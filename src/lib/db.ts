@@ -42,7 +42,11 @@ let ddbDocClient: DynamoDBDocumentClient | null = null;
 
 if (USE_AWS) {
   const client = new DynamoDBClient({
-    region: process.env.AWS_REGION || 'us-east-1',
+    region: process.env.APP_AWS_REGION || 'eu-north-1',
+    credentials: {
+      accessKeyId: process.env.APP_AWS_ACCESS_KEY_ID || '',
+      secretAccessKey: process.env.APP_AWS_SECRET_ACCESS_KEY || '',
+    }
   });
   ddbDocClient = DynamoDBDocumentClient.from(client);
 }
