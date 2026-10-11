@@ -9,6 +9,7 @@ import {
   Play, Star, Flame, Compass, FileText, Send
 } from "lucide-react";
 import Image from "next/image";
+import Footer from "./Footer";
 
 // Define animation variants
 const fadeInUp: Variants = {
@@ -840,68 +841,7 @@ export default function LandingClient() {
       {/* ============================================================ */}
       {/* 12. GIANT RETRO 3D FOOTER - Optimizely Brand Finale          */}
       {/* ============================================================ */}
-      <footer className="w-full bg-[#f3edf9] border-t-2 border-brand-violet/20 pt-16 pb-12 overflow-hidden relative">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 text-center">
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16 text-left max-w-4xl mx-auto text-sm">
-            <div>
-              <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Platform</h4>
-              <ul className="space-y-2 text-gray-600">
-                <li><a href="#tools" className="hover:text-brand-violet">Signal Radar</a></li>
-                <li><a href="#tools" className="hover:text-brand-violet">Beta Collective</a></li>
-                <li><a href="#ai" className="hover:text-brand-violet">AI Growth Engine</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Resources</h4>
-              <ul className="space-y-2 text-gray-600">
-                <li><a href="#paths" className="hover:text-brand-violet">3-Step Playbook</a></li>
-                <li><a href="#stories" className="hover:text-brand-violet">Case Studies</a></li>
-                <li><a href="https://discord.gg/xTeuQ9yE4" target="_blank" rel="noreferrer" className="hover:text-brand-violet">Discord Collective</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Company</h4>
-              <ul className="space-y-2 text-gray-600">
-                <li><span className="text-gray-400">About Wisentry</span></li>
-                <li><span className="text-gray-400">Mission</span></li>
-                <li><span className="text-gray-400">Careers</span></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Legal</h4>
-              <ul className="space-y-2 text-gray-600">
-                <li><span className="text-gray-400">Privacy Policy</span></li>
-                <li><span className="text-gray-400">Terms of Service</span></li>
-                <li><span className="text-gray-400">Security</span></li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Giant Optimizely-style 3D Extruded Brand Wordmark */}
-          <div className="my-10 select-none overflow-hidden">
-            <div className="text-6xl sm:text-8xl md:text-9xl lg:text-[140px] font-black tracking-tight text-brand-bush extruded-violet uppercase leading-none">
-              WISENTRY
-            </div>
-          </div>
-
-          <div className="pt-8 border-t border-purple-200/60 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-4">
-            <div className="flex items-center gap-2">
-              <img src="/icon.jpg" alt="" className="w-5 h-5 rounded object-cover" />
-              <span className="font-extrabold text-gray-900">Wisentry</span>
-              <span>© {new Date().getFullYear()} Wisentry Inc. All rights reserved.</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span>Violent Violet Theme</span>
-              <span>•</span>
-              <a href="https://discord.gg/xTeuQ9yE4" target="_blank" rel="noreferrer" className="text-brand-violet font-bold hover:underline">
-                Join Community Discord
-              </a>
-            </div>
-          </div>
-
-        </div>
-      </footer>
+      <Footer />
 
       {/* ============================================================ */}
       {/* 13. INTERACTIVE MODAL OVERLAY (Waitlist / Discord / Code)    */}
