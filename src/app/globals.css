@@ -4,10 +4,76 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #111827; /* gray-900 */
+  --foreground: #02010a;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
+}
+
+/* Optimizely-style 3D Extruded Text in Violent Violet Palette */
+.extruded-violet {
+  text-shadow: 
+    1px -1px 0 #361a62,
+    2px -2px 0 #361a62,
+    3px -3px 0 #361a62,
+    4px -4px 0 #361a62,
+    5px -5px 0 #361a62,
+    6px -6px 0 #361a62;
+}
+
+.extruded-white {
+  text-shadow: 
+    1px -1px 0 #ffffff,
+    2px -2px 0 #ffffff,
+    3px -3px 0 #ffffff,
+    4px -4px 0 #ffffff;
+}
+
+.extruded-electric {
+  text-shadow: 
+    1px -1px 0 #b129ff,
+    2px -2px 0 #b129ff,
+    3px -3px 0 #b129ff,
+    4px -4px 0 #b129ff,
+    5px -5px 0 #180632,
+    6px -6px 0 #180632;
+}
+
+.extruded-dark {
+  text-shadow: 
+    1px -1px 0 #02010a,
+    2px -2px 0 #02010a,
+    3px -3px 0 #02010a,
+    4px -4px 0 #02010a,
+    5px -5px 0 #02010a,
+    6px -6px 0 #02010a;
+}
+
+/* Tactile 3D Buttons */
+.btn-tactile-violet {
+  box-shadow: -3px 3px 0 0 #361a62;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-tactile-violet:hover {
+  transform: translate(2px, -2px);
+  box-shadow: -5px 5px 0 0 #361a62;
+}
+.btn-tactile-violet:active {
+  transform: translate(0, 0);
+  box-shadow: 0 0 0 0 #361a62;
+}
+
+.btn-tactile-electric {
+  box-shadow: -3px 3px 0 0 #180632;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-tactile-electric:hover {
+  transform: translate(2px, -2px);
+  box-shadow: -5px 5px 0 0 #180632;
+}
+.btn-tactile-electric:active {
+  transform: translate(0, 0);
+  box-shadow: 0 0 0 0 #180632;
 }

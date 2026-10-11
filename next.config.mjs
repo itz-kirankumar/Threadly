@@ -2,7 +2,14 @@
 const nextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ["better-sqlite3"],
-  poweredByHeader: false,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+    ],
+  },
   outputFileTracingIncludes: {
     "/api/**/*": ["./data/**/*"],
   },
