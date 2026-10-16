@@ -43,9 +43,15 @@ export default function PortalLogin() {
       router.replace(invite ? `/portal?invite=${encodeURIComponent(invite)}` : "/portal");
     } catch (caught) {
       const code = (caught as { code?: string })?.code;
-      setError(code === "auth/unauthorized-domain"
-        ? "This domain is not authorized for Firebase sign-in. Add it in Firebase Authentication settings."
-        : caught instanceof Error ? caught.message : "Google sign-in failed. Please try again.");
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        return;
+      }
+      if (code === "auth/unauthorized-domain") {
+        const currentHost = typeof window !== "undefined" ? window.location.hostname : "this domain";
+        setError(`Domain "${currentHost}" is not authorized for Firebase sign-in. Open via http://localhost:3000 (not 127.0.0.1) or add "${currentHost}" in Firebase Console > Authentication > Settings > Authorized domains.`);
+        return;
+      }
+      setError(caught instanceof Error ? caught.message : "Google sign-in failed. Please try again.");
     } finally {
       setBusy(false);
     }

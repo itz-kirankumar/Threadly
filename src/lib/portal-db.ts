@@ -13,8 +13,7 @@ function getDemoPath(uid: string, path: string) {
 }
 
 function databaseUrl() {
-  const url = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
-  if (!url) throw new Error("FIREBASE_DATABASE_URL is not configured.");
+  const url = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "https://wisentry-510811-default-rtdb.firebaseio.com";
   return url.replace(/\/+$/, "");
 }
 
@@ -36,8 +35,7 @@ export async function getFirebaseIdentity(request: Request, optional = false): P
     };
   }
 
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  if (!apiKey) throw new Error("FIREBASE_API_KEY is not configured.");
+  const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyBh_cw7QS00FX2ZwaGtNnuiNhXaVWbdYWM";
   const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
