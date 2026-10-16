@@ -122,6 +122,9 @@ export default function LandingClient() {
 
           {/* Action CTA */}
           <div className="flex items-center gap-3">
+            <a href="/portal" className="rounded-full border border-brand-violet/30 px-3 py-2.5 text-xs font-extrabold text-brand-violet transition-colors hover:bg-purple-50 sm:px-4">
+              Portal
+            </a>
             <button 
               onClick={() => setModalState("waitlist")}
               className="btn-tactile-violet inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-full bg-brand-violet border-2 border-brand-violet text-white text-xs sm:text-sm font-extrabold tracking-wide cursor-pointer focus:outline-none"
@@ -188,10 +191,12 @@ export default function LandingClient() {
           <motion.div variants={fadeInUp} className="relative w-full max-w-5xl rounded-3xl overflow-hidden border-2 border-brand-violet/20 bg-white shadow-2xl p-3 sm:p-5">
             <div className="relative w-full h-[320px] sm:h-[460px] md:h-[540px] rounded-2xl overflow-hidden bg-gradient-to-tr from-brand-violet via-brand-bush to-brand-pastel">
               {/* High-quality background visual */}
-              <img 
-                src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1920&q=80" 
-                alt="Builders collaborating and scaling" 
-                className="w-full h-full object-cover object-center opacity-75 mix-blend-multiply"
+              <Image
+                src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1920&q=80"
+                alt="Builders collaborating and scaling"
+                fill
+                sizes="(max-width: 768px) 100vw, 1200px"
+                className="object-cover object-center opacity-75 mix-blend-multiply"
               />
 
               {/* Overlay Gradient */}

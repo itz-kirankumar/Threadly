@@ -1,0 +1,33 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "opportunities": {
+          ".indexOn": ["observed_at", "status", "platform", "intent", "source_kind", "relevance"]
+        },
+        "drafts": {
+          ".indexOn": ["created_at", "status", "platform", "scheduled_at", "kind"]
+        },
+        "leads": {
+          ".indexOn": ["created_at", "stage", "platform", "owner", "email", "meetingStart"]
+        },
+        "outreachEmails": {
+          ".indexOn": ["created_at", "status", "lead_id", "recipient"]
+        },
+        "workflows": {
+          ".indexOn": ["created_at", "status", "trigger", "category", "enabled"]
+        },
+        "team": {
+          ".indexOn": ["role", "status", "email", "joined_at", "timezone"]
+        },
+        "invites": {
+          ".indexOn": ["status", "email", "created_at", "token"]
+        }
+      }
+    }
+  }
+}

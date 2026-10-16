@@ -40,16 +40,27 @@ The Wisentry Team
           }
         }
       }));
-      console.log(`SES email sent to ${email}`);
-    } catch (error) {
-      console.error("Failed to send email via SES:", error);
+    } catch {
+      throw new Error("Community email could not be sent. Please retry shortly.");
     }
   } else {
-    // Local fallback
-    console.log("=== EMAIL INTERCEPTED (LOCAL FALLBACK) ===");
-    console.log(`To: ${email}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Body: \n${bodyText}`);
-    console.log("==========================================");
+    // Do not write addresses or message content to local logs.
   }
+}
+
+export async function sendFounderOutreachEmail(input: { to: string; subject: string; body: string }) {
+  if (!USE_AWS || !sesClient || !process.env.FROM_EMAIL) {
+    throw new Error("Outbound email is not configured. Set USE_AWS=true and a verified FROM_EMAIL for Amazon SES.");
+  }
+  const result = await sesClient.send(new SendEmailCommand({
+    Source: process.env.FROM_EMAIL,
+    Destination: { ToAddresses: [input.to] },
+    ReplyToAddresses: process.env.REPLY_TO_EMAIL ? [process.env.REPLY_TO_EMAIL] : undefined,
+    Message: {
+      Subject: { Data: input.subject, Charset: "UTF-8" },
+      Body: { Text: { Data: input.body, Charset: "UTF-8" } },
+    },
+  }));
+  if (!result.MessageId) throw new Error("Email provider did not confirm delivery.");
+  return result.MessageId;
 }

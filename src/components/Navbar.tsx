@@ -34,6 +34,12 @@ export default function Navbar() {
 
         {/* Action CTA */}
         <div className="flex items-center gap-3">
+          <Link
+            href="/portal"
+            className="inline-flex rounded-full border border-brand-violet/30 px-3 py-2.5 text-xs font-extrabold text-brand-violet transition-colors hover:bg-purple-50 sm:px-4"
+          >
+            Sign in
+          </Link>
           <Link 
             href="/#waitlist"
             className="btn-tactile-violet inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-full bg-brand-violet border-2 border-brand-violet text-white text-xs sm:text-sm font-extrabold tracking-wide cursor-pointer focus:outline-none"

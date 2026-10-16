@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Footer() {
   return (
@@ -10,6 +11,11 @@ export default function Footer() {
           <div>
             <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Platform</h4>
             <ul className="space-y-2 text-gray-600">
+              <li>
+                <Link href="/portal" className="hover:text-brand-violet transition-colors">
+                  Founder Portal
+                </Link>
+              </li>
               <li>
                 <Link href="/signal-radar" className="hover:text-brand-violet transition-colors">
                   Signal Radar
@@ -109,7 +115,7 @@ export default function Footer() {
         {/* Bottom Copyright Bar */}
         <div className="pt-8 border-t border-purple-200/60 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-4">
           <div className="flex items-center gap-2">
-            <img src="/icon.jpg" alt="Wisentry Logo" className="w-5 h-5 rounded object-cover" />
+            <Image src="/icon.jpg" alt="Wisentry Logo" width={20} height={20} className="h-5 w-5 rounded object-cover" />
             <span className="font-extrabold text-gray-900">Wisentry</span>
             <span>© {new Date().getFullYear()} Wisentry Inc. All rights reserved.</span>
           </div>

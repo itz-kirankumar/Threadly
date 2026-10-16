@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   title: "Wisentry - Get Your First 1000 Real Users",
   description: "Wisentry helps B2C startups get real leads and users insights across social media.",
   icons: {
-    icon: "/icon.jpg",
-    apple: "/icon.jpg",
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.jpg", type: "image/jpeg" }],
   }
 };
 

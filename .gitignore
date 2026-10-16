@@ -11,6 +11,8 @@
 
 # next.js
 /.next/
+/.next-*/
+/.next-wisentry-build/
 /out/
 
 # production
@@ -39,3 +41,4 @@ next-env.d.ts
 # local sqlite db
 *.db
 *.db-journal
+/.wisentry-data/
