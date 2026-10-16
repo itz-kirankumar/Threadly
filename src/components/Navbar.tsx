@@ -35,7 +35,7 @@ export default function Navbar() {
         {/* Action CTA */}
         <div className="flex items-center gap-3">
           <Link
-            href="/portal"
+            href="/portal/login"
             className="inline-flex rounded-full border border-brand-violet/30 px-3 py-2.5 text-xs font-extrabold text-brand-violet transition-colors hover:bg-purple-50 sm:px-4"
           >
             Sign in

@@ -10,6 +10,8 @@ interface PortalPreloaderProps {
   error?: string;
   onRetry?: () => void;
   onContinueDemo?: () => void;
+  onGoogleSignIn?: () => Promise<void> | void;
+  signingIn?: boolean;
 }
 
 export default function PortalPreloader({
@@ -17,6 +19,8 @@ export default function PortalPreloader({
   error,
   onRetry,
   onContinueDemo,
+  onGoogleSignIn,
+  signingIn = false,
 }: PortalPreloaderProps) {
   const [statusIndex, setStatusIndex] = useState(0);
   const [showFallbackActions, setShowFallbackActions] = useState(false);
@@ -88,17 +92,29 @@ export default function PortalPreloader({
             </div>
             <p>{error}</p>
             <div className="preloader-error-actions">
-              {onRetry && (
-                <button type="button" className="btn btn-dark" onClick={onRetry}>
-                  <RefreshCw size={14} /> Try again
+              {onGoogleSignIn && (
+                <button
+                  type="button"
+                  className="btn btn-dark"
+                  onClick={onGoogleSignIn}
+                  disabled={signingIn}
+                  style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 18px", fontWeight: 650, borderRadius: 10 }}
+                >
+                  <span className="google-g" aria-hidden="true" style={{ width: 20, height: 20, fontSize: 13, borderRadius: "50%", background: "#fff", color: "#4285F4", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>G</span>
+                  {signingIn ? "Connecting to Google…" : "Continue with Google"}
                 </button>
               )}
-              <Link href="/portal/login" className="btn btn-outline">
-                Return to sign in
+              <Link href="/portal/login" className="btn btn-outline" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                Open sign-in page <ArrowRight size={13} />
               </Link>
               {onContinueDemo && (
                 <button type="button" className="btn btn-demo-outline" onClick={onContinueDemo}>
                   Explore demo workspace <ArrowRight size={14} />
+                </button>
+              )}
+              {onRetry && (
+                <button type="button" className="btn" onClick={onRetry} style={{ background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                  <RefreshCw size={12} /> Try again
                 </button>
               )}
             </div>
@@ -119,22 +135,35 @@ export default function PortalPreloader({
             {/* Dynamic Status Text */}
             <p className="preloader-status-text">{statuses[statusIndex]}</p>
 
-            {/* Delayed fallback assistance if auth is taking a moment */}
-            {showFallbackActions && (
-              <div className="preloader-fallback-prompt">
-                <span className="preloader-fallback-hint">Taking a moment to connect?</span>
-                <div className="preloader-fallback-buttons">
-                  <Link href="/portal/login" className="preloader-link-btn">
-                    Go to sign-in page <ArrowRight size={13} />
-                  </Link>
-                  {onContinueDemo && (
-                    <button type="button" className="preloader-link-btn demo-btn" onClick={onContinueDemo}>
-                      <Sparkles size={13} /> Open guest preview
-                    </button>
-                  )}
-                </div>
+            {/* Immediate Google sign-in action if not logged in */}
+            {onGoogleSignIn && (
+              <div style={{ marginTop: 16, width: "100%" }}>
+                <button
+                  type="button"
+                  className="btn btn-dark"
+                  onClick={onGoogleSignIn}
+                  disabled={signingIn}
+                  style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 18px", fontWeight: 650, borderRadius: 10 }}
+                >
+                  <span className="google-g" aria-hidden="true" style={{ width: 20, height: 20, fontSize: 13, borderRadius: "50%", background: "#fff", color: "#4285F4", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>G</span>
+                  {signingIn ? "Connecting to Google…" : "Continue with Google"}
+                </button>
               </div>
             )}
+
+            {/* Fallback assistance */}
+            <div className="preloader-fallback-prompt" style={{ marginTop: 10 }}>
+              <div className="preloader-fallback-buttons">
+                <Link href="/portal/login" className="preloader-link-btn">
+                  Sign-in page <ArrowRight size={13} />
+                </Link>
+                {onContinueDemo && (
+                  <button type="button" className="preloader-link-btn demo-btn" onClick={onContinueDemo}>
+                    <Sparkles size={13} /> Guest preview
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

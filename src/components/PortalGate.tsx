@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import PortalWorkspace from "@/components/PortalWorkspace";
 import PortalPreloader from "@/components/PortalPreloader";
@@ -13,6 +13,32 @@ export default function PortalGate() {
   const [ready, setReady] = useState(false);
   const [authError, setAuthError] = useState("");
   const [demoMode, setDemoMode] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setSigningIn(true);
+    setAuthError("");
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const cred = await signInWithPopup(getFirebaseAuth(), provider);
+      setUser(cred.user);
+      setReady(true);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        return;
+      }
+      if (code === "auth/unauthorized-domain") {
+        const currentHost = typeof window !== "undefined" ? window.location.hostname : "this domain";
+        setAuthError(`Domain "${currentHost}" is not authorized for Firebase sign-in. Open via http://localhost:3000 (not 127.0.0.1) or add "${currentHost}" in Firebase Console > Authentication > Settings > Authorized domains.`);
+        return;
+      }
+      setAuthError(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
+    } finally {
+      setSigningIn(false);
+    }
+  };
 
   const initAuth = useCallback(() => {
     setAuthError("");
@@ -28,8 +54,6 @@ export default function PortalGate() {
             // Check if demo query param is set
             if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo") === "true") {
               setDemoMode(true);
-            } else {
-              router.replace("/portal/login");
             }
           }
         },
@@ -44,7 +68,7 @@ export default function PortalGate() {
       setReady(true);
       return () => {};
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = initAuth();
@@ -76,6 +100,8 @@ export default function PortalGate() {
           initAuth();
         }}
         onContinueDemo={() => setDemoMode(true)}
+        onGoogleSignIn={handleGoogleSignIn}
+        signingIn={signingIn}
       />
     );
   }
@@ -83,8 +109,10 @@ export default function PortalGate() {
   if (!ready || !user) {
     return (
       <PortalPreloader
-        message="Opening your private workspace…"
+        message="Sign in to open your private founder workspace…"
         onContinueDemo={() => setDemoMode(true)}
+        onGoogleSignIn={handleGoogleSignIn}
+        signingIn={signingIn}
       />
     );
   }
