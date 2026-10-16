@@ -5,8 +5,8 @@ import Link from "next/link";
 import { BarChart3, ArrowRight, Star, TrendingUp, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Case Studies & Success Stories | Wisentry",
-  description: "Real growth results from B2C startups using Wisentry to escape the distribution tarpit.",
+  title: "Case Studies & Success Stories | Threadly",
+  description: "Real growth results from B2C startups using Threadly to escape the distribution tarpit.",
 };
 
 export default function CaseStudiesPage() {
@@ -44,7 +44,7 @@ export default function CaseStudiesPage() {
             <div className="md:col-span-8 text-left">
               <h2 className="text-2xl font-black text-gray-900 mb-3">&quot;We stopped burning $3.5k/month on Facebook ads.&quot;</h2>
               <p className="text-gray-600 text-sm leading-relaxed mb-4">
-                Before Wisentry, PocketSplit spent thousands on Meta ads with an 84% day-1 drop-off. By switching to Wisentry&apos;s Signal Radar, they found 350+ roommates actively complaining about Splitwise&apos;s new paywalls on Reddit. Over 60% joined their beta within 48 hours.
+                Before Threadly, PocketSplit spent thousands on Meta ads with an 84% day-1 drop-off. By switching to Threadly&apos;s Signal Radar, they found 350+ roommates actively complaining about Splitwise&apos;s new paywalls on Reddit. Over 60% joined their beta within 48 hours.
               </p>
               <div className="text-xs font-bold text-gray-800">
                 — Marcus Chen, Founder of PocketSplit
@@ -61,7 +61,7 @@ export default function CaseStudiesPage() {
             <div className="md:col-span-8 text-left">
               <h2 className="text-2xl font-black text-gray-900 mb-3">&quot;The feedback saved us from building the wrong product.&quot;</h2>
               <p className="text-gray-600 text-sm leading-relaxed mb-4">
-                Lumina was about to build a complex timeline editor. When they pushed their prototype to the Wisentry Beta Collective, 140+ testers highlighted that all they wanted was 1-click preset exports. They cut 3 months of unnecessary dev work and doubled user satisfaction.
+                Lumina was about to build a complex timeline editor. When they pushed their prototype to the Threadly Beta Collective, 140+ testers highlighted that all they wanted was 1-click preset exports. They cut 3 months of unnecessary dev work and doubled user satisfaction.
               </p>
               <div className="text-xs font-bold text-gray-800">
                 — Elena Rostova, Product Lead at Lumina AI
@@ -78,7 +78,7 @@ export default function CaseStudiesPage() {
             <div className="md:col-span-8 text-left">
               <h2 className="text-2xl font-black text-gray-900 mb-3">&quot;We launched on Product Hunt with 1,000 loyal fans behind us.&quot;</h2>
               <p className="text-gray-600 text-sm leading-relaxed mb-4">
-                HabitZen used Wisentry&apos;s referral engine to turn their initial 150 Discord beta testers into 1,000 active daily users before their public launch. On launch day, their community drove them straight to the #1 Product of the Day.
+                HabitZen used Threadly&apos;s referral engine to turn their initial 150 Discord beta testers into 1,000 active daily users before their public launch. On launch day, their community drove them straight to the #1 Product of the Day.
               </p>
               <div className="text-xs font-bold text-gray-800">
                 — Priya Sharma, Co-Founder of HabitZen

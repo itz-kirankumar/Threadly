@@ -127,7 +127,7 @@ export default function PortalOutreach({
 
   async function sendEmail() {
     if (!selectedEmail || selectedEmail.status !== "draft") return;
-    if (!window.confirm(`Send this reviewed email to ${selectedEmail.recipient}? Wisentry will send one email only.`)) return;
+    if (!window.confirm(`Send this reviewed email to ${selectedEmail.recipient}? Threadly will send one email only.`)) return;
     setBusy("send"); setError(""); setNotice("");
     try {
       await action("outreachSave", { id: selectedEmail.id, subject, body });
@@ -148,7 +148,7 @@ export default function PortalOutreach({
 
     <section className="mini-card outreach-panel">
       <div className="outreach-panel-heading"><span className="outreach-icon"><Target size={19}/></span><div><div className="section-kicker">01 · COMPANY CONTEXT</div><h2>Start with your website</h2></div><span className="outreach-model">{capabilities.websiteAiProvider ? `Analysis · ${capabilities.websiteAiProvider}` : "AI key needed"}</span></div>
-      <p>Wisentry reads public page text to draft an ideal-customer profile and search phrases. Review the suggestions before using them.</p>
+      <p>Threadly reads public page text to draft an ideal-customer profile and search phrases. Review the suggestions before using them.</p>
       <form className="outreach-site-form" onSubmit={analyze}><label htmlFor="outreach-website">Company website</label><div><input id="outreach-website" type="url" value={website} onChange={event => setWebsite(event.target.value)} placeholder="https://yourcompany.com" required/><button className="btn btn-dark" disabled={busy === "analyze" || !capabilities.websiteAiProvider}>{busy === "analyze" ? "Analyzing…" : "Analyze website"}<Sparkles size={15}/></button></div></form>
       {!capabilities.websiteAiProvider && <p className="outreach-help">Add a text-generation API key to enable site summaries and personalized drafts. Your website text is sent to that provider for this request.</p>}
       {profile && <div className="outreach-analysis"><div><small>PRODUCT</small><strong>{profile.companyName || companyName}</strong></div><div><small>IDEAL CUSTOMER</small><strong>{profile.icp || profile.customer || "Add this in Company Context"}</strong></div><div><small>PROBLEM</small><strong>{profile.painPoints || "Review pain points in Company Context"}</strong></div><div><small>SEARCH PHRASES</small><strong>{profile.searchPhrases || "Add a phrase in Discover"}</strong></div></div>}
@@ -175,7 +175,7 @@ export default function PortalOutreach({
       <aside className="outreach-column outreach-side">
         <section className="mini-card outreach-panel">
           <div className="outreach-panel-heading"><span className="outreach-icon"><CalendarDays size={19}/></span><div><div className="section-kicker">CALL BOOKING</div><h2>Share your calendar</h2></div></div>
-          <p>Add a Calendly, Cal.com, or other booking URL. Wisentry can include it in drafts so the recipient chooses an available time.</p>
+          <p>Add a Calendly, Cal.com, or other booking URL. Threadly can include it in drafts so the recipient chooses an available time.</p>
           <label className="outreach-field" htmlFor="booking-url">Your booking link</label><input id="booking-url" type="url" value={bookingUrl} onChange={event => setBookingUrl(event.target.value)} placeholder="https://cal.com/yourname/intro"/><button className="btn btn-outline outreach-save-booking" onClick={saveBookingLink} disabled={busy === "booking"}>{busy === "booking" ? "Saving…" : "Save booking link"}<Check size={15}/></button>
           {context.bookingUrl && <a className="text-link" href={context.bookingUrl} target="_blank" rel="noopener noreferrer">Open your booking page <ArrowUpRight size={14}/></a>}
         </section>
@@ -188,12 +188,12 @@ export default function PortalOutreach({
             <p className="outreach-recipient">To <strong>{selectedEmail.recipient}</strong>{selectedLead ? ` · ${selectedLead.name}` : ""}</p>
             <label className="outreach-field" htmlFor="outreach-subject">Subject<input id="outreach-subject" value={subject} onChange={event => setSubject(event.target.value)} disabled={selectedEmail.status !== "draft"}/></label>
             <label className="outreach-field" htmlFor="outreach-body">Message<textarea id="outreach-body" value={body} onChange={event => setBody(event.target.value)} rows={10} disabled={selectedEmail.status !== "draft"}/></label>
-            {selectedEmail.status === "draft" ? <div className="outreach-email-actions"><button className="btn btn-outline" onClick={saveDraft} disabled={busy === "save"}>{busy === "save" ? "Saving…" : "Save draft"}</button><a className="btn btn-outline" href={mailto}>Open in email app</a><button className="btn btn-dark" onClick={sendEmail} disabled={!capabilities.emailOutreach || busy === "send" || !subject.trim() || !body.trim()}>{busy === "send" ? "Sending…" : "Review & send"}<Send size={15}/></button></div> : <p className="outreach-help">{selectedEmail.status === "sent" ? `Sent ${selectedEmail.sent_at ? new Date(selectedEmail.sent_at).toLocaleString() : ""}.` : "Delivery is being checked. Wisentry will not retry automatically."}</p>}
+            {selectedEmail.status === "draft" ? <div className="outreach-email-actions"><button className="btn btn-outline" onClick={saveDraft} disabled={busy === "save"}>{busy === "save" ? "Saving…" : "Save draft"}</button><a className="btn btn-outline" href={mailto}>Open in email app</a><button className="btn btn-dark" onClick={sendEmail} disabled={!capabilities.emailOutreach || busy === "send" || !subject.trim() || !body.trim()}>{busy === "send" ? "Sending…" : "Review & send"}<Send size={15}/></button></div> : <p className="outreach-help">{selectedEmail.status === "sent" ? `Sent ${selectedEmail.sent_at ? new Date(selectedEmail.sent_at).toLocaleString() : ""}.` : "Delivery is being checked. Threadly will not retry automatically."}</p>}
             {!capabilities.emailOutreach && selectedEmail.status === "draft" && <p className="outreach-help">Connect Amazon SES to enable in-app sending. You can still open this reviewed draft in your email app.</p>}
           </> : <div className="outreach-empty"><Mail size={19}/><span>Add a verified email to a prospect, then choose “Draft an email.”</span></div>}
           {bookingUrl && <p className="outreach-booking-note">New drafts can include your booking link: <a href={bookingUrl} target="_blank" rel="noopener noreferrer">{bookingUrl}</a></p>}
         </section>
-        <div className="outreach-privacy-note"><CircleHelp size={17}/><span>Messages are saved privately under your Google account. Wisentry sends one reviewed email at a time and never sends a sequence automatically.</span></div>
+        <div className="outreach-privacy-note"><CircleHelp size={17}/><span>Messages are saved privately under your Google account. Threadly sends one reviewed email at a time and never sends a sequence automatically.</span></div>
       </aside>
     </div>
     {error && <div className="error-toast" role="alert">{error}</div>}

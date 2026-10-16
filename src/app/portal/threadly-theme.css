@@ -1,0 +1,892 @@
+/* ============================================================
+   THREADLY THEME LAYER
+   Black · White · Reddit Orange · Violent Violet
+   Imported after portal.css so it wins the cascade over the
+   legacy violet-on-mint palette without rewriting it.
+   ============================================================ */
+
+#wisentry-portal {
+  --bg: #faf9f7;
+  --surface: #ffffff;
+  --ink: #0a0a0a;
+  --muted: #6f6a72;
+  --green: #0a0a0a; /* legacy token name, now ink */
+  --green-light: #fff1eb;
+  --line: #e9e6e1;
+  --line-dark: #d9d5ce;
+  --orange: #ff4500;
+  --violet: #7c3aed;
+  --violet-deep: #4c1d95;
+  --violet-light: #f5f3ff;
+  --paper-deep: #f3f1ec;
+  --shadow: 0 1px 2px rgba(10, 10, 10, 0.04), 0 16px 36px -26px rgba(10, 10, 10, 0.32);
+}
+
+/* Accents ---------------------------------------------------- */
+#wisentry-portal .accent-period,
+#wisentry-portal .brand-dot {
+  color: #ff4500;
+}
+
+#wisentry-portal .eyebrow,
+#wisentry-portal .section-kicker,
+#wisentry-portal .sidebar-label,
+#wisentry-portal .section-label {
+  color: #8a838f;
+}
+
+#wisentry-portal .pulse-dot,
+#wisentry-portal .tiny-dot {
+  background: #ff4500;
+  box-shadow: 0 0 0 4px rgba(255, 69, 0, 0.12);
+}
+
+/* Buttons ---------------------------------------------------- */
+#wisentry-portal .btn {
+  border-radius: 10px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+#wisentry-portal .btn-dark {
+  background: #0a0a0a;
+  color: #fff;
+  box-shadow: -3px 3px 0 0 #ff4500;
+}
+#wisentry-portal .btn-dark:hover:not(:disabled) {
+  background: #141414;
+  transform: translate(1px, -1px);
+  box-shadow: -4px 4px 0 0 #ff4500;
+}
+#wisentry-portal .btn-outline {
+  background: #fff;
+  border-color: #d9d5ce;
+  color: #0a0a0a;
+  box-shadow: -3px 3px 0 0 #e9e6e1;
+}
+#wisentry-portal .btn-outline:hover:not(:disabled) {
+  background: #faf9f7;
+  border-color: #0a0a0a;
+  transform: translate(1px, -1px);
+  box-shadow: -4px 4px 0 0 #c9c4bc;
+}
+#wisentry-portal .text-link {
+  color: #0a0a0a;
+}
+#wisentry-portal .text-link:hover {
+  color: #ff4500;
+}
+#wisentry-portal .icon-button:hover {
+  background: #f3f1ec;
+  color: #ff4500;
+}
+#wisentry-portal .status-tag {
+  background: #f3f1ec;
+  color: #4a4550;
+}
+#wisentry-portal .count-badge {
+  background: #fff1eb;
+  color: #cc3700;
+}
+#wisentry-portal .platform-x {
+  background: #0a0a0a;
+}
+#wisentry-portal .platform-reddit {
+  background: #ff4500;
+}
+
+/* Shell ------------------------------------------------------ */
+#wisentry-portal .sidebar {
+  background: #ffffff;
+  border-right: 1px solid #e9e6e1;
+}
+#wisentry-portal .workspace-switch {
+  border-color: #e9e6e1;
+  border-radius: 10px;
+  background: #faf9f7;
+}
+#wisentry-portal .workspace-switch:hover {
+  border-color: #d9d5ce;
+  background: #fff;
+}
+#wisentry-portal .workspace-avatar {
+  background: #0a0a0a;
+  color: #fff;
+  border-radius: 8px;
+}
+#wisentry-portal .sidebar-label {
+  color: #a09aa5;
+}
+#wisentry-portal .nav-item {
+  color: #55505a;
+  border-radius: 8px;
+}
+#wisentry-portal .nav-item:hover {
+  background: #f3f1ec;
+  color: #0a0a0a;
+}
+#wisentry-portal .nav-item.active {
+  background: #0a0a0a;
+  color: #ffffff;
+}
+#wisentry-portal .nav-item.active svg {
+  color: #ff4500;
+}
+#wisentry-portal .nav-item.active i {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+#wisentry-portal .nav-item i {
+  background: #f3f1ec;
+  color: #0a0a0a;
+}
+#wisentry-portal .sidebar-help {
+  background: #fff1eb;
+  border: 1px solid #ffd9c7;
+  border-radius: 12px;
+}
+#wisentry-portal .sidebar-help > span {
+  color: #ff4500;
+}
+#wisentry-portal .sidebar-help strong {
+  color: #0a0a0a;
+}
+#wisentry-portal .sidebar-help p {
+  color: #7a6f66;
+}
+#wisentry-portal .sidebar-help button {
+  color: #cc3700;
+}
+#wisentry-portal .profile-avatar {
+  background: #7c3aed;
+}
+
+#wisentry-portal .topbar {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #e9e6e1;
+}
+#wisentry-portal .breadcrumbs {
+  color: #a09aa5;
+}
+#wisentry-portal .breadcrumbs strong {
+  color: #0a0a0a;
+}
+#wisentry-portal .demo-pill,
+#wisentry-portal .source-notice {
+  background: #faf9f7;
+  border-color: #e9e6e1;
+  color: #55505a;
+}
+
+/* Surfaces --------------------------------------------------- */
+#wisentry-portal .surface-section,
+#wisentry-portal .mini-card,
+#wisentry-portal .stat-card {
+  background: #ffffff;
+  border: 1px solid #e9e6e1;
+  border-radius: 14px;
+}
+#wisentry-portal .stat-card:hover {
+  border-color: #0a0a0a;
+}
+#wisentry-portal .stat-card > div {
+  color: #6f6a72;
+}
+#wisentry-portal .stat-card small {
+  color: #cc3700;
+}
+#wisentry-portal .stat-card strong {
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+#wisentry-portal .opportunity-symbol {
+  background: #fff1eb;
+  color: #ff4500;
+  border-radius: 10px;
+}
+#wisentry-portal .symbol-1 {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+#wisentry-portal .symbol-2 {
+  background: #f3f1ec;
+  color: #0a0a0a;
+}
+#wisentry-portal .row-main > button {
+  color: #0a0a0a;
+}
+#wisentry-portal .row-action:hover {
+  background: #ff4500;
+  color: #fff;
+}
+
+#wisentry-portal .insight-card,
+#wisentry-portal .insight-feature {
+  background: #0a0a0a;
+  color: #ffffff;
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+}
+#wisentry-portal .insight-card::after,
+#wisentry-portal .insight-feature::after {
+  content: "";
+  position: absolute;
+  right: -90px;
+  top: -90px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 69, 0, 0.35), transparent 70%);
+  pointer-events: none;
+}
+#wisentry-portal .insight-icon,
+#wisentry-portal .generate-icon {
+  background: #ff4500;
+  color: #ffffff;
+  border-radius: 10px;
+}
+#wisentry-portal .insight-card .section-kicker,
+#wisentry-portal .insight-feature .section-kicker {
+  color: #ffb59b;
+}
+#wisentry-portal .insight-card p,
+#wisentry-portal .insight-feature p {
+  color: #cfcac6;
+}
+#wisentry-portal .insight-card button,
+#wisentry-portal .insight-feature button {
+  color: #ff8a5c;
+}
+
+/* Typography ------------------------------------------------- */
+#wisentry-portal h1 {
+  font-weight: 800;
+  letter-spacing: -0.055em;
+}
+#wisentry-portal .page-head p {
+  color: #6f6a72;
+}
+#wisentry-portal .section-heading h2,
+#wisentry-portal .section-heading h3 {
+  color: #0a0a0a;
+}
+
+/* Pipeline --------------------------------------------------- */
+#wisentry-portal .pipeline-column {
+  background: #f6f4f0;
+  border-color: #ebe7e1;
+  border-radius: 12px;
+}
+#wisentry-portal .pipeline-head strong {
+  color: #0a0a0a;
+}
+#wisentry-portal .stage-dot {
+  background: #c9c4bc;
+}
+#wisentry-portal .stage-qualified,
+#wisentry-portal .stage-conversation {
+  background: #7c3aed;
+}
+#wisentry-portal .stage-converted {
+  background: #ff4500;
+}
+#wisentry-portal .lead-card {
+  border-color: #ebe7e1;
+  border-radius: 10px;
+}
+#wisentry-portal .lead-avatar {
+  background: #0a0a0a;
+  color: #fff;
+}
+#wisentry-portal .drop-area {
+  border-color: #d9d5ce;
+  color: #a09aa5;
+}
+
+/* Analytics -------------------------------------------------- */
+#wisentry-portal .funnel-row > div {
+  background: #f0ede8;
+}
+#wisentry-portal .funnel-row i {
+  background: linear-gradient(90deg, #ff4500, #7c3aed);
+}
+#wisentry-portal .funnel-row strong {
+  color: #0a0a0a;
+}
+#wisentry-portal .analytics-disclaimer {
+  background: #faf9f7;
+  color: #7a747d;
+}
+#wisentry-portal .assistant-panel {
+  border-color: #e9e6e1;
+  border-radius: 14px;
+}
+#wisentry-portal .assistant-heading {
+  color: #0a0a0a;
+}
+#wisentry-portal .assistant-panel form button {
+  background: #ff4500;
+}
+#wisentry-portal .assistant-answer {
+  background: #fff1eb;
+  color: #4a3327;
+}
+
+/* Forms ------------------------------------------------------ */
+#wisentry-portal input,
+#wisentry-portal select,
+#wisentry-portal textarea {
+  border-radius: 9px;
+}
+#wisentry-portal input:focus,
+#wisentry-portal select:focus,
+#wisentry-portal textarea:focus {
+  outline: 2px solid rgba(255, 69, 0, 0.28);
+  outline-offset: 1px;
+  border-color: #ff4500;
+}
+
+/* Calendar --------------------------------------------------- */
+#wisentry-portal .calendar-day {
+  border-color: #ebe7e1;
+}
+#wisentry-portal .calendar-day.today {
+  background: #fff1eb;
+  border-color: #ffc2a6;
+}
+#wisentry-portal .segmented {
+  background: #f3f1ec;
+  border-radius: 10px;
+}
+#wisentry-portal .segmented button.selected {
+  background: #0a0a0a;
+  color: #fff;
+}
+
+/* Overlays --------------------------------------------------- */
+#wisentry-portal .dialog,
+#wisentry-portal .detail-drawer,
+#wisentry-portal .user-dropdown-popup {
+  border-radius: 16px;
+  box-shadow: 0 30px 80px -30px rgba(10, 10, 10, 0.45);
+}
+#wisentry-portal .dropdown-item:hover {
+  background: #faf9f7;
+}
+#wisentry-portal .dropdown-badge {
+  background: #fff1eb;
+  color: #cc3700;
+}
+#wisentry-portal .profile-info-btn:hover {
+  background: #faf9f7;
+}
+#wisentry-portal .profile-info-btn strong {
+  color: #0a0a0a;
+}
+
+/* Auth ------------------------------------------------------- */
+#wisentry-portal.portal-auth {
+  background: #faf9f7;
+}
+#wisentry-portal .portal-auth-preview {
+  background: #0a0a0a;
+  color: #fff;
+  border-radius: 18px;
+}
+#wisentry-portal .portal-auth-preview-row .preview-icon {
+  background: rgba(255, 69, 0, 0.16);
+  color: #ff8a5c;
+}
+#wisentry-portal .portal-auth-live i {
+  background: #ff4500;
+}
+#wisentry-portal .portal-auth-copy h1 em {
+  color: #ff4500;
+  font-style: normal;
+}
+#wisentry-portal .portal-auth-label {
+  color: #a09aa5;
+}
+
+/* Preloader -------------------------------------------------- */
+.portal-preloader-root {
+  background: #faf9f7;
+  color: #0a0a0a;
+}
+.portal-preloader-root .preloader-card {
+  background: #fff;
+  border: 1px solid #e9e6e1;
+  border-radius: 18px;
+  box-shadow: 0 40px 90px -40px rgba(10, 10, 10, 0.35);
+}
+.portal-preloader-root .preloader-orb-ring {
+  border-color: rgba(255, 69, 0, 0.35);
+}
+.portal-preloader-root .preloader-orb-glow {
+  background: radial-gradient(circle, rgba(255, 69, 0, 0.35), transparent 70%);
+}
+.portal-preloader-root .preloader-progress-bar {
+  background: linear-gradient(90deg, #ff4500, #7c3aed);
+}
+.portal-preloader-root .preloader-badge {
+  background: #fff1eb;
+  color: #cc3700;
+}
+.portal-preloader-root .preloader-pulse-dot {
+  background: #ff4500;
+}
+.portal-preloader-root .preloader-link-btn.demo-btn {
+  border-color: #0a0a0a;
+  color: #0a0a0a;
+}
+
+/* ============================================================
+   THREADLY MODULE SURFACES
+   Shared primitives for the campaign, sequence, GEO and
+   real-time modules rendered by the workspace.
+   ============================================================ */
+
+#wisentry-portal .thread-grid {
+  display: grid;
+  gap: 16px;
+}
+#wisentry-portal .thread-grid.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+#wisentry-portal .thread-grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+#wisentry-portal .thread-grid.cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#wisentry-portal .thread-panel {
+  background: #fff;
+  border: 1px solid #e9e6e1;
+  border-radius: 14px;
+  padding: 20px;
+}
+#wisentry-portal .thread-panel.ink {
+  background: #0a0a0a;
+  border-color: #0a0a0a;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+#wisentry-portal .thread-panel.ink::after {
+  content: "";
+  position: absolute;
+  right: -110px;
+  bottom: -110px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.45), transparent 70%);
+  pointer-events: none;
+}
+#wisentry-portal .thread-panel.gradient {
+  background: linear-gradient(118deg, #ff4500 0%, #7c3aed 100%);
+  border: 0;
+  color: #fff;
+}
+
+#wisentry-portal .thread-kicker {
+  font: 700 10px/1.4 var(--font-mono), monospace;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #8a838f;
+}
+#wisentry-portal .thread-panel.ink .thread-kicker,
+#wisentry-portal .thread-panel.gradient .thread-kicker {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+#wisentry-portal .thread-metric {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+
+#wisentry-portal .thread-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid #e9e6e1;
+  background: #faf9f7;
+  font: 700 10px/1 var(--font-mono), monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #55505a;
+}
+#wisentry-portal .thread-chip.orange {
+  background: #fff1eb;
+  border-color: #ffd9c7;
+  color: #cc3700;
+}
+#wisentry-portal .thread-chip.violet {
+  background: #f5f3ff;
+  border-color: #e4d9fd;
+  color: #6d28d9;
+}
+#wisentry-portal .thread-chip.ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+#wisentry-portal .thread-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #f0ede8;
+  overflow: hidden;
+}
+#wisentry-portal .thread-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff4500, #7c3aed);
+}
+
+#wisentry-portal .thread-empty {
+  border: 1px dashed #d9d5ce;
+  border-radius: 12px;
+  padding: 26px;
+  text-align: center;
+  color: #8a838f;
+  font-size: 12px;
+}
+
+#wisentry-portal .thread-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 700 10px/1 var(--font-mono), monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #cc3700;
+}
+#wisentry-portal .thread-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff4500;
+  animation: thread-live-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes thread-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(255, 69, 0, 0.45);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 0 5px rgba(255, 69, 0, 0);
+  }
+}
+
+@media (max-width: 960px) {
+  #wisentry-portal .thread-grid.cols-3,
+  #wisentry-portal .thread-grid.cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  #wisentry-portal .thread-grid.cols-2,
+  #wisentry-portal .thread-grid.cols-3,
+  #wisentry-portal .thread-grid.cols-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #wisentry-portal .thread-live i {
+    animation: none;
+  }
+}
+
+/* Taller nav: let the sidebar scroll instead of clipping the account block. */
+#wisentry-portal .sidebar {
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+#wisentry-portal .nav-list {
+  gap: 1px;
+}
+#wisentry-portal .nav-item {
+  min-height: 33px;
+  font-size: 10.5px;
+}
+#wisentry-portal .sidebar-brand img.sidebar-brand-full {
+  width: 142px;
+  height: auto;
+}
+#wisentry-portal .sidebar-help {
+  margin: 12px 3px 14px;
+}
+#wisentry-portal .sidebar-help p {
+  margin-bottom: 8px;
+}
+
+/* The brand SVG is a wordmark; keep its intrinsic aspect ratio. */
+#wisentry-portal .sidebar-brand-full {
+  height: auto !important;
+  width: 142px !important;
+}
+#wisentry-portal .portal-auth-logo img {
+  height: auto !important;
+}
+
+/* Responsive workspace frame -------------------------------- */
+@media (max-width: 1000px) {
+  #wisentry-portal.app-shell .topbar {
+    gap: 8px;
+    padding-inline: clamp(12px, 2.5vw, 24px);
+  }
+
+  #wisentry-portal .topbar-right .timezone-topbar-pill,
+  #wisentry-portal .topbar-right > .icon-button {
+    display: none;
+  }
+
+  #wisentry-portal .breadcrumbs {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #wisentry-portal .breadcrumbs > span,
+  #wisentry-portal .breadcrumbs > strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Tablets use the same compact drawer navigation as phones so the
+   workspace keeps its full content width. */
+@media (max-width: 820px) {
+  #wisentry-portal.app-shell,
+  #wisentry-portal.app-shell.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #wisentry-portal .sidebar-toggle {
+    display: none;
+  }
+
+  #wisentry-portal .mobile-menu {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 34px;
+    height: 34px;
+    margin-right: 4px;
+    border-radius: 8px;
+    color: #615070;
+  }
+
+  #wisentry-portal.app-shell > .sidebar,
+  #wisentry-portal.app-shell.sidebar-collapsed > .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: -260px;
+    z-index: 50;
+    flex: none;
+    width: 230px;
+    height: 100vh;
+    height: 100dvh;
+    padding: 23px 13px 15px;
+    transition: left 0.2s ease;
+  }
+
+  #wisentry-portal.app-shell > .sidebar.sidebar-open {
+    left: 0;
+  }
+
+  #wisentry-portal.app-shell.sidebar-collapsed .sidebar-brand {
+    justify-content: flex-start;
+    padding: 2px 10px 22px;
+  }
+
+  #wisentry-portal.app-shell.sidebar-collapsed .sidebar-brand-full {
+    display: block;
+  }
+
+  #wisentry-portal.app-shell.sidebar-collapsed .sidebar-brand-mark {
+    display: none;
+  }
+
+  #wisentry-portal.app-shell.sidebar-collapsed .workspace-switch {
+    justify-content: flex-start;
+    margin: 0 3px 25px;
+    padding: 8px;
+  }
+
+  #wisentry-portal.app-shell.sidebar-collapsed .workspace-switch > :not(.workspace-avatar),
+  #wisentry-portal.app-shell.sidebar-collapsed .nav-item > span,
+  #wisentry-portal.app-shell.sidebar-collapsed .sidebar-help,
+  #wisentry-portal.app-shell.sidebar-collapsed .sidebar-profile-card .profile-text,
+  #wisentry-portal.app-shell.sidebar-collapsed .sidebar-profile-card .sidebar-logout-btn {
+    display: revert;
+  }
+
+  #wisentry-portal.app-shell.sidebar-collapsed .nav-item {
+    position: static;
+    justify-content: flex-start;
+    gap: 11px;
+    padding: 0 11px;
+  }
+
+  #wisentry-portal.app-shell.sidebar-collapsed .nav-item i {
+    position: static;
+    min-width: 18px;
+    height: auto;
+    padding: 2px 4px;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+
+  #wisentry-portal .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: rgba(24, 14, 35, 0.34);
+    backdrop-filter: blur(2px);
+  }
+
+  #wisentry-portal.app-shell > .main-area {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  #wisentry-portal.app-shell .topbar {
+    min-height: 55px;
+    height: auto;
+    padding-inline: 12px;
+  }
+
+  #wisentry-portal .topbar-right {
+    flex: none;
+    gap: 8px;
+  }
+
+  #wisentry-portal .topbar-right .demo-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+    font-size: 0;
+  }
+
+  #wisentry-portal .demo-pill .tiny-dot {
+    flex: none;
+    margin: 0;
+  }
+
+  #wisentry-portal .topbar-user-trigger {
+    gap: 0;
+    padding-inline: 2px;
+  }
+
+  #wisentry-portal .page-actions {
+    gap: 8px;
+  }
+
+  #wisentry-portal .page-actions > .btn {
+    flex: 1 1 140px;
+    width: auto;
+    min-width: 0;
+    padding-inline: 9px;
+    white-space: normal;
+  }
+
+  #wisentry-portal .thread-grid.cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #wisentry-portal .thread-grid.cols-4 > * {
+    min-width: 0;
+    padding: 12px;
+  }
+
+  #wisentry-portal .thread-grid.cols-4 > * > div:first-child {
+    gap: 4px;
+  }
+
+  #wisentry-portal .thread-grid.cols-4 > * > div:first-child > span {
+    font-size: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  #wisentry-portal .error-toast,
+  #wisentry-portal .toast {
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 12px;
+    width: auto;
+    max-width: none;
+  }
+}
+
+@media (max-width: 350px) {
+  #wisentry-portal .breadcrumbs > span,
+  #wisentry-portal .breadcrumbs > svg,
+  #wisentry-portal .topbar-user-name,
+  #wisentry-portal .topbar-user-trigger .menu-chevron {
+    display: none;
+  }
+
+  #wisentry-portal .thread-grid.cols-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Module split views must shrink below their desktop min-content width. */
+#wisentry-portal .thread-split-layout,
+#wisentry-portal .thread-split-layout > * {
+  min-width: 0;
+}
+
+#wisentry-portal .thread-split-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1200px) {
+  #wisentry-portal .thread-split-campaign {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  }
+
+  #wisentry-portal .thread-split-sequence {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  }
+
+  #wisentry-portal .thread-split-scheduler {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+
+  #wisentry-portal .thread-split-revenue {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+
+  #wisentry-portal .thread-split-geo {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  }
+}

@@ -75,8 +75,8 @@ export default function PortalPreloader({
             </div>
           </div>
           <Image
-            src="/logo.png"
-            alt="Wisentry"
+            src="/threadly-logo.svg"
+            alt="Threadly"
             width={168}
             height={52}
             className="preloader-logo-image"
@@ -168,7 +168,7 @@ export default function PortalPreloader({
         )}
 
         <div className="preloader-footer">
-          <span>WISENTRY · FOUNDER REVENUE INTELLIGENCE</span>
+          <span>THREADLY · FOUNDER REVENUE INTELLIGENCE</span>
         </div>
       </div>
     </div>

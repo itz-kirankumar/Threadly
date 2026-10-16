@@ -64,7 +64,11 @@ export function errorStatus(error: unknown, fallback = 500) {
 
 export function errorResponse(error: unknown, context: string, fallback = 500) {
   const status = errorStatus(error, fallback);
-  if (status >= 500) console.error(`${context} failed (HTTP ${status})`);
+  if (status >= 500) {
+    console.error(`${context} failed (HTTP ${status})`, error instanceof Error
+      ? { name: error.name, message: error.message, stack: error.stack }
+      : error);
+  }
   const message = error instanceof RequestError || status === 401
     ? (error instanceof Error ? error.message : "Request failed.")
     : status === 503

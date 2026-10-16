@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Target, Search, ArrowRight, Zap, CheckCircle2, ShieldCheck, Flame, Cpu, BarChart3 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Agentic Signal Radar | Wisentry",
+  title: "Agentic Signal Radar | Threadly",
   description: "Search recent public X posts for customer problems and open the original conversations.",
 };
 
@@ -77,7 +77,7 @@ export default function SignalRadarPage() {
               </div>
               <h3 className="text-2xl font-black text-gray-900 mb-3">Public Engagement Context</h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Review available likes, replies, and reposts alongside each post. Wisentry does not assign an automated buying-intent score.
+                Review available likes, replies, and reposts alongside each post. Threadly does not assign an automated buying-intent score.
               </p>
             </div>
           </div>

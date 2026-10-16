@@ -1,136 +1,134 @@
 import Link from "next/link";
-import Image from "next/image";
+
+const columns = [
+  {
+    title: "Platform",
+    links: [
+      { href: "/portal?demo=true", label: "Workspace" },
+      { href: "/signal-radar", label: "Signal Radar" },
+      { href: "/ai-engine", label: "AI Engine" },
+      { href: "/beta-collective", label: "Beta Collective" },
+    ],
+  },
+  {
+    title: "Growth",
+    links: [
+      { href: "/playbook", label: "Playbook" },
+      { href: "/case-studies", label: "Case Studies" },
+      { href: "/mission", label: "Mission" },
+      { href: "/careers", label: "Careers" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { href: "/about", label: "About Threadly" },
+      { href: "/security", label: "Security" },
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
+    ],
+  },
+];
 
 export default function Footer() {
   return (
-    <footer className="w-full bg-[#f3edf9] border-t-2 border-brand-violet/20 pt-16 pb-12 overflow-hidden relative">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-12 text-center">
-        
-        {/* Navigation Columns */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16 text-left max-w-4xl mx-auto text-sm">
-          <div>
-            <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Platform</h4>
-            <ul className="space-y-2 text-gray-600">
-              <li>
-                <Link href="/portal" className="hover:text-brand-violet transition-colors">
-                  Founder Portal
-                </Link>
-              </li>
-              <li>
-                <Link href="/signal-radar" className="hover:text-brand-violet transition-colors">
-                  Signal Radar
-                </Link>
-              </li>
-              <li>
-                <Link href="/beta-collective" className="hover:text-brand-violet transition-colors">
-                  Beta Collective
-                </Link>
-              </li>
-              <li>
-                <Link href="/ai-engine" className="hover:text-brand-violet transition-colors">
-                  AI Growth Engine
-                </Link>
-              </li>
-            </ul>
-          </div>
+    <footer className="relative overflow-hidden border-t-2 border-brand-black bg-brand-black text-white">
+      <div className="ink-grid pointer-events-none absolute inset-0 opacity-70" aria-hidden />
 
+      <div className="relative mx-auto w-full max-w-[1240px] px-5 pb-10 pt-16 lg:px-8">
+        <div className="grid gap-12 lg:grid-cols-[1.3fr_2fr]">
           <div>
-            <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Resources</h4>
-            <ul className="space-y-2 text-gray-600">
-              <li>
-                <Link href="/playbook" className="hover:text-brand-violet transition-colors">
-                  3-Step Playbook
-                </Link>
-              </li>
-              <li>
-                <Link href="/case-studies" className="hover:text-brand-violet transition-colors">
-                  Case Studies
-                </Link>
-              </li>
-              <li>
-                <a 
-                  href="https://discord.gg/xTeuQ9yE4" 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="hover:text-brand-violet transition-colors flex items-center gap-1"
-                >
-                  Discord Collective
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Company</h4>
-            <ul className="space-y-2 text-gray-600">
-              <li>
-                <Link href="/about" className="hover:text-brand-violet transition-colors">
-                  About Wisentry
-                </Link>
-              </li>
-              <li>
-                <Link href="/mission" className="hover:text-brand-violet transition-colors">
-                  Mission
-                </Link>
-              </li>
-              <li>
-                <Link href="/careers" className="hover:text-brand-violet transition-colors">
-                  Careers
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-extrabold text-brand-violet mb-3 uppercase tracking-wider text-xs">Legal</h4>
-            <ul className="space-y-2 text-gray-600">
-              <li>
-                <Link href="/privacy" className="hover:text-brand-violet transition-colors">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms" className="hover:text-brand-violet transition-colors">
-                  Terms of Service
-                </Link>
-              </li>
-              <li>
-                <Link href="/security" className="hover:text-brand-violet transition-colors">
-                  Security
-                </Link>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Giant Optimizely-style 3D Extruded Brand Wordmark */}
-        <div className="my-10 select-none overflow-hidden">
-          <Link href="/" className="inline-block hover:scale-[1.01] transition-transform">
-            <div className="text-6xl sm:text-8xl md:text-9xl lg:text-[140px] font-black tracking-tight text-brand-bush extruded-violet uppercase leading-none">
-              WISENTRY
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-brand-black">
+                <svg viewBox="0 0 64 64" className="h-6 w-6" aria-hidden>
+                  <path
+                    d="M22 15c8.4 0 15.2 6.8 15.2 15.2S30.4 45.4 22 45.4"
+                    fill="none"
+                    stroke="#ff4500"
+                    strokeWidth="7"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M42 49c-8.4 0-15.2-6.8-15.2-15.2S33.6 18.6 42 18.6"
+                    fill="none"
+                    stroke="#7c3aed"
+                    strokeWidth="7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <span className="text-[26px] font-black tracking-[-0.05em]">
+                threadly<span className="text-brand-orange">.</span>
+              </span>
             </div>
-          </Link>
+            <p className="mt-5 max-w-sm text-sm leading-relaxed text-white/60">
+              The growth operating system. Find the people already talking about
+              the problem you solve, reach them like a human, and compound every
+              channel — search, social and AI answers.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {["Leads", "Outreach", "Campaigns", "Scheduling", "Analytics", "GEO"].map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border border-white/15 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-white/70"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+            {columns.map((column) => (
+              <div key={column.title}>
+                <h4 className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-brand-orange">
+                  {column.title}
+                </h4>
+                <ul className="mt-4 space-y-2.5">
+                  {column.links.map((link) => (
+                    <li key={link.label}>
+                      <Link
+                        href={link.href}
+                        className="text-[13px] font-semibold text-white/70 transition-colors hover:text-white"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Bottom Copyright Bar */}
-        <div className="pt-8 border-t border-purple-200/60 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-4">
-          <div className="flex items-center gap-2">
-            <Image src="/icon.jpg" alt="Wisentry Logo" width={20} height={20} className="h-5 w-5 rounded object-cover" />
-            <span className="font-extrabold text-gray-900">Wisentry</span>
-            <span>© {new Date().getFullYear()} Wisentry Inc. All rights reserved.</span>
+        <div className="my-12 select-none overflow-hidden">
+          <div
+            aria-hidden
+            className="whitespace-nowrap text-center text-[clamp(64px,17vw,220px)] font-black uppercase leading-[0.82] tracking-[-0.065em] text-transparent"
+            style={{
+              WebkitTextStroke: "2px rgba(255,255,255,0.16)",
+            }}
+          >
+            threadly
           </div>
-          <div className="flex items-center gap-4">
-            <a 
-              href="https://discord.gg/xTeuQ9yE4" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-brand-violet font-bold hover:underline"
+        </div>
+
+        <div className="flex flex-col gap-4 border-t border-white/12 pt-6 text-[11px] text-white/45 sm:flex-row sm:items-center sm:justify-between">
+          <span>© {new Date().getFullYear()} Threadly Inc. All rights reserved.</span>
+          <div className="flex items-center gap-5">
+            <a
+              href="https://discord.gg/xTeuQ9yE4"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-white/70 transition-colors hover:text-brand-orange"
             >
-              Join Community Discord
+              Community
             </a>
+            <span className="font-mono uppercase tracking-[0.1em]">
+              Built for founders who ship
+            </span>
           </div>
         </div>
-
       </div>
     </footer>
   );

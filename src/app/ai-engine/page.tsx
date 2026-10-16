@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Cpu, ArrowRight, Zap, Shield, Sparkles, MessageSquare, Flame } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "AI Growth Engine | Wisentry",
+  title: "AI Growth Engine | Threadly",
   description: "The autonomous growth workforce designed to run your outreach, uncover customer friction, and scale B2C user acquisition.",
 };
 

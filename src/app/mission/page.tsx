@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Compass, ArrowRight, ShieldCheck, Heart, Sparkles, Target } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Our Mission | Wisentry",
+  title: "Our Mission | Threadly",
   description: "Eliminating the startup distribution tarpit so experience-makers can focus on building what consumers love.",
 };
 

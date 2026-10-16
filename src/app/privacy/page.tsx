@@ -4,8 +4,8 @@ import Footer from "@/components/Footer";
 import { ShieldCheck } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Wisentry",
-  description: "Learn how Wisentry collects, uses, and safeguards founder and user data.",
+  title: "Privacy Policy | Threadly",
+  description: "Learn how Threadly collects, uses, and safeguards founder and user data.",
 };
 
 export default function PrivacyPage() {
@@ -29,7 +29,7 @@ export default function PrivacyPage() {
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">1. Information We Collect</h2>
               <p className="mb-4">
-                When you sign up for Wisentry, join our waitlist, or participate in the Beta Collective, we may collect:
+                When you sign up for Threadly, join our waitlist, or participate in the Beta Collective, we may collect:
               </p>
               <ul className="list-disc pl-6 space-y-2 text-sm">
                 <li>Contact details such as your full name, email address, and Discord handle.</li>
@@ -60,7 +60,7 @@ export default function PrivacyPage() {
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">4. Your Privacy Rights</h2>
               <p className="mb-4">
-                Depending on your location (including under GDPR and CCPA), you have the right to access, update, export, or delete your personal data at any time. To exercise these rights, please contact us at privacy@wisentry.com.
+                Depending on your location (including under GDPR and CCPA), you have the right to access, update, export, or delete your personal data at any time. To exercise these rights, please contact us at privacy@threadly.com.
               </p>
             </section>
           </div>

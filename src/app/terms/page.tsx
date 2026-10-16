@@ -4,8 +4,8 @@ import Footer from "@/components/Footer";
 import { FileText } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | Wisentry",
-  description: "Terms and conditions governing use of the Wisentry platform and community.",
+  title: "Terms of Service | Threadly",
+  description: "Terms and conditions governing use of the Threadly platform and community.",
 };
 
 export default function TermsPage() {
@@ -29,14 +29,14 @@ export default function TermsPage() {
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">1. Acceptance of Terms</h2>
               <p>
-                By accessing or using Wisentry, submitting our waitlist application, or joining our Discord collective, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our services.
+                By accessing or using Threadly, submitting our waitlist application, or joining our Discord collective, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our services.
               </p>
             </section>
 
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">2. Acceptable Use & Anti-Spam Policy</h2>
               <p className="mb-4">
-                Wisentry exists to foster authentic, value-driven connections between builders and early adopters. You agree not to:
+                Threadly exists to foster authentic, value-driven connections between builders and early adopters. You agree not to:
               </p>
               <ul className="list-disc pl-6 space-y-2 text-sm">
                 <li>Deploy automated scrapers, mass spam bots, or deceptive marketing tactics through our platform.</li>
@@ -48,14 +48,14 @@ export default function TermsPage() {
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">3. Beta Cohorts & Intellectual Property</h2>
               <p>
-                You retain all ownership and intellectual property rights in your startup, products, and designs submitted to Wisentry. Wisentry retains all rights in its platform, algorithms, brand assets, and methodologies.
+                You retain all ownership and intellectual property rights in your startup, products, and designs submitted to Threadly. Threadly retains all rights in its platform, algorithms, brand assets, and methodologies.
               </p>
             </section>
 
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">4. Limitation of Liability</h2>
               <p>
-                Wisentry provides guidance, intent signals, and early adopter testing tools on an &quot;as is&quot; basis. While we strive to maximize your distribution outcomes, we do not guarantee specific revenue figures or investor commitments.
+                Threadly provides guidance, intent signals, and early adopter testing tools on an &quot;as is&quot; basis. While we strive to maximize your distribution outcomes, we do not guarantee specific revenue figures or investor commitments.
               </p>
             </section>
           </div>

@@ -1,0 +1,11 @@
+.git
+.gstack
+node_modules
+.next
+.next-*
+out
+build
+.env*
+*.db
+*.db-journal
+.wisentry-data

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 96" role="img" aria-label="Threadly">
+  <g transform="translate(6 12)">
+    <path
+      d="M12 4c13.3 0 24 10.7 24 24s-10.7 24-24 24"
+      fill="none" stroke="#ff4500" stroke-width="11" stroke-linecap="round"
+    />
+    <path
+      d="M44 52c-13.3 0-24-10.7-24-24s10.7-24 24-24"
+      fill="none" stroke="#a78bfa" stroke-width="11" stroke-linecap="round"
+    />
+  </g>
+  <text
+    x="76" y="63"
+    font-family="Inter, 'Helvetica Neue', Arial, sans-serif"
+    font-size="52" font-weight="800" letter-spacing="-2.6"
+    fill="#ffffff"
+  >threadly</text>
+  <circle cx="352" cy="60" r="6.5" fill="#ff4500"/>
+</svg>

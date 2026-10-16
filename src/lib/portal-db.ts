@@ -4,12 +4,64 @@ type FirebaseIdentity = { uid: string; email: string; name: string; idToken: str
 type WorkspaceAuth = { uid: string; idToken: string };
 const workspaceAuth = new AsyncLocalStorage<WorkspaceAuth>();
 
-// In-memory fallback store for demo mode & offline development
-const demoStore = new Map<string, unknown>();
+// In-memory store for demo mode. It mirrors the Realtime Database's data
+// model (one tree per user, nested paths, PATCH merges) and its storage
+// rules (null, empty arrays and empty objects are not stored), so demo
+// sessions exercise the same code paths and edge cases as real workspaces.
+type DemoTree = Record<string, unknown>;
+const demoTrees = new Map<string, DemoTree>();
 
-function getDemoPath(uid: string, path: string) {
-  const cleanPath = path.split("/").filter(Boolean).join("/");
-  return `${uid}:${cleanPath}`;
+function pathKeys(path: string) {
+  return path.split("/").filter(Boolean);
+}
+
+function firebaseValue(value: unknown): unknown {
+  if (value === null || value === undefined || typeof value === "function") return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number" && !Number.isFinite(value)) return null;
+  if (Array.isArray(value)) {
+    const items = value.map(firebaseValue).filter(item => item !== null);
+    return items.length ? items : null;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => [key, firebaseValue(item)] as const)
+      .filter(([, item]) => item !== null);
+    return entries.length ? Object.fromEntries(entries) : null;
+  }
+  return value;
+}
+
+function demoRead(uid: string, path: string): unknown {
+  let node: unknown = demoTrees.get(uid) ?? null;
+  for (const key of pathKeys(path)) {
+    if (!node || typeof node !== "object") return null;
+    node = (node as DemoTree)[key];
+  }
+  if (node === undefined || node === null) return null;
+  if (typeof node === "object" && !Array.isArray(node) && !Object.keys(node).length) return null;
+  return structuredClone(node);
+}
+
+function demoWrite(uid: string, path: string, value: unknown) {
+  const keys = pathKeys(path);
+  const stored = firebaseValue(value);
+  if (!keys.length) {
+    demoTrees.set(uid, stored && typeof stored === "object" && !Array.isArray(stored) ? stored as DemoTree : {});
+    return;
+  }
+  let node = demoTrees.get(uid);
+  if (!node) {
+    node = {};
+    demoTrees.set(uid, node);
+  }
+  for (const key of keys.slice(0, -1)) {
+    if (!node[key] || typeof node[key] !== "object") node[key] = {};
+    node = node[key] as DemoTree;
+  }
+  const last = keys[keys.length - 1];
+  if (stored === null) delete node[last];
+  else node[last] = stored;
 }
 
 function databaseUrl() {
@@ -29,7 +81,7 @@ export async function getFirebaseIdentity(request: Request, optional = false): P
   if (idToken === "demo-token") {
     return {
       uid: "demo-founder-uid",
-      email: "founder@demo.wisentry.io",
+      email: "founder@demo.threadly.io",
       name: "Demo Founder",
       idToken: "demo-token",
     };
@@ -65,22 +117,7 @@ export async function readData<T>(path: string): Promise<T | null> {
   if (!context) throw new Error("Authenticated Firebase workspace is required.");
 
   if (context.idToken === "demo-token") {
-    const key = getDemoPath(context.uid, path);
-    if (!path || path === "") {
-      // return full tree
-      const full: Record<string, unknown> = {};
-      for (const [storeKey, val] of demoStore.entries()) {
-        if (storeKey.startsWith(`${context.uid}:`)) {
-          const subKey = storeKey.slice(`${context.uid}:`.length);
-          if (!subKey.includes("/")) {
-            full[subKey] = val;
-          }
-        }
-      }
-      return (Object.keys(full).length ? full : null) as T | null;
-    }
-    const val = demoStore.get(key);
-    return (val !== undefined ? val : null) as T | null;
+    return demoRead(context.uid, path) as T | null;
   }
 
   const response = await fetch(firebasePath(path), { cache: "no-store" });
@@ -95,8 +132,7 @@ export async function writeData(path: string, value: unknown): Promise<void> {
   if (!context) throw new Error("Authenticated Firebase workspace is required.");
 
   if (context.idToken === "demo-token") {
-    const key = getDemoPath(context.uid, path);
-    demoStore.set(key, value);
+    demoWrite(context.uid, path, value);
     return;
   }
 
@@ -116,9 +152,8 @@ export async function patchData(path: string, value: Record<string, unknown>): P
   if (!context) throw new Error("Authenticated Firebase workspace is required.");
 
   if (context.idToken === "demo-token") {
-    const key = getDemoPath(context.uid, path);
-    const existing = (demoStore.get(key) as Record<string, unknown>) || {};
-    demoStore.set(key, { ...existing, ...value });
+    // PATCH semantics: each key is a child path; null deletes it.
+    for (const [key, item] of Object.entries(value)) demoWrite(context.uid, `${path}/${key}`, item);
     return;
   }
 

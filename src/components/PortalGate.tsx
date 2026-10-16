@@ -77,16 +77,24 @@ export default function PortalGate() {
     };
   }, [initAuth]);
 
+  // Keep these identities stable across renders. PortalWorkspace derives
+  // `refresh` from getIdToken, and an inline function here would re-create
+  // it every render, re-firing the auto-refresh effect forever.
+  const demoGetIdToken = useCallback(async () => "demo-token", []);
+  const demoSignOut = useCallback(async () => {
+    setDemoMode(false);
+    router.replace("/portal/login");
+  }, [router]);
+  const userGetIdToken = useCallback(() => user?.getIdToken() ?? Promise.reject(new Error("Sign in required.")), [user]);
+  const userSignOut = useCallback(() => signOut(getFirebaseAuth()), []);
+
   if (demoMode) {
     return (
       <PortalWorkspace
-        email="founder@demo.wisentry.io"
+        email="founder@demo.threadly.io"
         name="Demo Founder"
-        getIdToken={async () => "demo-token"}
-        signOutAction={async () => {
-          setDemoMode(false);
-          router.replace("/portal/login");
-        }}
+        getIdToken={demoGetIdToken}
+        signOutAction={demoSignOut}
       />
     );
   }
@@ -121,8 +129,8 @@ export default function PortalGate() {
     <PortalWorkspace
       email={user.email || ""}
       name={user.displayName || "Founder"}
-      getIdToken={() => user.getIdToken()}
-      signOutAction={() => signOut(getFirebaseAuth())}
+      getIdToken={userGetIdToken}
+      signOutAction={userSignOut}
     />
   );
 }

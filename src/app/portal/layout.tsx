@@ -1,7 +1,8 @@
 import "./portal.css";
+import "./threadly-theme.css";
 
 export const metadata = {
-  title: "Founder Portal | Wisentry",
+  title: "Threadly Workspace",
   robots: { index: false, follow: false },
 };
 
