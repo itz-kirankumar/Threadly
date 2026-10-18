@@ -16,8 +16,9 @@ export type WaitlistRequest = {
 };
 
 function databaseUrl() {
-  const url = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
-  if (!url) throw new Error("Configure the Firebase Realtime Database URL.");
+  const url = process.env.FIREBASE_DATABASE_URL
+    || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL
+    || "https://wisentry-510811-default-rtdb.firebaseio.com";
   return url.replace(/\/+$/, "");
 }
 

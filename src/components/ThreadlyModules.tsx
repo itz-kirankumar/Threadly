@@ -1586,9 +1586,9 @@ export function RevenuePage({ growth, leads }: { growth: Growth; leads: LeadLite
             tone: "violet" as const,
           },
           {
-            label: "GEO answer share",
+            label: "GEO citation share",
             value: pct(growth.metrics.geoShare),
-            copy: "Average citation share across tracked AI questions.",
+            copy: "Share of completed web-grounded scans citing your domain.",
             tone: "ink" as const,
           },
         ].map((card) => (
@@ -1625,6 +1625,7 @@ const engineLabel: Record<string, string> = {
   google_ai: "Google AI",
   claude: "Claude",
 };
+const geoEngineCount = 2;
 
 export function GeoPage({
   growth,
@@ -1646,7 +1647,7 @@ export function GeoPage({
     if (!query.trim()) return;
     const result = await act(
       "geoAdd",
-      { query, intent, volume: 500 },
+      { query, intent },
       "Question added to GEO tracking",
     );
     if (result) {
@@ -1667,7 +1668,7 @@ export function GeoPage({
           <h1>
             GEO Visibility<span className="accent-period">.</span>
           </h1>
-          <p>Do the AI engines cite you when your buyers ask? Track the answer, then close the gap.</p>
+          <p>Check live, web-grounded answers and their sources for your tracked buyer questions.</p>
         </div>
         <div className="page-actions">
           <button className="btn btn-outline" onClick={() => setAdding((value) => !value)}>
@@ -1675,7 +1676,7 @@ export function GeoPage({
           </button>
           <button
             className="btn btn-dark"
-            disabled={busy}
+            disabled={busy || growth.geo.length === 0}
             onClick={() => act("geoScan", {}, "All questions rescanned")}
           >
             <RefreshCw size={16} /> Rescan all
@@ -1684,26 +1685,30 @@ export function GeoPage({
       </div>
 
       <div className="thread-grid cols-4" style={{ marginBottom: 18 }}>
-        <MetricTile label="Average answer share" value={pct(growth.metrics.geoShare)} delta="Across engines" tone="ink" icon={Globe2} />
-        <MetricTile label="Tracked questions" value={String(growth.geo.length)} delta="Commercial + informational" icon={Target} />
+        <MetricTile label="Domain citation share" value={pct(growth.metrics.geoShare)} delta="Across completed provider scans" tone="ink" icon={Globe2} />
+        <MetricTile label="Tracked questions" value={String(growth.geo.length)} delta="Add questions your buyers ask" icon={Target} />
         <MetricTile
           label="Citations"
           value={String(
             growth.geo.reduce(
-              (total, item) => total + item.engines.filter((engine) => engine.cited).length,
+              (total, item) => total + item.engines.filter((engine) => engine.status === "scanned" && engine.cited).length,
               0,
             ),
           )}
-          delta="Out of possible"
+          delta="From provider source citations"
           tone="violet"
           icon={Link2}
         />
         <MetricTile
           label="Open gaps"
-          value={String(growth.geo.filter((item) => item.shareOfAnswer < 50).length)}
-          delta="Below 50% share"
+          value={String(growth.geo.filter((item) => item.engines.some((engine) => engine.status === "scanned") && item.shareOfAnswer === 0).length)}
+          delta="No tracked domain citations"
           icon={Flame}
         />
+      </div>
+
+      <div className="mb-4 rounded-xl border border-brand-line bg-white px-4 py-3 text-[11px] leading-relaxed text-brand-muted">
+        Scans use OpenAI web search and Gemini Google Search grounding. Add <code>OPENAI_API_KEY</code> and/or <code>GEMINI_API_KEY</code> in Vercel Project Settings → Environment Variables, then redeploy. Each scan makes a billable provider request. Only source URLs returned by the provider count as citations.
       </div>
 
       {adding && (
@@ -1739,9 +1744,18 @@ export function GeoPage({
 
       <div className="thread-split-layout thread-split-geo grid gap-4">
         <div className="space-y-2.5">
+          {growth.geo.length === 0 && (
+            <div className="thread-panel text-center">
+              <Globe2 className="mx-auto h-7 w-7 text-brand-violet" />
+              <h3 className="mt-3 text-[14px] font-black">Track your first buyer question</h3>
+              <p className="mt-1 text-[11px] leading-relaxed text-brand-muted">Add a question people ask before choosing a product. Then run a scan to see grounded answers and source links.</p>
+              <button className="btn btn-dark mt-3" onClick={() => setAdding(true)}><Plus size={15} /> Track question</button>
+            </div>
+          )}
           {growth.geo.map((item) => {
             const active = item.id === selected?.id;
-            const cited = item.engines.filter((engine) => engine.cited).length;
+            const scannedCount = item.engines.filter((engine) => engine.status === "scanned").length;
+            const cited = item.engines.filter((engine) => engine.status === "scanned" && engine.cited).length;
             return (
               <button
                 key={item.id}
@@ -1759,18 +1773,15 @@ export function GeoPage({
                       <span className={`thread-chip ${item.intent === "commercial" ? "orange" : "violet"}`}>
                         {item.intent}
                       </span>
-                      <span className="font-mono text-[8.5px] text-brand-quiet">
-                        {item.volume.toLocaleString()} / mo
-                      </span>
                     </div>
                     <div className="mt-2 text-[12.5px] font-black leading-snug">{item.query}</div>
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="text-[19px] font-black leading-none tracking-[-0.05em]">
-                      {item.shareOfAnswer}%
+                      {scannedCount ? `${item.shareOfAnswer}%` : "—"}
                     </div>
                     <div className={`font-mono text-[8.5px] font-bold ${item.trend >= 0 ? "text-brand-orange" : "text-brand-quiet"}`}>
-                      {item.trend >= 0 ? "↑" : "↓"} {Math.abs(item.trend).toFixed(1)}
+                      {scannedCount ? `${item.trend >= 0 ? "↑" : "↓"} ${Math.abs(item.trend).toFixed(1)} pt` : "not scanned"}
                     </div>
                   </div>
                 </div>
@@ -1778,9 +1789,9 @@ export function GeoPage({
                   {item.engines.map((engine) => (
                     <span
                       key={engine.engine}
-                      title={`${engineLabel[engine.engine]}${engine.cited ? ` · rank ${engine.rank}` : " · not cited"}`}
+                      title={`${engineLabel[engine.engine]} · ${engine.status === "scanned" ? (engine.cited ? "domain cited" : "not cited") : engine.status.replace("_", " ")}`}
                       className={`grid h-5 w-5 place-items-center rounded-md font-mono text-[7px] font-black ${
-                        engine.cited
+                        engine.status === "scanned" && engine.cited
                           ? "bg-brand-orange text-white"
                           : "border border-brand-line bg-brand-paper text-brand-quiet"
                       }`}
@@ -1789,7 +1800,7 @@ export function GeoPage({
                     </span>
                   ))}
                   <span className="ml-auto font-mono text-[8.5px] text-brand-quiet">
-                    {cited}/5 cited
+                    {scannedCount ? `${cited}/${scannedCount} citations` : `0/${geoEngineCount} scanned`}
                   </span>
                 </div>
               </button>
@@ -1824,7 +1835,7 @@ export function GeoPage({
                   >
                     <span
                       className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[8px] font-black ${
-                        engine.cited ? "bg-brand-black text-white" : "bg-brand-line text-brand-muted"
+                        engine.status === "scanned" && engine.cited ? "bg-brand-black text-white" : "bg-brand-line text-brand-muted"
                       }`}
                     >
                       {engineLabel[engine.engine].slice(0, 2).toUpperCase()}
@@ -1833,19 +1844,23 @@ export function GeoPage({
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-black">{engineLabel[engine.engine]}</span>
                         <span
-                          className={`thread-chip ${engine.cited ? "ok" : "orange"}`}
+                          className={`thread-chip ${engine.status === "scanned" && engine.cited ? "ok" : engine.status === "failed" ? "orange" : ""}`}
                         >
-                          {engine.cited ? `cited · #${engine.rank}` : "not cited"}
+                          {engine.status === "scanned" ? (engine.cited ? "domain cited" : "not cited") : engine.status === "not_configured" ? "not configured" : engine.status === "failed" ? "scan failed" : "not scanned"}
                         </span>
                       </div>
-                      <p className="mt-0.5 truncate text-[10px] text-brand-muted">{engine.answer}</p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-brand-muted">{engine.answer}</p>
+                      {engine.sources.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                          {engine.sources.map((source) => (
+                            <a key={source.url} href={source.url} target="_blank" rel="noreferrer" className="max-w-full truncate text-[9px] font-bold text-brand-violet underline" onClick={(event) => event.stopPropagation()}>
+                              {source.title || source.url}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="shrink-0 text-right">
-                      <div className="font-mono text-[9px] text-brand-quiet">sentiment</div>
-                      <div className="font-mono text-[10px] font-bold">
-                        {Math.round(engine.sentiment * 100)}%
-                      </div>
-                    </div>
+                    {engine.status === "scanned" && <div className="shrink-0 font-mono text-[9px] text-brand-quiet">{engine.sources.length} sources</div>}
                   </div>
                 ))}
               </div>
@@ -1857,20 +1872,6 @@ export function GeoPage({
                 Close the gap before a competitor owns the answer.
               </h3>
               <p className="mt-2 text-[11px] leading-relaxed text-white/75">{selected.gap}</p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {[
-                  ["Volume", selected.volume.toLocaleString()],
-                  ["Difficulty", String(selected.difficulty)],
-                  ["Owned pages", String(selected.ownedPages)],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-white/12 px-2.5 py-2">
-                    <div className="font-mono text-[8px] uppercase tracking-[0.1em] text-white/60">
-                      {label}
-                    </div>
-                    <div className="mt-0.5 text-[14px] font-black text-white">{value}</div>
-                  </div>
-                ))}
-              </div>
               <button
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[11px] font-black text-brand-black"
                 onClick={() => act("slotSuggest", { channel: "blog", title: `GEO fix · ${selected.query}`, group: "GEO series" }, "Content slot reserved")}
@@ -1883,9 +1884,7 @@ export function GeoPage({
             <div className="thread-panel">
               <Kicker>How Threadly measures this</Kicker>
               <p className="mt-2 text-[10.5px] leading-relaxed text-brand-muted">
-                Each tracked question is asked of every engine on a schedule. A citation only counts
-                when your domain appears in the answer or its sources — not when a competitor merely
-                mentions the category.
+                Scans run when you request them. A domain citation counts only when the provider returns a source URL on your configured domain. Results reflect provider search output at scan time; they do not represent the consumer-facing ChatGPT or Gemini product exactly.
               </p>
             </div>
           </div>

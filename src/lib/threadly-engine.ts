@@ -141,13 +141,17 @@ export type ContentSlot = {
   created_at: string;
 };
 
-export type GeoEngine = "chatgpt" | "perplexity" | "gemini" | "google_ai" | "claude";
+export type GeoEngine = "chatgpt" | "gemini";
+export type GeoSource = { title: string; url: string };
 export type GeoEngineResult = {
   engine: GeoEngine;
+  status: "not_scanned" | "scanned" | "not_configured" | "failed";
   cited: boolean;
   rank: number | null;
-  sentiment: number;
   answer: string;
+  sources: GeoSource[];
+  scannedAt?: string;
+  error?: string;
 };
 
 export type GeoQuery = {
@@ -564,86 +568,8 @@ function buildSlots(seed: string): ContentSlot[] {
 }
 
 function buildGeo(seed: string): GeoQuery[] {
-  const engine = (
-    name: GeoEngine,
-    salt: string,
-    answer: string,
-  ): GeoEngineResult => {
-    const cited = seededUnit(seed, `${salt}-cited`) > 0.45;
-    return {
-      engine: name,
-      cited,
-      rank: cited ? seededInt(seed, `${salt}-rank`, 1, 6) : null,
-      sentiment: Number((seededUnit(seed, `${salt}-sent`) * 0.5 + 0.5).toFixed(2)),
-      answer,
-    };
-  };
-
-  const queries: Omit<GeoQuery, "engines" | "lastScannedAt" | "trend">[] = [
-    {
-      id: "geo-1",
-      query: "best outreach automation for B2B SaaS",
-      intent: "commercial",
-      volume: 2400,
-      difficulty: 61,
-      shareOfAnswer: 38,
-      ownedPages: 3,
-      gap: "No comparison page against the three tools cited above you.",
-    },
-    {
-      id: "geo-2",
-      query: "how to find high intent leads on social",
-      intent: "informational",
-      volume: 1800,
-      difficulty: 44,
-      shareOfAnswer: 52,
-      ownedPages: 5,
-      gap: "Your playbook ranks, but lacks a definition block AI engines can quote.",
-    },
-    {
-      id: "geo-3",
-      query: "threadly vs traditional cold email",
-      intent: "comparison",
-      volume: 720,
-      difficulty: 32,
-      shareOfAnswer: 64,
-      ownedPages: 2,
-      gap: "Strong, but missing freshness signals — engines prefer recently updated pages.",
-    },
-    {
-      id: "geo-4",
-      query: "generative engine optimization tools",
-      intent: "commercial",
-      volume: 1200,
-      difficulty: 58,
-      shareOfAnswer: 21,
-      ownedPages: 1,
-      gap: "You have no landing page targeting GEO as a category.",
-    },
-    {
-      id: "geo-5",
-      query: "how to schedule social posts by best time",
-      intent: "informational",
-      volume: 3100,
-      difficulty: 39,
-      shareOfAnswer: 47,
-      ownedPages: 4,
-      gap: "Add a data table per timezone — the current post is prose only.",
-    },
-  ];
-
-  return queries.map((query) => ({
-    ...query,
-    engines: [
-      engine("chatgpt", `${query.id}-gpt`, "Lists four tools, cites your playbook second."),
-      engine("perplexity", `${query.id}-pplx`, "Cites a third-party roundup that omits you."),
-      engine("gemini", `${query.id}-gem`, "References a competitor's comparison page."),
-      engine("google_ai", `${query.id}-goog`, "Draws from your own docs for one sub-answer."),
-      engine("claude", `${query.id}-claude`, "Quotes your definition but not the product page."),
-    ],
-    lastScannedAt: addDays(now(), -seededInt(seed, `${query.id}-scan`, 0, 3)),
-    trend: Number((seededUnit(seed, `${query.id}-trend`) * 18 - 5).toFixed(1)),
-  }));
+  void seed;
+  return [];
 }
 
 function buildEvents(seed: string): LiveEvent[] {
@@ -653,7 +579,7 @@ function buildEvents(seed: string): LiveEvent[] {
     { kind: "outreach", title: "Step 2 delivered", detail: "Variant B opened by 41% of recipients so far.", actor: "Sequence Engine", tone: "orange" },
     { kind: "campaign", title: "Budget shifted", detail: "$240 moved into Google Search after ROAS crossed 3.1×.", actor: "Campaign Command", tone: "violet" },
     { kind: "schedule", title: "Slot approved", detail: "“Why cold outreach stopped working” queued for Tue 14:00.", actor: "Scheduler", tone: "orange" },
-    { kind: "geo", title: "AI citation gained", detail: "ChatGPT now cites you for “outreach automation”.", actor: "GEO Monitor", tone: "ok" },
+    { kind: "geo", title: "GEO question tracked", detail: "Run a provider scan to collect grounded answers and source citations.", actor: "GEO Monitor", tone: "violet" },
     { kind: "reply", title: "Prospect replied", detail: "“Send the playbook — we're evaluating this quarter.”", actor: "Outreach", tone: "orange" },
     { kind: "workflow", title: "Workflow executed", detail: "Auto-qualify ran across 4 new signals.", actor: "Automation", tone: "violet" },
     { kind: "signal", title: "New signal · Reddit", detail: "r/SaaS thread: “what replaced cold email for you?”", actor: "Signal Radar", tone: "orange" },
@@ -793,11 +719,22 @@ async function readGrowth(uid: string, leads: Lead[]): Promise<GrowthState> {
       leadIds: asList(record.leadIds, fallback.leadIds),
     } as Segment;
   });
-  const geo = asList<GeoQuery>(stored.geo, defaults.geo).map((item, index) => {
-    const fallback = defaults.geo[index] ?? defaults.geo[0];
-    const record: Record<string, unknown> = isRecord(item) ? item : {};
-    return { ...fallback, ...record, engines: asList(record.engines, fallback.engines) } as GeoQuery;
-  });
+  const geo = asList<GeoQuery>(stored.geo, defaults.geo)
+    // Remove the old seeded GEO examples. Their answers and citation metrics were illustrative only.
+    .filter((item) => !/^geo-[1-5]$/.test(item.id))
+    .map((item) => {
+      const record: Record<string, unknown> = isRecord(item) ? item : {};
+      const previousEngines = asList<GeoEngineResult>(record.engines, []);
+      const migratedSample = previousEngines.some((engine) => !["chatgpt", "gemini"].includes(engine.engine) || !engine.status || !Array.isArray(engine.sources));
+      // Only show supported providers. Older saved answers were illustrative and are reset for a live scan.
+      const engines = (["chatgpt", "gemini"] as GeoEngine[]).map((name) => {
+        const previous = previousEngines.find((engine) => engine.engine === name);
+        return previous?.status && Array.isArray(previous.sources)
+          ? previous
+          : { engine: name, status: "not_scanned", cited: false, rank: null, answer: "Run a scan to check this provider.", sources: [] } as GeoEngineResult;
+      });
+      return { ...record, engines, ...(migratedSample ? { shareOfAnswer: 0, trend: 0, lastScannedAt: "Not scanned", volume: 0, difficulty: 0, ownedPages: 0 } : {}) } as GeoQuery;
+    });
 
   const normalized: GrowthState = {
     ...defaults,
@@ -914,12 +851,10 @@ export async function getGrowthSnapshot(uid: string, leads: Lead[]): Promise<Gro
   ).length;
   const converted = leads.filter((lead) => lead.stage === "converted").length;
 
-  const geoShare =
-    state.geo.length > 0
-      ? Math.round(
-          state.geo.reduce((total, query) => total + query.shareOfAnswer, 0) / state.geo.length,
-        )
-      : 0;
+  const completedGeoScans = state.geo.flatMap((query) => query.engines).filter((engine) => engine.status === "scanned");
+  const geoShare = completedGeoScans.length
+    ? Math.round((completedGeoScans.filter((engine) => engine.cited).length / completedGeoScans.length) * 100)
+    : 0;
 
   const scheduledThisWeek = state.slots.filter((slot) => {
     const when = new Date(slot.scheduledFor).getTime();
@@ -1433,26 +1368,99 @@ export async function removeContentSlot(uid: string, leads: Lead[], slotId: stri
    GEO visibility
    ------------------------------------------------------------ */
 
+async function scanWithOpenAI(query: string, domain: string): Promise<{ answer: string; sources: GeoSource[] }> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model: process.env.GEO_OPENAI_MODEL || "gpt-4.1-mini",
+      tools: [{ type: "web_search" }],
+      tool_choice: "required",
+      store: false,
+      input: `Answer this buyer question directly and naturally: "${query}". Mention ${domain} only if it is genuinely relevant to the answer.`,
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+  if (!response.ok) throw new Error("OpenAI web search request failed.");
+  const payload = await response.json();
+  const blocks = Array.isArray(payload.output) ? payload.output : [];
+  const answer = blocks.flatMap((item: { type?: string; content?: Array<{ type?: string; text?: string }> }) =>
+    item.type === "message" && Array.isArray(item.content) ? item.content.filter((part) => part.type === "output_text").map((part) => part.text ?? "") : [],
+  ).join("\n").trim();
+  const citations = blocks.flatMap((item: { type?: string; content?: Array<{ annotations?: Array<{ type?: string; url?: string; title?: string }> }> }) =>
+    item.type === "message" && Array.isArray(item.content)
+      ? item.content.flatMap((part) => Array.isArray(part.annotations) ? part.annotations.filter((annotation) => annotation.type === "url_citation" && typeof annotation.url === "string").map((annotation) => ({ title: annotation.title || annotation.url!, url: annotation.url! })) : [])
+      : [],
+  );
+  if (!answer) throw new Error("OpenAI returned no answer.");
+  return { answer, sources: uniqueGeoSources(citations) };
+}
+
+async function scanWithGemini(query: string, domain: string): Promise<{ answer: string; sources: GeoSource[] }> {
+  const model = process.env.GEO_GEMINI_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY! },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: `Answer this buyer question directly and naturally: "${query}". Mention ${domain} only if it is genuinely relevant to the answer.` }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: { temperature: 0.2 },
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+  if (!response.ok) throw new Error("Gemini Google Search grounding request failed.");
+  const payload = await response.json();
+  const candidate = payload.candidates?.[0];
+  const answer = candidate?.content?.parts?.map((part: { text?: unknown }) => typeof part.text === "string" ? part.text : "").join("\n").trim();
+  const chunks = candidate?.groundingMetadata?.groundingChunks ?? [];
+  const sources = chunks.flatMap((chunk: { web?: { uri?: unknown; title?: unknown } }) =>
+    typeof chunk.web?.uri === "string" ? [{ title: typeof chunk.web.title === "string" ? chunk.web.title : chunk.web.uri, url: chunk.web.uri }] : [],
+  );
+  if (!answer) throw new Error("Gemini returned no answer.");
+  return { answer, sources: uniqueGeoSources(sources) };
+}
+
+function uniqueGeoSources(sources: GeoSource[]) {
+  return [...new Map(sources.map((source) => [source.url, source])).values()].slice(0, 8);
+}
+
 export async function scanGeo(uid: string, leads: Lead[], queryId?: string) {
   const state = await readGrowth(uid, leads);
   const targets = queryId ? state.geo.filter((query) => query.id === queryId) : state.geo;
   if (!targets.length) throw new Error("Query not found.");
-
-  const stamp = Math.floor(Date.now() / 60000);
-  for (const query of state.geo) {
-    if (!targets.includes(query)) continue;
-    const drift = (seededUnit(`${uid}-${query.id}-${stamp}`, "drift") - 0.5) * 8;
-    query.shareOfAnswer = Math.max(0, Math.min(100, Math.round(query.shareOfAnswer + drift)));
-    query.trend = Number(drift.toFixed(1));
+  if (targets.length > 20) throw new Error("Rescan up to 20 GEO questions at a time.");
+  const configured: Array<{ engine: GeoEngine; key?: string }> = [
+    { engine: "chatgpt", key: process.env.OPENAI_API_KEY },
+    { engine: "gemini", key: process.env.GEMINI_API_KEY },
+  ];
+  if (!configured.some((provider) => provider.key)) {
+    throw new Error("GEO scans need an OPENAI_API_KEY or GEMINI_API_KEY. Add one in the Vercel project environment variables, then redeploy.");
+  }
+  for (const query of targets) {
+    const previous = query.shareOfAnswer;
+    const engines: GeoEngineResult[] = await Promise.all(configured.map(async ({ engine, key }) => {
+      if (!key) return { engine, status: "not_configured", cited: false, rank: null, answer: "Provider API key is not configured.", sources: [] };
+      try {
+        const result = engine === "chatgpt"
+          ? await scanWithOpenAI(query.query, process.env.GEO_BRAND_DOMAIN || "gothreadly.live")
+          : await scanWithGemini(query.query, process.env.GEO_BRAND_DOMAIN || "gothreadly.live");
+        const domain = (process.env.GEO_BRAND_DOMAIN || "gothreadly.live").replace(/^www\./, "").toLowerCase();
+        const cited = result.sources.some((source) => {
+          try { return new URL(source.url).hostname.replace(/^www\./, "").toLowerCase() === domain; } catch { return false; }
+        });
+        return { engine, status: "scanned", cited, rank: null, answer: result.answer, sources: result.sources, scannedAt: now() };
+      } catch {
+        return { engine, status: "failed", cited: false, rank: null, answer: "Provider scan failed. Check its API key, model access, and usage limits.", sources: [], error: "Provider request failed" };
+      }
+    }));
+    const scanned = engines.filter((engine) => engine.status === "scanned");
+    query.engines = engines;
+    query.shareOfAnswer = Math.round((scanned.filter((engine) => engine.cited).length / scanned.length) * 100);
+    query.trend = Number((query.shareOfAnswer - previous).toFixed(1));
     query.lastScannedAt = now();
-    query.engines = query.engines.map((engine) => {
-      const cited = seededUnit(`${uid}-${query.id}-${engine.engine}-${stamp}`, "cited") > 0.4;
-      return {
-        ...engine,
-        cited,
-        rank: cited ? seededInt(`${uid}-${stamp}`, `${query.id}-${engine.engine}`, 1, 6) : null,
-      };
-    });
+    query.gap = query.shareOfAnswer > 0
+      ? "Review the linked sources and strengthen the pages cited for this question."
+      : "No tracked domain citation found. Publish a directly answerable page with clear evidence and current facts.";
   }
   await saveGrowth(uid, state);
   return state.geo;
@@ -1469,24 +1477,24 @@ export async function addGeoQuery(
     throw new Error("You are already tracking that question.");
   }
   const id = `geo-${randomUUID()}`;
-  const engines: GeoEngine[] = ["chatgpt", "perplexity", "gemini", "google_ai", "claude"];
   state.geo.unshift({
     id,
     query: input.query.trim(),
     intent: input.intent ?? "commercial",
-    volume: input.volume && input.volume > 0 ? input.volume : 500,
-    difficulty: 45,
+    volume: input.volume && input.volume > 0 ? input.volume : 0,
+    difficulty: 0,
     shareOfAnswer: 0,
     ownedPages: 0,
-    engines: engines.map((engine) => ({
+    engines: (["chatgpt", "gemini"] as GeoEngine[]).map((engine) => ({
       engine,
+      status: "not_scanned" as const,
       cited: false,
       rank: null,
-      sentiment: 0.5,
-      answer: "Not scanned yet.",
+      answer: "Run a scan to check this provider.",
+      sources: [],
     })),
     gap: "Not indexed for this question yet — publish a directly answerable page.",
-    lastScannedAt: now(),
+    lastScannedAt: "Not scanned",
     trend: 0,
   });
   await saveGrowth(uid, state);
