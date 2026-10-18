@@ -30,7 +30,8 @@ import {
   updateOpportunity,
   updateTeamRole,
 } from "@/lib/portal-data";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { withWorkspace } from "@/lib/portal-db";
+import { requireApprovedIdentity } from "@/lib/admin-auth";
 import { sendFounderOutreachEmail } from "@/lib/mailer";
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { checkRateLimit, rateLimitUnavailable, tooManyRequests } from "@/lib/rate-limit";
@@ -83,8 +84,7 @@ function companyContext(value: unknown): Record<string, string> {
 
 export async function POST(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
-    if (!user) return Response.json({ error: "Sign in required" }, { status: 401 });
+    const user = await requireApprovedIdentity(request);
     const parsedBody = await readJsonBody(request);
     if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody) || typeof (parsedBody as { action?: unknown }).action !== "string") {
       return Response.json({ error: "Choose a valid workspace action." }, { status: 400 });

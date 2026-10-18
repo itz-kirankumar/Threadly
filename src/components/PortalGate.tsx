@@ -2,18 +2,18 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
-import { useRouter } from "next/navigation";
 import PortalWorkspace from "@/components/PortalWorkspace";
 import PortalPreloader from "@/components/PortalPreloader";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
 
 export default function PortalGate() {
-  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [authError, setAuthError] = useState("");
-  const [demoMode, setDemoMode] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
+  const [accessChecked, setAccessChecked] = useState(false);
+  const [accessStatus, setAccessStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setSigningIn(true);
@@ -21,9 +21,10 @@ export default function PortalGate() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      const cred = await signInWithPopup(getFirebaseAuth(), provider);
-      setUser(cred.user);
+      const credential = await signInWithPopup(getFirebaseAuth(), provider);
+      setUser(credential.user);
       setReady(true);
+      setAccessChecked(false);
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code;
       if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
@@ -49,13 +50,31 @@ export default function PortalGate() {
         auth,
         currentUser => {
           setUser(currentUser);
+          setIsAdmin(false);
           setReady(true);
           if (!currentUser) {
-            // Check if demo query param is set
-            if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo") === "true") {
-              setDemoMode(true);
-            }
+            setAccessStatus(null);
+            setIsAdmin(false);
+            setAccessChecked(true);
+            return;
           }
+          setAccessChecked(false);
+          void (async () => {
+            try {
+              const response = await fetch("/api/waitlist", {
+                headers: { Authorization: `Bearer ${await currentUser.getIdToken()}` },
+                cache: "no-store",
+              });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(data.error || "Could not check your beta access.");
+              setIsAdmin(data.role === "admin");
+              setAccessStatus(data.accessGranted ? "approved" : data.application?.status || null);
+            } catch (error) {
+              setAuthError(error instanceof Error ? error.message : "Could not check your beta access.");
+            } finally {
+              setAccessChecked(true);
+            }
+          })();
         },
         error => {
           setAuthError(error.message);
@@ -77,27 +96,8 @@ export default function PortalGate() {
     };
   }, [initAuth]);
 
-  // Keep these identities stable across renders. PortalWorkspace derives
-  // `refresh` from getIdToken, and an inline function here would re-create
-  // it every render, re-firing the auto-refresh effect forever.
-  const demoGetIdToken = useCallback(async () => "demo-token", []);
-  const demoSignOut = useCallback(async () => {
-    setDemoMode(false);
-    router.replace("/portal/login");
-  }, [router]);
   const userGetIdToken = useCallback(() => user?.getIdToken() ?? Promise.reject(new Error("Sign in required.")), [user]);
   const userSignOut = useCallback(() => signOut(getFirebaseAuth()), []);
-
-  if (demoMode) {
-    return (
-      <PortalWorkspace
-        email="founder@demo.threadly.io"
-        name="Demo Founder"
-        getIdToken={demoGetIdToken}
-        signOutAction={demoSignOut}
-      />
-    );
-  }
 
   if (authError) {
     return (
@@ -107,9 +107,9 @@ export default function PortalGate() {
           setReady(false);
           initAuth();
         }}
-        onContinueDemo={() => setDemoMode(true)}
-        onGoogleSignIn={handleGoogleSignIn}
+        onGoogleSignIn={!user ? handleGoogleSignIn : undefined}
         signingIn={signingIn}
+        showSignInLink={!user}
       />
     );
   }
@@ -117,18 +117,34 @@ export default function PortalGate() {
   if (!ready || !user) {
     return (
       <PortalPreloader
-        message="Sign in to open your private founder workspace…"
-        onContinueDemo={() => setDemoMode(true)}
+        message="Sign in with Google to check your Threadly 2.0 beta access…"
         onGoogleSignIn={handleGoogleSignIn}
         signingIn={signingIn}
       />
     );
   }
 
+  if (!accessChecked) {
+    return <PortalPreloader message="Checking your Threadly 2.0 beta access…" />;
+  }
+
+  if (accessStatus !== "approved") {
+    return <main id="wisentry-portal" className="portal-auth">
+      <header className="portal-auth-header"><a href="/" className="portal-login-brand">threadly<span className="brand-dot">.</span></a><button className="btn btn-outline" onClick={userSignOut}>Sign out</button></header>
+      <section className="portal-auth-copy" style={{ maxWidth: 700, margin: "14vh auto", padding: 28 }}>
+        <div className="eyebrow"><span className="pulse-dot"/> THREADLY 2.0 · BETA ACCESS</div>
+        <h1>{accessStatus === "pending" ? "Your request is under review." : accessStatus === "rejected" ? "Your request was not approved." : "Request beta access to continue."}</h1>
+        <p>{accessStatus === "pending" ? "The team is reviewing your application. Return to the homepage with this Google account to check your access." : accessStatus === "rejected" ? "You can update and resubmit your beta request from the homepage." : "The Threadly workspace is available to approved beta members. Join the waitlist from the homepage to request access."}</p>
+        <div className="welcome-actions"><a className="btn btn-dark" href="/">{accessStatus === "pending" ? "Back to homepage" : "Join the beta waitlist"}</a><button className="btn btn-outline" onClick={userSignOut}>Sign out</button></div>
+      </section>
+    </main>;
+  }
+
   return (
     <PortalWorkspace
       email={user.email || ""}
       name={user.displayName || "Founder"}
+      isAdmin={isAdmin}
       getIdToken={userGetIdToken}
       signOutAction={userSignOut}
     />

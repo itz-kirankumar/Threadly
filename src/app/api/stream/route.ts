@@ -1,5 +1,7 @@
 import { getState } from "@/lib/portal-data";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { withWorkspace } from "@/lib/portal-db";
+import { requireApprovedIdentity } from "@/lib/admin-auth";
+import { errorResponse } from "@/lib/api-request";
 import { buildLiveFeed } from "@/lib/threadly-engine";
 
 export const runtime = "nodejs";
@@ -26,9 +28,9 @@ export async function GET(request: Request) {
 
   let user;
   try {
-    user = await getFirebaseIdentity(requestForAuth);
-  } catch {
-    return Response.json({ error: "Sign in required" }, { status: 401 });
+    user = await requireApprovedIdentity(requestForAuth);
+  } catch (error) {
+    return errorResponse(error, "Workspace live feed");
   }
   if (!user) return Response.json({ error: "Sign in required" }, { status: 401 });
 

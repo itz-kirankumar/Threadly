@@ -139,7 +139,7 @@ function timeAgo(date?: string | null) {
   return `${days}d ago`;
 }
 
-export default function Workspace({ email, name, getIdToken, signOutAction }: { email: string; name: string; getIdToken: () => Promise<string>; signOutAction: () => Promise<void> }) {
+export default function Workspace({ email, name, isAdmin = false, getIdToken, signOutAction }: { email: string; name: string; isAdmin?: boolean; getIdToken: () => Promise<string>; signOutAction: () => Promise<void> }) {
   const [data, setData] = useState<State | null>(null);
   const [page, setPage] = useState<Page>("Dashboard");
   const [loading, setLoading] = useState(true);
@@ -602,6 +602,15 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
                 >
                   <Settings size={15} /> Account Settings
                 </button>
+                {isAdmin && <a
+                  className="dropdown-item"
+                  href="/admin/waitlist"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setUserMenuOpen(false)}
+                >
+                  <Users size={15} /> Review beta requests <ExternalLink size={13} />
+                </a>}
                 <button
                   type="button"
                   className="dropdown-item"

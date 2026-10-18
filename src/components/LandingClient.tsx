@@ -3,6 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import Footer from "./Footer";
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type User } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 import {
   Activity, ArrowRight, ArrowUpRight, BarChart3, CalendarClock, Check, ChevronRight,
   CircleDollarSign, Copy, Flame, Globe2, Layers, Mail, Radar, Search, Sparkles,
@@ -89,7 +91,13 @@ const stack = [
 
 export default function LandingClient() {
   const [modalOpen, setModalOpen] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [applicationChecked, setApplicationChecked] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
+  const [confirmationEmailSent, setConfirmationEmailSent] = useState<boolean | null>(null);
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -101,8 +109,42 @@ export default function LandingClient() {
     industry: "",
     url: "",
     challenge1: "",
-    email: "",
   });
+
+  useEffect(() => {
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = onAuthStateChanged(getFirebaseAuth(), async user => {
+        setAuthUser(user);
+        setAuthReady(true);
+        setAuthError("");
+        if (!user) {
+          setApplicationStatus(null);
+          setApplicationChecked(true);
+          return;
+        }
+        setApplicationChecked(false);
+        setForm(current => ({ ...current, fullName: current.fullName || user.displayName || "" }));
+        try {
+          const response = await fetch("/api/waitlist", {
+            headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+            cache: "no-store",
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || "Could not check your beta request.");
+          setApplicationStatus(data.application?.status || null);
+        } catch (error) {
+          setFormError(error instanceof Error ? error.message : "Could not check your beta request.");
+        } finally {
+          setApplicationChecked(true);
+        }
+      });
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Google sign-in is not configured.");
+      setAuthReady(true);
+    }
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -120,10 +162,23 @@ export default function LandingClient() {
     return () => window.removeEventListener("keydown", close);
   }, [modalOpen]);
 
+  useEffect(() => {
+    const openFromHash = () => {
+      if (window.location.hash === "#waitlist") setModalOpen(true);
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, []);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setFormError("");
-    if (!form.fullName || !form.startupName || !form.industry || !form.email || !form.challenge1) {
+    if (!authUser) {
+      setFormError("Sign in with Google before sending your beta request.");
+      return;
+    }
+    if (!form.fullName || !form.startupName || !form.industry || !form.challenge1) {
       setFormError("Fill in the required fields so we can route your workspace.");
       return;
     }
@@ -131,20 +186,42 @@ export default function LandingClient() {
     try {
       const response = await fetch("/api/waitlist", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await authUser.getIdToken()}` },
         body: JSON.stringify(form),
       });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "Could not save your spot.");
-      }
-      setSubmitted(true);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not save your request.");
+      setApplicationStatus(data.status || "pending");
+      setConfirmationEmailSent(typeof data.emailSent === "boolean" ? data.emailSent : null);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
       setSubmitting(false);
     }
   }
+
+  async function signInForBeta() {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(getFirebaseAuth(), provider);
+    } catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
+        setAuthError(error instanceof Error ? error.message : "Google sign-in failed. Please try again.");
+      }
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  const openWaitlist = () => {
+    setFormError("");
+    setConfirmationEmailSent(null);
+    setModalOpen(true);
+  };
 
   const visibleEvents = Array.from({ length: 4 }, (_, offset) => liveEvents[(liveIndex + offset) % liveEvents.length]);
 
@@ -184,16 +261,17 @@ export default function LandingClient() {
             >
               Sign in
             </a>
-            <a
-              href="/portal?demo=true"
-              aria-label="Open workspace"
+            <button
+              type="button"
+              onClick={openWaitlist}
+              aria-label="Join the beta waitlist"
               className="btn-tactile-orange inline-flex items-center gap-2 rounded-full border-2 border-brand-orange bg-brand-orange px-3 py-2.5 text-[11px] font-extrabold text-white sm:px-5 sm:text-[12px] max-[380px]:gap-1.5 max-[380px]:px-2"
             >
-              <span className="max-[640px]:hidden">Open workspace</span>
-              <span className="hidden max-[380px]:inline">Open</span>
-              <span className="hidden max-[640px]:inline max-[380px]:hidden">Workspace</span>
+              <span className="max-[640px]:hidden">Join the beta</span>
+              <span className="hidden max-[380px]:inline">Beta</span>
+              <span className="hidden max-[640px]:inline max-[380px]:hidden">Join beta</span>
               <ArrowRight className="h-4 w-4 max-[380px]:h-3.5 max-[380px]:w-3.5" />
-            </a>
+            </button>
           </div>
         </div>
       </header>
@@ -221,7 +299,7 @@ export default function LandingClient() {
               className="inline-flex items-center gap-2.5 rounded-full border-2 border-brand-black bg-white px-3.5 py-2 text-[11px] font-extrabold shadow-[3px_3px_0_#0a0a0a]"
             >
               <span className="live-dot" />
-              <span>THREADLY 2.0 · THE FULL GROWTH OS IS LIVE</span>
+              <span>THREADLY 2.0 · PRIVATE BETA IS OPEN</span>
               <ChevronRight className="h-3.5 w-3.5" />
             </a>
 
@@ -258,18 +336,19 @@ export default function LandingClient() {
             </p>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <a
-                href="/portal?demo=true"
+              <button
+                type="button"
+                onClick={openWaitlist}
                 className="btn-tactile-orange inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-orange bg-brand-orange px-7 py-4 text-[15px] font-black text-white"
               >
-                Explore the live workspace <ArrowRight className="h-4 w-4" />
-              </a>
+                Request beta access <ArrowRight className="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 onClick={() => setModalOpen(true)}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-black bg-white px-7 py-4 text-[15px] font-black transition-colors hover:bg-brand-orangeLight"
               >
-                Request a workspace <ArrowUpRight className="h-4 w-4" />
+                Join the beta waitlist <ArrowUpRight className="h-4 w-4" />
               </button>
             </div>
 
@@ -481,12 +560,13 @@ export default function LandingClient() {
                 <span className="text-brand-violetPastel">One compounding loop.</span>
               </h2>
             </div>
-            <a
-              href="/portal?demo=true"
+            <button
+              type="button"
+              onClick={openWaitlist}
               className="inline-flex shrink-0 items-center gap-2 self-start rounded-full border-2 border-white px-5 py-3 text-[12px] font-extrabold transition-colors hover:bg-white hover:text-brand-black lg:self-auto"
             >
-              See them live <ArrowUpRight className="h-4 w-4" />
-            </a>
+              Request beta access <ArrowUpRight className="h-4 w-4" />
+            </button>
           </div>
 
           <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -575,12 +655,13 @@ export default function LandingClient() {
               ))}
             </ul>
 
-            <a
-              href="/portal?demo=true"
+            <button
+              type="button"
+              onClick={openWaitlist}
               className="btn-tactile-orange mt-9 inline-flex items-center gap-2 rounded-2xl border-2 border-brand-orange bg-brand-orange px-6 py-3.5 text-[14px] font-black text-white"
             >
-              Open the live demo <ArrowRight className="h-4 w-4" />
-            </a>
+              Request beta access <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
 
           <div className="relative">
@@ -752,12 +833,13 @@ export default function LandingClient() {
             people actually want to talk about.
           </p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <a
-              href="/portal?demo=true"
+            <button
+              type="button"
+              onClick={openWaitlist}
               className="btn-tactile-orange inline-flex items-center gap-2 rounded-2xl border-2 border-brand-orange bg-brand-orange px-7 py-4 text-[15px] font-black text-white"
             >
-              Open the workspace <ArrowRight className="h-4 w-4" />
-            </a>
+              Request beta access <ArrowRight className="h-4 w-4" />
+            </button>
             <button
               type="button"
               onClick={() => setModalOpen(true)}
@@ -790,7 +872,7 @@ export default function LandingClient() {
                 <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-brand-orange">
                   Early access · cohort 01
                 </div>
-                <h3 className="mt-1 text-[22px] font-black tracking-[-0.045em]">Claim your workspace</h3>
+                <h3 className="mt-1 text-[22px] font-black tracking-[-0.045em]">Request beta access</h3>
               </div>
               <button
                 type="button"
@@ -802,25 +884,35 @@ export default function LandingClient() {
               </button>
             </div>
 
-            {submitted ? (
+            {!authReady ? (
+              <div className="px-6 py-10 text-center text-sm font-semibold text-brand-muted">Checking your sign-in…</div>
+            ) : !authUser ? (
+              <div className="px-6 py-8">
+                <p className="text-[13px] leading-relaxed text-brand-muted">Sign in with Google first. We’ll use that account to track your Threadly 2.0 beta request and access approval.</p>
+                {authError && <p role="alert" className="mt-3 rounded-lg border border-brand-orange/40 bg-brand-orangeLight px-3 py-2 text-[11px] font-semibold text-brand-orangeDark">{authError}</p>}
+                <button type="button" onClick={() => void signInForBeta()} disabled={authBusy} className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl border-2 border-brand-black bg-white px-5 py-3.5 text-[13px] font-black disabled:opacity-60">
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-[#4285f4] font-sans text-[12px] font-bold text-white">G</span>
+                  {authBusy ? "Connecting to Google…" : "Continue with Google"}
+                </button>
+              </div>
+            ) : !applicationChecked ? (
+              <div className="px-6 py-10 text-center text-sm font-semibold text-brand-muted">Checking your beta request…</div>
+            ) : applicationStatus === "pending" ? (
               <div className="px-6 py-10 text-center">
-                <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-orange text-white">
-                  <Check className="h-7 w-7" />
-                </span>
-                <h4 className="mt-5 text-[24px] font-black tracking-[-0.045em]">You&apos;re in the thread.</h4>
-                <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-brand-muted">
-                  We&apos;ll email <b className="text-brand-black">{form.email}</b> with your workspace
-                  invite. In the meantime, the demo is wide open.
-                </p>
-                <a
-                  href="/portal?demo=true"
-                  className="btn-tactile-orange mt-6 inline-flex items-center gap-2 rounded-xl border-2 border-brand-orange bg-brand-orange px-5 py-3 text-[13px] font-black text-white"
-                >
-                  Open the live demo <ArrowRight className="h-4 w-4" />
-                </a>
+                <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-orange text-white"><Check className="h-7 w-7" /></span>
+                <h4 className="mt-5 text-[24px] font-black tracking-[-0.045em]">Request received.</h4>
+                <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-brand-muted">{confirmationEmailSent === true ? <>We sent a confirmation email to <b className="text-brand-black">{authUser.email}</b>. Your request is now under review.</> : confirmationEmailSent === false ? <>Your request is saved and under review, but we couldn’t send the confirmation email. Contact us if you need help.</> : <>Your Threadly 2.0 beta request is under review for <b className="text-brand-black">{authUser.email}</b>. Return here with this Google account to check your access.</>}</p>
+              </div>
+            ) : applicationStatus === "approved" ? (
+              <div className="px-6 py-10 text-center">
+                <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-orange text-white"><Check className="h-7 w-7" /></span>
+                <h4 className="mt-5 text-[24px] font-black tracking-[-0.045em]">You&apos;re approved.</h4>
+                <p className="mt-2 text-[13px] leading-relaxed text-brand-muted">Your Google account has access to the Threadly 2.0 workspace.</p>
+                <a href="/portal" className="btn-tactile-orange mt-6 inline-flex items-center gap-2 rounded-xl border-2 border-brand-orange bg-brand-orange px-5 py-3 text-[13px] font-black text-white">Open workspace <ArrowRight className="h-4 w-4" /></a>
               </div>
             ) : (
               <form onSubmit={submit} className="px-6 py-5">
+                <div className="mb-4 rounded-xl border border-brand-line bg-white px-3 py-2.5 text-[12px] text-brand-muted">Requesting as <b className="text-brand-black">{authUser.email}</b>{applicationStatus === "rejected" && <span className="mt-1 block text-brand-orangeDark">Your previous request was declined. You may update and resubmit it.</span>}</div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
@@ -844,19 +936,6 @@ export default function LandingClient() {
                       onChange={(event) => setForm({ ...form, startupName: event.target.value })}
                       className="mt-1.5 w-full rounded-xl border-2 border-brand-black bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-brand-orange"
                       placeholder="Lumen"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
-                      Work email *
-                    </span>
-                    <input
-                      required
-                      type="email"
-                      value={form.email}
-                      onChange={(event) => setForm({ ...form, email: event.target.value })}
-                      className="mt-1.5 w-full rounded-xl border-2 border-brand-black bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-brand-orange"
-                      placeholder="you@company.com"
                     />
                   </label>
                   <label className="block">
@@ -922,7 +1001,7 @@ export default function LandingClient() {
                   <ArrowRight className="h-4 w-4" />
                 </button>
                 <p className="mt-3 text-center font-mono text-[8.5px] uppercase tracking-[0.08em] text-brand-quiet">
-                  No card. No spam. Cancel the thread whenever you like.
+                  No card required. The Threadly team reviews every beta request.
                 </p>
               </form>
             )}

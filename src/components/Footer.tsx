@@ -4,7 +4,7 @@ const columns = [
   {
     title: "Platform",
     links: [
-      { href: "/portal?demo=true", label: "Workspace" },
+      { href: "/portal/login", label: "Workspace sign in" },
       { href: "/signal-radar", label: "Signal Radar" },
       { href: "/ai-engine", label: "AI Engine" },
       { href: "/beta-collective", label: "Beta Collective" },

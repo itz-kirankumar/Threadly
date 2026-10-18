@@ -67,10 +67,10 @@ export default function Navbar() {
             Sign in
           </Link>
           <Link
-            href="/portal?demo=true"
+            href="/portal/login"
             className="btn-tactile-orange inline-flex items-center gap-2 rounded-full border-2 border-brand-orange bg-brand-orange px-4 py-2.5 text-[12px] font-extrabold text-white sm:px-5"
           >
-            <span>Open workspace</span>
+            <span>Beta access</span>
             <ArrowRight className="h-4 w-4" />
           </Link>
           <button
