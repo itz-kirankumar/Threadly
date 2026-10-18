@@ -11,7 +11,7 @@ export const maxDuration = 45;
 export async function POST(request: Request) {
   try {
     const user = await requireApprovedIdentity(request);
-    const limit = await checkRateLimit(`website-analysis:${user.uid}`, 10, 60 * 60);
+    const limit = await checkRateLimit(`website-analysis:${user.uid}`, 10, 60 * 60, user);
     if (!limit) return rateLimitUnavailable();
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
     const parsedBody = await readJsonBody(request, 8 * 1024);

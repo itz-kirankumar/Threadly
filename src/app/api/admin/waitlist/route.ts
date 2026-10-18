@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin(request);
-    const applications = await listWaitlistRequests();
+    const admin = await requireAdmin(request);
+    const applications = await listWaitlistRequests(admin.idToken);
     return NextResponse.json({ applications }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return errorResponse(error, "Admin waitlist list");
@@ -28,10 +28,10 @@ export async function PATCH(request: Request) {
     if ((typeof id !== "string" && typeof id !== "number") || !["approved", "rejected", "pending"].includes(String(status))) {
       return NextResponse.json({ error: "Choose a valid application and status." }, { status: 400 });
     }
-    const application = (await listWaitlistRequests()).find(item => String(item.id) === String(id));
+    const application = (await listWaitlistRequests(admin.idToken)).find(item => String(item.id) === String(id));
     if (!application) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
     const shouldSendApproval = status === "approved" && application.status !== "approved";
-    const updated = await reviewWaitlistRequest(String(id), status as WaitlistStatus, admin.email);
+    const updated = await reviewWaitlistRequest(String(id), status as WaitlistStatus, admin.email, admin.idToken);
     if (!updated) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
     let emailSent: boolean | undefined;
     if (shouldSendApproval && application.email) {

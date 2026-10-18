@@ -79,6 +79,7 @@ export async function getFirebaseIdentity(request: Request, optional = false): P
 
   // Handle Demo Mode safely without external network call
   if (idToken === "demo-token") {
+    if (process.env.NODE_ENV === "production") throw new Error("Demo sign-in is unavailable in production.");
     return {
       uid: "demo-founder-uid",
       email: "founder@demo.threadly.io",

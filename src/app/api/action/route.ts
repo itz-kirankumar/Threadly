@@ -104,7 +104,7 @@ export async function POST(request: Request) {
     };
     const quota = costlyActions[action];
     if (quota && user.idToken !== "demo-token") {
-      const limit = await checkRateLimit(`action:${action}:${user.uid}`, quota.limit, quota.windowSeconds);
+      const limit = await checkRateLimit(`action:${action}:${user.uid}`, quota.limit, quota.windowSeconds, user);
       if (!limit) return rateLimitUnavailable();
       if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
     }

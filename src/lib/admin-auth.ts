@@ -23,7 +23,7 @@ export async function requireApprovedIdentity(request: Request) {
   const identity = await getFirebaseIdentity(request);
   if (!identity) throw new RequestError("Sign in with Google to continue.", 401);
   if (isAdminEmail(identity.email)) return identity;
-  const application = await getWaitlistRequest(identity.uid);
+  const application = await getWaitlistRequest(identity.uid, identity.idToken);
   if (!application || application.status !== "approved") {
     throw new RequestError("Threadly 2.0 workspace access requires an approved beta request.", 403);
   }

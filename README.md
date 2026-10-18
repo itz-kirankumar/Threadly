@@ -12,11 +12,11 @@ Wisentry combines the public product site with a private founder portal.
 1. Install dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local`. The Firebase web app settings are already filled for the Wisentry project.
 3. In Firebase Console, open **Authentication → Sign-in method**, enable **Google**, and add your local and production domains under **Authorized domains**. Homepage beta requests require Google sign-in.
-4. Publish `database.rules.json` to the Wisentry Realtime Database. The rules give each authenticated Google account access only to `/users/{uid}`. With Firebase CLI installed and authenticated, run `firebase deploy --only database`.
+4. Publish `database.rules.json` to the Wisentry Realtime Database. The rules scope workspace records and rate limits to each signed-in account, store waitlist requests by Firebase UID, and allow only `kiran160703kumar@gmail.com` to review the waitlist. With Firebase CLI installed and authenticated, run `firebase deploy --only database`.
 5. Set `APIFY_TOKEN` to enable recent X discovery. `X_BEARER_TOKEN` is an optional fallback for X API recent search.
 6. Configure `LAYA_URL` and/or `ANYJEV_URL` to enable typed prospect qualification. Wisentry uses Laya for conversations containing non-English text and AnyJev for English qualification; a low-confidence result or unavailable preferred service falls back to the other configured service. Run Laya's `laya-serve` and AnyJev's Tacit `/v1/decide` service behind private networking. AnyJev's built-in HTTP gateway has no authentication, so do not expose it publicly. Optional `LAYA_API_KEY` and `ANYJEV_API_KEY` values are sent as bearer tokens when the service or proxy supports them.
 7. Optional `OPENAI_API_KEY` and/or `GEMINI_API_KEY` enable free-form text generation for website summaries, content variations, and personalized email drafts. Laya and AnyJev make typed decisions; they do not generate prose. `OPENAI_MODEL` and `GEMINI_MODEL` select the text-generation model IDs.
-8. For one-at-a-time in-app email delivery, configure Amazon SES with `USE_AWS=true`, `AWS_REGION`, and a verified `FROM_EMAIL`; provide AWS credentials through the normal AWS SDK credential chain (prefer an IAM role). Without SES, reviewed drafts can still open in your email app.
+8. For one-at-a-time in-app email delivery, configure Amazon SES with `USE_AWS=true`, `AWS_REGION`, and a verified `FROM_EMAIL`; provide AWS credentials through the normal AWS SDK credential chain (prefer an IAM role). This optional mail integration is separate from beta waitlist storage, which uses Firebase.
 9. For Threadly beta emails, create a Resend API key and set `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO`, and `APP_BASE_URL` in `.env.local` (details below).
 10. Run `npm run dev`.
 
@@ -40,17 +40,17 @@ The portal verifies Firebase ID tokens on its API routes and uses them for Realt
 
 ## Production setup
 
-Use Node.js 22 or newer. Build and host the Next.js app on a Node runtime that supports API routes and the `better-sqlite3` native module. The production environment must provide:
+Use Node.js 22 or newer and host the Next.js app on a Node runtime that supports API routes. The production environment must provide:
 
 - The Firebase web settings and server-side Firebase API key from `.env.example`. Enable Google sign-in and authorize the production hostname in Firebase Authentication.
-- The checked-in Realtime Database rules deployed to the Wisentry Firebase project. Keep rules scoped to each signed-in user's `/users/{uid}` data.
-- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Shared rate limiting protects X search, website analysis, AI actions, beta requests, and community endpoints. The app uses a bounded in-memory limiter only during local development and fails closed in production when Redis is missing or unavailable.
-- Persistent storage for beta requests and community signups. Prefer DynamoDB by setting `USE_DYNAMODB=true`, `APP_AWS_REGION`, and the table names. Create `Wisentry_Waitlist` with string partition key `id` and `Wisentry_Community` with string partition key `email`; the runtime IAM role needs `PutItem`, `Scan`, and `UpdateItem` on the waitlist table, and `PutItem` on the community table. The AWS SDK credential chain is used when static credentials are not supplied. `WISENTRY_DB_PATH` is supported only when the host provides durable writable storage; the default local SQLite path is not treated as production persistence.
+- The checked-in Realtime Database rules deployed to the Wisentry Firebase project. Beta requests, community signups, and per-user rate counters are stored in Firebase. Do not broaden the database rules to public reads or writes.
+- `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to deliver waitlist confirmation and approval emails. Email reply-to and site URL are configured with `RESEND_REPLY_TO` and `APP_BASE_URL`.
+- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are optional and used only to rate limit anonymous public X searches. Authenticated APIs use atomic rate counters in Firebase and remain available without Upstash. If Upstash is not configured, anonymous X searches fail closed.
 
 Optional integrations can be enabled independently: configure `APIFY_TOKEN` or `X_BEARER_TOKEN` for X search, `OPENAI_API_KEY` and/or `GEMINI_API_KEY` for text generation, `LAYA_URL` and/or `ANYJEV_URL` for prospect decisions, and `USE_AWS=true` with a verified `FROM_EMAIL` for reviewed SES mail. Use private networking for model services. Never expose AnyJev's unauthenticated gateway publicly. Do not put server credentials in `NEXT_PUBLIC_*` variables.
 
-`GET /api/health` reports whether core production configuration is present without returning secrets. Before release, run `npm ci`, `npm run lint`, `npm run typecheck`, `npm run build`, and `npm audit`. Set `NODE_ENV=production` in the host and verify Google sign-in, one user's data isolation, rate-limit behavior, X provider failures, email confirmation, and backup/restore procedures in a staging project first.
+`GET /api/health` reports core Firebase and Resend configuration without returning secrets. Its `anonymousRateLimitStore` check indicates whether public unauthenticated X search is available. Before release, run `npm ci`, `npm run lint`, `npm run typecheck`, `npm run build`, and `npm audit`. Set `NODE_ENV=production` in the host and verify Google sign-in, one user's data isolation, rate-limit behavior, X provider failures, email confirmation, and backup/restore procedures in a staging project first.
 
-Configure the hosting proxy to overwrite `x-real-ip` and `x-forwarded-for` with the actual client address; the public form and unauthenticated search quotas use those headers as rate-limit keys.
+Configure the hosting proxy to overwrite `x-real-ip` and `x-forwarded-for` with the actual client address if public anonymous endpoints are enabled; those quotas use the forwarded client address as their rate-limit key.
 
-Portal records are stored in Firebase Realtime Database under `users/{uid}`. Beta requests and community data use DynamoDB when `USE_DYNAMODB=true` or SQLite on a persistent local server. Beta requests are bound to the verified Google account, reviewed at `/admin/waitlist`, and workspace access checks the approved status on both the page and API routes.
+Portal records are stored in Firebase Realtime Database under `users/{uid}`. Beta requests are stored at `betaWaitlist/{uid}` and community signups at `communityMembers/{uid}`. Beta requests are bound to the verified Google account, reviewed at `/admin/waitlist`, and workspace access checks the approved status on both the page and API routes.

@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     if (isAdminEmail(user.email)) {
       return NextResponse.json({ application: null, accessGranted: true, role: "admin" }, { headers: { "Cache-Control": "no-store" } });
     }
-    const application = await getWaitlistRequest(user.uid);
+    const application = await getWaitlistRequest(user.uid, user.idToken);
     return NextResponse.json({ accessGranted: application?.status === "approved", application: application ? {
       status: application.status || "pending",
       createdAt: application.createdAt,
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   try {
     const user = await getFirebaseIdentity(request);
     if (!user) return NextResponse.json({ error: "Sign in with Google to join the waitlist." }, { status: 401 });
-    const limit = await checkRateLimit(`waitlist:${user.uid}`, 3, 10 * 60);
+    const limit = await checkRateLimit(`waitlist:${user.uid}`, 3, 10 * 60, user);
     if (!limit) return rateLimitUnavailable();
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
 
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     }
     if (!user.email) return NextResponse.json({ error: "Your Google account needs a verified email address." }, { status: 400 });
 
-    const previous = await getWaitlistRequest(user.uid);
+    const previous = await getWaitlistRequest(user.uid, user.idToken);
     await insertWaitlist({
       uid: user.uid,
       email: user.email.trim().toLowerCase(),
@@ -64,9 +64,9 @@ export async function POST(request: Request) {
       url: typeof form.url === "string" ? form.url.trim() : "",
       challenge1: String(form.challenge1).trim(),
       challenge2: typeof form.challenge2 === "string" ? form.challenge2.trim() : "",
-    });
+    }, user.idToken);
 
-    const application = await getWaitlistRequest(user.uid);
+    const application = await getWaitlistRequest(user.uid, user.idToken);
     let emailSent: boolean | undefined;
     if (!previous || previous.status === "rejected") {
       try {

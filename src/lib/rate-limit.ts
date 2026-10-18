@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 type Bucket = { count: number; expiresAt: number };
 export type RateLimitResult = { allowed: boolean; retryAfterSeconds: number };
+type FirebaseIdentity = { uid: string; idToken: string };
 
 const localBuckets = new Map<string, Bucket>();
 const RATE_LIMIT_SCRIPT = `local count = redis.call('INCR', KEYS[1]); if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]); end; return count`;
@@ -11,10 +12,40 @@ function hashedKey(key: string) {
 }
 
 /**
- * Shared production rate limiting via Upstash Redis. Local development uses a
- * bounded in-process bucket; production fails closed when Redis is not set up.
+ * Authenticated production requests use an atomic Firebase Realtime Database
+ * counter scoped to the signed-in UID. Anonymous production requests require
+ * shared Upstash Redis. Local development uses a bounded in-process bucket.
  */
-export async function checkRateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult | null> {
+export async function checkRateLimit(key: string, limit: number, windowSeconds: number, identity?: FirebaseIdentity): Promise<RateLimitResult | null> {
+  if (identity && identity.idToken !== "demo-token") {
+    const databaseUrl = (process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "").replace(/\/+$/, "");
+    if (!databaseUrl) throw new Error("Firebase Realtime Database is not configured for rate limiting.");
+    const bucketKey = hashedKey(key);
+    const endpoint = `${databaseUrl}/apiRateLimits/${encodeURIComponent(identity.uid)}/${bucketKey}.json?auth=${encodeURIComponent(identity.idToken)}`;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const currentResponse = await fetch(endpoint, {
+        headers: { "X-Firebase-ETag": "true" }, cache: "no-store", signal: AbortSignal.timeout(4000),
+      });
+      if (!currentResponse.ok) throw new Error("Firebase rate limit service is unavailable.");
+      const current = await currentResponse.json() as { count?: number; resetAt?: number } | null;
+      const etag = currentResponse.headers.get("ETag") || "null_etag";
+      const now = Date.now();
+      const active = current && typeof current.count === "number" && typeof current.resetAt === "number" && current.resetAt > now;
+      const count = active ? Number(current?.count) + 1 : 1;
+      const resetAt = active ? Number(current?.resetAt) : now + windowSeconds * 1000;
+      const writeResponse = await fetch(endpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "If-Match": etag },
+        body: JSON.stringify({ count, resetAt }),
+        cache: "no-store", signal: AbortSignal.timeout(4000),
+      });
+      if (writeResponse.status === 412) continue;
+      if (!writeResponse.ok) throw new Error("Firebase rate limit service is unavailable.");
+      return { allowed: count <= limit, retryAfterSeconds: Math.max(1, Math.ceil((resetAt - now) / 1000)) };
+    }
+    throw new Error("Firebase rate limit service is busy. Try again shortly.");
+  }
+
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim().replace(/\/$/, "");
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 

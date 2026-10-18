@@ -44,7 +44,6 @@ module.exports = {
           // Legacy aliases referenced by the secondary marketing pages.
           pastel: "#c4b5fd",
           bush: "#7c3aed",
-          electric: "#8b5cf6",
           jaguar: "#0a0a0a",
           haiti: "#141414",
         },
