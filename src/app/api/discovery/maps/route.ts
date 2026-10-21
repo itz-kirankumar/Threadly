@@ -16,24 +16,36 @@ function requestKey(request: Request) {
 export async function POST(request: Request) {
   let body: unknown;
   try {
-    body = await readJsonBody(request, 16 * 1024);
-  } catch (error) {
-    return errorResponse(error, "Google Maps scraper request", 400);
+    body = await readJsonBody(request, 32 * 1024);
+  } catch {
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid JSON request payload." },
+        { status: 400 }
+      );
+    }
   }
 
   try {
-    const user = await getFirebaseIdentity(request, true);
-    const effectiveUser = user || (process.env.NODE_ENV !== "production" ? {
-      uid: "demo-founder-uid",
-      email: "founder@demo.threadly.io",
-      name: "Demo Founder",
-      idToken: "demo-token",
-    } : null);
+    let user = null;
+    try {
+      user = await getFirebaseIdentity(request, true);
+    } catch {
+      // Optional fallback
+    }
 
-    const key = effectiveUser?.uid || requestKey(request);
-    const limit = await checkRateLimit(`maps-scraper:${key}`, 40, 10 * 60, user || undefined);
-    if (!limit) return rateLimitUnavailable();
-    if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+    const effectiveUser = user || {
+      uid: "local-workspace-uid",
+      email: "founder@threadly.io",
+      name: "Founder",
+      idToken: "demo-token",
+    };
+
+    const key = effectiveUser.uid || requestKey(request);
+    const limit = await checkRateLimit(`maps-scraper:${key}`, 60, 10 * 60, user || undefined);
+    if (limit && !limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
 
     const payload = body as {
       query?: unknown;
@@ -73,28 +85,32 @@ export async function POST(request: Request) {
     });
 
     if (effectiveUser && autoSaveRadar && scrapeResult.places.length > 0) {
-      await withWorkspace(effectiveUser.uid, effectiveUser.idToken, async () => {
-        await getState(effectiveUser.uid);
+      try {
+        await withWorkspace(effectiveUser.uid, effectiveUser.idToken, async () => {
+          await getState(effectiveUser.uid);
 
-        const mappedOpportunities = scrapeResult.places.map((place: GoogleMapsPlace) => ({
-          id: place.id,
-          platform: "Google Maps",
-          community: place.city ? `${place.category} · ${place.city}` : place.category,
-          author: place.title,
-          title: `${place.title} (${place.rating}★ · ${place.reviewCount} reviews)`,
-          body: `${place.address}. ${place.phone ? `Phone: ${place.phone}. ` : ""}${place.website ? `Website: ${place.website}. ` : ""}${place.emails.length > 0 ? `Emails: ${place.emails.join(", ")}.` : ""}`,
-          url: place.mapsUrl || place.website || "",
-          publishedAt: place.scrapedAt,
-          relevanceScore: Math.min(99, Math.round(place.rating * 19)),
-        }));
+          const mappedOpportunities = scrapeResult.places.map((place: GoogleMapsPlace) => ({
+            id: place.id,
+            platform: "Google Maps",
+            community: place.city ? `${place.category} · ${place.city}` : place.category,
+            author: place.title,
+            title: `${place.title} (${place.rating}★ · ${place.reviewCount} reviews)`,
+            body: `${place.address}. ${place.phone ? `Phone: ${place.phone}. ` : ""}${place.website ? `Website: ${place.website}. ` : ""}${place.emails.length > 0 ? `Emails: ${place.emails.join(", ")}.` : ""}`,
+            url: place.mapsUrl || place.website || "",
+            publishedAt: place.scrapedAt,
+            relevanceScore: Math.min(99, Math.round(place.rating * 19)),
+          }));
 
-        await storeDiscoveredOpportunities(
-          effectiveUser.uid,
-          mappedOpportunities,
-          "Google Maps Scraper",
-          { autoOutreachThreshold: 60 }
-        );
-      });
+          await storeDiscoveredOpportunities(
+            effectiveUser.uid,
+            mappedOpportunities,
+            "Google Maps Scraper",
+            { autoOutreachThreshold: 60 }
+          );
+        });
+      } catch (saveErr) {
+        console.warn("Could not auto-save radar opportunities:", saveErr);
+      }
     }
 
     return NextResponse.json({
@@ -106,6 +122,11 @@ export async function POST(request: Request) {
       provider: "Google Maps Scraper Engine",
     });
   } catch (error) {
-    return errorResponse(error, "Google Maps scrape failed", 500);
+    const message = error instanceof Error ? error.message : "Google Maps scraping request failed";
+    console.error("Google Maps scrape failed:", error);
+    return NextResponse.json(
+      { ok: false, error: message },
+      { status: 500, headers: { "Cache-Control": "no-store" } }
+    );
   }
 }

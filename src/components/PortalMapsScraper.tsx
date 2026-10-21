@@ -87,13 +87,18 @@ export default function PortalMapsScraper({
     setError("");
 
     try {
-      const token = await getIdToken();
+      let token = "";
+      try {
+        token = await getIdToken();
+      } catch {
+        // Optional auth token fallback
+      }
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch("/api/discovery/maps", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({
           query: customQuery.trim(),
           category: selectedCat,
@@ -103,7 +108,14 @@ export default function PortalMapsScraper({
         }),
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: { ok?: boolean; places?: GoogleMapsPlace[]; query?: string; error?: string } = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(rawText?.slice(0, 150) || `Server responded with status ${res.status}`);
+      }
+
       if (!res.ok) throw new Error(data.error || "Failed to scrape Google Maps.");
 
       setPlaces(data.places || []);
@@ -255,8 +267,8 @@ export default function PortalMapsScraper({
       {/* Main Search Configuration Card */}
       <div className="mini-card" style={{ padding: 24, marginBottom: 24 }}>
         <div className="dialog-grid" style={{ gridTemplateColumns: "1.2fr 1fr 140px" }}>
-          <label>
-            BUSINESS CATEGORY / NICHE
+          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
+            <span>BUSINESS CATEGORY / NICHE</span>
             <input
               type="text"
               value={category}
@@ -268,8 +280,8 @@ export default function PortalMapsScraper({
             />
           </label>
 
-          <label>
-            LOCATION / CITY / REGION
+          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
+            <span>LOCATION / CITY / REGION</span>
             <input
               type="text"
               value={location}
@@ -281,8 +293,8 @@ export default function PortalMapsScraper({
             />
           </label>
 
-          <label>
-            LEADS DEPTH
+          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
+            <span>LEADS DEPTH</span>
             <select
               value={depth}
               onChange={e => setDepth(parseInt(e.target.value, 10))}

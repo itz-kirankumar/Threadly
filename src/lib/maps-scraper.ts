@@ -83,16 +83,13 @@ export async function enrichWebsiteContact(websiteUrl: string): Promise<{
 
   for (const pageUrl of pagesToScrape.slice(0, 2)) {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4500);
       const res = await fetch(pageUrl, {
-        signal: controller.signal,
+        signal: AbortSignal.timeout(2500),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Accept": "text/html,application/xhtml+xml",
         },
       });
-      clearTimeout(timeout);
 
       if (!res.ok) continue;
       const html = await res.text();
@@ -158,6 +155,7 @@ async function searchNominatim(query: string, limit = 15): Promise<GoogleMapsPla
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=${limit}`;
     const res = await fetch(url, {
+      signal: AbortSignal.timeout(4500),
       headers: {
         "User-Agent": "ThreadlyLeadEngine/1.0 (growth@threadly.io)",
         "Accept-Language": "en-US,en;q=0.9",
@@ -230,6 +228,7 @@ async function searchGoogleLocalWeb(query: string, limit = 15): Promise<GoogleMa
   try {
     const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=lcl&hl=en`;
     const res = await fetch(url, {
+      signal: AbortSignal.timeout(3500),
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
@@ -369,14 +368,17 @@ export async function scrapeGoogleMaps(options: MapsScrapeOptions): Promise<{
 
   // 2. Deep contact enrichment if requested
   if (options.extractEmails !== false) {
-    const enrichmentPromises = finalPlaces.map(async place => {
-      if (place.website && place.emails.length === 0) {
-        const enriched = await enrichWebsiteContact(place.website);
+    const targets = finalPlaces.filter(p => p.website && p.emails.length === 0).slice(0, 10);
+    const enrichmentPromises = targets.map(async place => {
+      try {
+        const enriched = await enrichWebsiteContact(place.website!);
         if (enriched.emails.length > 0) place.emails = enriched.emails;
         if (!place.phone && enriched.phones.length > 0) place.phone = enriched.phones[0];
         if (Object.keys(enriched.socialLinks).length > 0) {
           place.socialLinks = { ...place.socialLinks, ...enriched.socialLinks };
         }
+      } catch {
+        // Ignore single website enrichment failures
       }
     });
 
