@@ -276,8 +276,29 @@ export async function getState(uid: string) {
 
   return {
     ...records,
-    team: values(data.team).filter(item => item.id !== "member-demo-collab" && item.id !== "member-demo-collab2"),
-    invites: values(data.invites),
+    team: (() => {
+      const list = values(data.team).filter(item => item && item.id && item.id !== "member-demo-collab" && item.id !== "member-demo-collab2");
+      if (!list.length) {
+        list.push({
+          id: safeId(`member-${uid}`),
+          name: "Founder",
+          email: "founder@threadly.io",
+          role: "Owner",
+          status: "active",
+          joined_at: now(),
+          timezone: "America/New_York",
+          workdayStart: "09:00",
+          workdayEnd: "17:00",
+          workingDays: [1, 2, 3, 4, 5],
+          availabilityStatus: "Available",
+          country: "US",
+          region: "New York",
+          title: "Founder & CEO",
+        });
+      }
+      return list;
+    })(),
+    invites: values(data.invites).filter(item => item && item.id),
     capabilities: {
       ai: Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY) || isDemo,
       liveSources: Boolean(xConnection.provider) || isDemo,

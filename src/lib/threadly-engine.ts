@@ -690,41 +690,90 @@ export async function readGrowth(uid: string, leads: Lead[]): Promise<GrowthStat
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+  const emptyCampaign: Campaign = {
+    id: "",
+    name: "",
+    objective: "",
+    status: "draft",
+    startDate: now(),
+    endDate: now(),
+    budget: 0,
+    spend: 0,
+    revenue: 0,
+    roas: 0,
+    conversions: 0,
+    targetRoas: 2,
+    autoOptimize: false,
+    channels: [],
+    creatives: [],
+    notes: "",
+    created_at: now(),
+    updated_at: now(),
+  };
+
+  const emptySequence: Sequence = {
+    id: "",
+    name: "",
+    description: "",
+    status: "draft",
+    steps: [],
+    runs: [],
+    sendWindowStart: "09:00",
+    sendWindowEnd: "17:00",
+    timezone: "UTC",
+    created_at: now(),
+    updated_at: now(),
+  };
+
+  const emptySegment: Segment = {
+    id: "",
+    name: "",
+    description: "",
+    color: "orange",
+    rules: [],
+    leadIds: [],
+    created_at: now(),
+    updated_at: now(),
+  };
+
   const campaigns = asList<Campaign>(stored.campaigns, defaults.campaigns)
-    .filter(item => !item.id.startsWith("cmp-1-") && !item.id.startsWith("cmp-2-") && !item.id.startsWith("cmp-3-") && !item.id.startsWith("cmp-4-")).map((item, index) => {
-    const fallback = defaults.campaigns[index] ?? defaults.campaigns[0];
+    .filter(item => item && item.id && !item.id.startsWith("cmp-1-") && !item.id.startsWith("cmp-2-") && !item.id.startsWith("cmp-3-") && !item.id.startsWith("cmp-4-")).map((item, index) => {
+    const fallback = defaults.campaigns[index] ?? defaults.campaigns[0] ?? emptyCampaign;
     const record: Record<string, unknown> = isRecord(item) ? item : {};
     return {
+      ...emptyCampaign,
       ...fallback,
       ...record,
-      channels: asList(record.channels, fallback.channels),
-      creatives: asList(record.creatives, fallback.creatives),
+      channels: asList(record.channels, fallback?.channels || []),
+      creatives: asList(record.creatives, fallback?.creatives || []),
     } as Campaign;
   });
   const sequences = asList<Sequence>(stored.sequences, defaults.sequences)
-    .filter(item => !item.id.startsWith("seq-inbound-")).map((item, index) => {
-    const fallback = defaults.sequences[index] ?? defaults.sequences[0];
+    .filter(item => item && item.id && !item.id.startsWith("seq-inbound-")).map((item, index) => {
+    const fallback = defaults.sequences[index] ?? defaults.sequences[0] ?? emptySequence;
     const record: Record<string, unknown> = isRecord(item) ? item : {};
     return {
+      ...emptySequence,
       ...fallback,
       ...record,
-      steps: asList(record.steps, fallback.steps),
-      runs: asList(record.runs, fallback.runs),
+      steps: asList(record.steps, fallback?.steps || []),
+      runs: asList(record.runs, fallback?.runs || []),
     } as Sequence;
   });
   const segments = asList<Segment>(stored.segments, defaults.segments).map((item, index) => {
-    const fallback = defaults.segments[index] ?? defaults.segments[0];
+    const fallback = defaults.segments[index] ?? defaults.segments[0] ?? emptySegment;
     const record: Record<string, unknown> = isRecord(item) ? item : {};
     return {
+      ...emptySegment,
       ...fallback,
       ...record,
-      rules: asList(record.rules, fallback.rules),
-      leadIds: asList(record.leadIds, fallback.leadIds),
+      rules: asList(record.rules, fallback?.rules || []),
+      leadIds: asList(record.leadIds, fallback?.leadIds || []),
     } as Segment;
   });
   const geo = asList<GeoQuery>(stored.geo, defaults.geo)
     // Remove the old seeded GEO examples. Their answers and citation metrics were illustrative only.
-    .filter((item) => !/^geo-[1-5]$/.test(item.id))
+    .filter((item) => item && item.id && !/^geo-[1-5]$/.test(item.id))
     .map((item) => {
       const record: Record<string, unknown> = isRecord(item) ? item : {};
       const previousEngines = asList<GeoEngineResult>(record.engines, []);
@@ -772,18 +821,19 @@ async function saveGrowth(uid: string, state: GrowthState) {
    ------------------------------------------------------------ */
 
 function liveCampaign(campaign: Campaign, loop: number, salt: string): Campaign {
-  const drift = Math.sin((loop + hashString(campaign.id) % 40) / 17);
-  const spend = Math.round(campaign.spend * (1 + drift * 0.004));
-  const revenue = Math.round(campaign.revenue * (1 + drift * 0.007));
-  const channels = campaign.channels.map((channel, index) => {
+  const id = campaign.id || "cmp";
+  const drift = Math.sin((loop + hashString(id) % 40) / 17);
+  const spend = Math.round((campaign.spend || 0) * (1 + drift * 0.004));
+  const revenue = Math.round((campaign.revenue || 0) * (1 + drift * 0.007));
+  const channels = (campaign.channels || []).map((channel, index) => {
     const channelDrift = Math.sin((loop + index * 23) / 19);
-    const channelSpend = Math.round(channel.spend * (1 + channelDrift * 0.006));
+    const channelSpend = Math.round((channel.spend || 0) * (1 + channelDrift * 0.006));
     return {
       ...channel,
       spend: channelSpend,
-      revenue: Math.round(channel.revenue * (1 + channelDrift * 0.01)),
-      roas: Number((channel.roas * (1 + channelDrift * 0.01)).toFixed(2)),
-      trend: Number((channel.trend + channelDrift * 0.02).toFixed(2)),
+      revenue: Math.round((channel.revenue || 0) * (1 + channelDrift * 0.01)),
+      roas: Number(((channel.roas || 0) * (1 + channelDrift * 0.01)).toFixed(2)),
+      trend: Number(((channel.trend || 0) + channelDrift * 0.02).toFixed(2)),
     };
   });
   const totalRevenue = channels.reduce((total, channel) => total + channel.revenue, 0);
@@ -799,13 +849,13 @@ function liveCampaign(campaign: Campaign, loop: number, salt: string): Campaign 
 }
 
 function liveSequence(sequence: Sequence, loop: number): Sequence {
-  const runs = sequence.runs.map((run) => {
+  const runs = (sequence.runs || []).map((run) => {
     if (run.status !== "active") return run;
-    const drift = Math.sin((loop + hashString(run.id) % 30) / 21);
+    const drift = Math.sin((loop + hashString(run.id || "run") % 30) / 21);
     return {
       ...run,
-      opens: Math.max(0, run.opens + (drift > 0.85 ? 1 : 0)),
-      clicks: Math.max(0, run.clicks + (drift > 0.96 ? 1 : 0)),
+      opens: Math.max(0, (run.opens || 0) + (drift > 0.85 ? 1 : 0)),
+      clicks: Math.max(0, (run.clicks || 0) + (drift > 0.96 ? 1 : 0)),
     };
   });
   return { ...sequence, runs };
@@ -813,7 +863,7 @@ function liveSequence(sequence: Sequence, loop: number): Sequence {
 
 function liveEvents(events: LiveEvent[], loop: number): LiveEvent[] {
   const nowMs = Date.now();
-  return events.map((event, index) => {
+  return (events || []).map((event, index) => {
     const offset = (event.loopOffset ?? index * 7) % 120;
     const secondsAgo = ((loop + offset) % 120) + 1;
     return {
@@ -832,38 +882,39 @@ export async function getGrowthSnapshot(uid: string, leads: Lead[]): Promise<Gro
   const state = await readGrowth(uid, leads);
   const loop = Math.floor(Date.now() / 6000) % 120;
 
-  const campaigns = state.campaigns.map((campaign) =>
+  const campaigns = (state.campaigns || []).map((campaign) =>
     liveCampaign(campaign, loop, uid),
   );
-  const sequences = state.sequences.map((sequence) => liveSequence(sequence, loop));
+  const sequences = (state.sequences || []).map((sequence) => liveSequence(sequence, loop));
   const events = buildLiveFeed(uid, 14, undefined, leads);
-  const scores = leads.map((lead) =>
-    state.scores.find((score) => score.leadId === lead.id) ?? scoreLead(lead, uid),
+  const scores = (leads || []).map((lead) =>
+    (state.scores || []).find((score) => score.leadId === lead.id) ?? scoreLead(lead, uid),
   );
 
-  const totalSpend = campaigns.reduce((total, campaign) => total + campaign.spend, 0);
-  const totalRevenue = campaigns.reduce((total, campaign) => total + campaign.revenue, 0);
-  const allRuns = sequences.flatMap((sequence) => sequence.runs);
+  const totalSpend = campaigns.reduce((total, campaign) => total + (campaign.spend || 0), 0);
+  const totalRevenue = campaigns.reduce((total, campaign) => total + (campaign.revenue || 0), 0);
+  const allRuns = sequences.flatMap((sequence) => sequence.runs || []);
   const sent = allRuns.length;
   const replied = allRuns.filter((run) => run.status === "replied").length;
-  const opened = allRuns.filter((run) => run.opens > 0).length;
-  const qualified = leads.filter((lead) =>
+  const opened = allRuns.filter((run) => (run.opens || 0) > 0).length;
+  const qualified = (leads || []).filter((lead) =>
     ["qualified", "conversation", "converted"].includes(lead.stage),
   ).length;
-  const converted = leads.filter((lead) => lead.stage === "converted").length;
+  const converted = (leads || []).filter((lead) => lead.stage === "converted").length;
 
-  const completedGeoScans = state.geo.flatMap((query) => query.engines).filter((engine) => engine.status === "scanned");
+  const completedGeoScans = (state.geo || []).flatMap((query) => query.engines || []).filter((engine) => engine.status === "scanned");
   const geoShare = completedGeoScans.length
     ? Math.round((completedGeoScans.filter((engine) => engine.cited).length / completedGeoScans.length) * 100)
     : 0;
 
-  const scheduledThisWeek = state.slots.filter((slot) => {
+  const scheduledThisWeek = (state.slots || []).filter((slot) => {
+    if (!slot.scheduledFor) return false;
     const when = new Date(slot.scheduledFor).getTime();
     const diff = when - Date.now();
     return diff > -86400000 && diff < 7 * 86400000;
   }).length;
 
-  const pipelineValue = leads.reduce((total, lead) => {
+  const pipelineValue = (leads || []).reduce((total, lead) => {
     const weight: Record<string, number> = {
       identified: 0.08,
       engaged: 0.16,
@@ -878,8 +929,8 @@ export async function getGrowthSnapshot(uid: string, leads: Lead[]): Promise<Gro
     generatedAt: now(),
     campaigns,
     sequences,
-    segments: state.segments,
-    slots: [...state.slots].sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor)),
+    segments: state.segments || [],
+    slots: [...(state.slots || [])].sort((a, b) => (a.scheduledFor || "").localeCompare(b.scheduledFor || "")),
     geo: state.geo,
     events: events.slice(0, 14),
     scores,

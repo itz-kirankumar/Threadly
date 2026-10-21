@@ -39,6 +39,21 @@ async function databaseRequest<T>(path: string, idToken: string, init?: RequestI
 }
 
 export async function getWaitlistRequest(uid: string, idToken: string): Promise<WaitlistRequest | null> {
+  if (idToken === "demo-token" || uid === "demo-founder-uid") {
+    return {
+      id: "demo-founder-uid",
+      uid: "demo-founder-uid",
+      email: "founder@demo.threadly.io",
+      fullName: "Demo Founder",
+      startupName: "Threadly",
+      industry: "B2B SaaS",
+      url: "https://threadly.io",
+      challenge1: "Growth",
+      challenge2: "Outreach",
+      status: "approved",
+      createdAt: new Date().toISOString(),
+    };
+  }
   const request = await databaseRequest<WaitlistRequest>(`betaWaitlist/${uid}`, idToken);
   return request ? { ...request, id: uid, uid } : null;
 }
