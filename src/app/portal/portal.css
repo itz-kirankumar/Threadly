@@ -214,6 +214,18 @@
 .openreply-dm-btn-secondary { background: #f3f0f7; color: #4b3861; border: 1px solid #ded5e8; }
 .openreply-public-reply-box { border-left: 2px solid #e1306c; padding-left: 8px; margin-top: 8px; font-size: 11px; color: #4a3e56; font-style: italic; }
 
+/* PumpGTM Engine Styles */
+.pumpgtm-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font-size: 9px; font-weight: 800; background: #1e1b4b; color: #a5b4fc; letter-spacing: .04em; }
+.pumpgtm-tier-hot { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.pumpgtm-tier-warm { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; background: #fffbeb; border: 1px solid #fde68a; color: #b45309; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.pumpgtm-tier-watching { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.pumpgtm-humanize-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 6px; background: #fdf4ff; border: 1px solid #f0abfc; color: #a21caf; font-size: 10px; font-weight: 700; cursor: pointer; transition: all .15s ease; }
+.pumpgtm-humanize-btn:hover { background: #fae8ff; border-color: #e879f9; }
+.pumpgtm-enrich-card { border: 1px solid #c7d2fe; background: #f5f7ff; border-radius: 9px; padding: 12px; margin: 10px 0; }
+.pumpgtm-chip { display: inline-block; padding: 1px 6px; border-radius: 4px; background: #e0e7ff; color: #3730a3; font-size: 9px; font-weight: 600; margin: 2px; }
+.pumpgtm-triage-card { border: 1px solid #ded5e8; border-radius: 9px; padding: 12px; background: #ffffff; margin-top: 10px; }
+
+
 
 
 /* The shell itself carries this ID and class, so its layout must use a compound selector. */

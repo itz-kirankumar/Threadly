@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowUpRight,
   Bot,
+  Briefcase,
   CalendarDays,
   Check,
   CheckCircle2,
   CircleHelp,
   Clock,
   ExternalLink,
+  Flame,
+  Inbox,
   Layers,
   Link as LinkIcon,
   Mail,
@@ -26,7 +29,9 @@ import {
   ToggleLeft,
   ToggleRight,
   Trash2,
+  TrendingUp,
   UserCheck,
+  Wand2,
   Zap,
 } from "lucide-react";
 import XDiscovery from "@/components/PortalXDiscovery";
@@ -49,6 +54,14 @@ import {
   INITIAL_OPENREPLY_LOGS,
   executeOpenReplyTrigger,
 } from "@/lib/openreply-engine";
+import {
+  humanizeCopy,
+  enrichBuyerProfile,
+  triageInboundReply,
+  classifyIntentTier,
+  type EnrichedBuyer,
+  type ReplyTriageResult,
+} from "@/lib/pumpgtm-engine";
 
 type OutreachEmail = { id: string; lead_id: string; recipient: string; subject: string; body: string; status: "draft" | "sending" | "sent"; created_at: string; sent_at?: string };
 type Context = Record<string, string>;
@@ -73,8 +86,8 @@ export default function PortalOutreach({
   const [error, setError] = useState("");
   const [analysis, setAnalysis] = useState<{ companyName: string; description: string; customer: string; icp: string; painPoints: string; searchPhrases: string; provider: string | null } | null>(null);
 
-  // Workbench Mode: CogSend Social, OpenReply Comment-to-DM, or Email
-  const [workbenchMode, setWorkbenchMode] = useState<"cogsend" | "openreply" | "email">("openreply");
+  // Workbench Mode: OpenReply, CogSend, Email, or PumpGTM Triage
+  const [workbenchMode, setWorkbenchMode] = useState<"openreply" | "cogsend" | "email" | "triage">("openreply");
 
   // CogSend Multi-Platform Social & Thread State
   const [selectedPlatforms, setSelectedPlatforms] = useState<SocialPlatform[]>(["x", "linkedin", "bluesky", "threads"]);
@@ -107,6 +120,12 @@ export default function PortalOutreach({
   const [newCampUrl, setNewCampUrl] = useState<string>("https://threadly.app/playbook");
   const [newCampRequireFollow, setNewCampRequireFollow] = useState<boolean>(true);
   const [newCampPublicReply, setNewCampPublicReply] = useState<string>("Sent you a DM! Check your inbox 📬");
+
+  // PumpGTM State
+  const [enrichedBuyers, setEnrichedBuyers] = useState<Record<string, EnrichedBuyer>>({});
+  const [triageInput, setTriageInput] = useState<string>("Hey! Saw this, sounds super interesting. Can you send over pricing or a calendar link?");
+  const [triageProspectName, setTriageProspectName] = useState<string>("Alex");
+  const [triageResult, setTriageResult] = useState<ReplyTriageResult | null>(null);
 
   const selectedEmail = useMemo(() => emails.find(email => email.id === selectedId) || null, [emails, selectedId]);
   const profile = analysis || (context.website ? {
@@ -170,7 +189,7 @@ export default function PortalOutreach({
     setBusy(`prospect-${post.id}`); setError(""); setNotice("");
     try {
       await action("lead", { name: post.author ? (post.author.startsWith("@") ? post.author : `@${post.author}`) : `${post.platform || "X"} prospect`, platform: post.platform || "X", opportunityId: post.id.startsWith("x-") || post.id.startsWith("tavily-") ? post.id : `x-${post.id}`, pain: post.text.slice(0, 500), notes: `Added from a public ${post.platform || "X"} conversation. Verify fit and contact details before outreach.` });
-      setNotice("Prospect saved. Add a verified email address or draft multi-platform outreach.");
+      setNotice("Prospect saved. Add a verified email address, enrich buyer, or draft outreach.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save prospect."); }
     finally { setBusy(""); }
   }
@@ -204,17 +223,59 @@ export default function PortalOutreach({
     finally { setBusy(""); }
   }
 
+  // PumpGTM 1-Click Buyer Enrichment
+  function handleEnrichProspect(lead: Lead) {
+    const enriched = enrichBuyerProfile({
+      name: lead.name,
+      role: lead.role,
+      company: lead.company,
+      pain: lead.pain,
+      platform: lead.platform,
+    });
+    setEnrichedBuyers(prev => ({ ...prev, [lead.id]: enriched }));
+    setNotice(`PumpGTM: Enriched ${lead.name} · Intent Tier: ${enriched.intentTier.toUpperCase()} (${enriched.intentScore}%)`);
+  }
+
+  // PumpGTM Anti-AI Slop Humanizer Actions
+  function humanizeActiveSegment(index: number) {
+    const current = segments[index] || "";
+    const humanized = humanizeCopy(current);
+    updateSegmentText(index, humanized);
+    setNotice("PumpGTM: Copy humanized! Removed buzzwords, em dashes, and bot syntax.");
+  }
+
+  function humanizeEmailBody() {
+    const humanized = humanizeCopy(body);
+    setBody(humanized);
+    setNotice("PumpGTM: Email humanized! Cut bot openers and pitch lines.");
+  }
+
+  // PumpGTM Reply Triage Trigger
+  function handleRunTriage() {
+    const res = triageInboundReply(triageInput, triageProspectName || "Prospect");
+    setTriageResult(res);
+    setNotice(`PumpGTM: Triaged as "${res.category.toUpperCase()}" with ${Math.round(res.confidence * 100)}% confidence.`);
+  }
+
+  function applyTriagedReplyToComposer() {
+    if (!triageResult) return;
+    setBody(triageResult.suggestedHumanizedReply);
+    setWorkbenchMode("email");
+    setNotice("PumpGTM: Triaged response loaded into Email Workbench.");
+  }
+
   // CogSend 1-Click Prospect Outreach Synthesizer
   function draftMultiPlatformOutreach(lead: Lead) {
     setProspectTargetLead(lead);
     const cleanHandle = lead.name.startsWith("@") ? lead.name : `@${lead.name}`;
     const cleanPain = (lead.pain || "high-intent inquiry").replace(/\n+/g, " ").slice(0, 90);
-    const initialPost = `Hey ${cleanHandle}, caught your note on ${cleanPain}.\n---\nAt ${companyName || "Threadly"}, we built a real-time signal monitor that spots high-intent buyers without cold spam. Live demo: https://threadly.app`;
+    const rawPost = `Hey ${cleanHandle}, caught your note on ${cleanPain}.\n---\nAt ${companyName || "Threadly"}, we built a real-time signal monitor that spots high-intent buyers without cold spam. Live demo: https://threadly.app`;
+    const initialPost = humanizeCopy(rawPost);
     
     const segs = splitLongText(initialPost, PLATFORM_LIMITS.x);
     setSegments(segs);
     setPlatformOverrides({
-      linkedin: `Hey ${lead.name},\n\nNoticed your discussion regarding "${cleanPain}". We recently tackled this challenge by listening to intent conversations across social communities.\n\nHappy to share our playbook or compare notes: https://threadly.app`,
+      linkedin: humanizeCopy(`Hey ${lead.name},\n\nNoticed your discussion regarding "${cleanPain}". We recently tackled this challenge by listening to intent conversations across social communities.\n\nHappy to compare notes: https://threadly.app`),
     });
     setWorkbenchMode("cogsend");
     setNotice(`CogSend multi-platform outreach prepared for ${cleanHandle}.`);
@@ -413,7 +474,6 @@ export default function PortalOutreach({
       if (result.matched) {
         setOpenreplyLogs([result.logItem, ...openreplyLogs]);
 
-        // Increment stats
         setOpenreplyCampaigns(openreplyCampaigns.map(c => {
           if (c.id === activeOpenReplyCampaign.id) {
             const comments = c.stats.comments + 1;
@@ -434,7 +494,6 @@ export default function PortalOutreach({
           return c;
         }));
 
-        // Automatically convert engaged commenter into a qualified lead in Threadly
         await action("lead", {
           name: simCommenter.startsWith("@") ? simCommenter : `@${simCommenter}`,
           platform: "Instagram",
@@ -485,15 +544,15 @@ export default function PortalOutreach({
       <div>
         <div className="eyebrow"><span className="pulse-dot"/> FROM PRODUCT TO PIPELINE</div>
         <h1>Outreach<span className="accent-period">.</span></h1>
-        <p>Inbound and outbound customer acquisition. ManyChat-style OpenReply comment-to-DM automation, CogSend multi-platform publishing, and 1-to-1 verified emails.</p>
+        <p>Inbound and outbound customer acquisition. PumpGTM intent enrichment & anti-slop copy, OpenReply ManyChat automation, CogSend multi-platform publishing, and 1-to-1 verified emails.</p>
       </div>
-      <span className="source-notice"><span className="tiny-dot"/> OpenReply & CogSend & SES Active</span>
+      <span className="source-notice"><span className="tiny-dot"/> PumpGTM & OpenReply & CogSend Active</span>
     </div>
     
     <div className="outreach-steps">
       <span className="outreach-step active"><i>01</i> Understand your product</span>
       <span className="outreach-step active"><i>02</i> Find relevant conversations</span>
-      <span className="outreach-step active"><i>03</i> Automated Inbound & Multi-Channel Outreach</span>
+      <span className="outreach-step active"><i>03</i> Humanized Multi-Channel Outbound</span>
     </div>
 
     <section className="mini-card outreach-panel">
@@ -535,60 +594,105 @@ export default function PortalOutreach({
             <div><div className="section-kicker">03 · REVIEWED PROSPECTS</div><h2>Your prospect list</h2></div>
             <span className="count-badge">{leads.length}</span>
           </div>
-          <p>Autonomous lead scoring. Trigger OpenReply comment-to-DM workflows, schedule CogSend social threads, or send 1-to-1 verified emails.</p>
+          <p>Autonomous lead scoring with PumpGTM Intent Tiers (Hot $\ge$ 65, Warm $\ge$ 35). Enrich buyer profiles, trigger OpenReply ManyChat DMs, or schedule CogSend social threads.</p>
           {!capabilities.decisionModels.laya && !capabilities.decisionModels.anyjev && <p className="outreach-help">Add LAYA_URL and/or ANYJEV_URL on the server to enable model qualification.</p>}
           
           {leads.length ? (
             <div className="outreach-prospect-list">
-              {leads.map(lead => (
-                <article className="outreach-prospect" key={lead.id}>
-                  <div className="outreach-prospect-info">
-                    <strong>{lead.name}</strong>
-                    <span>{lead.company || lead.role || "Discussion Lead"} · {lead.stage}</span>
-                    {lead.pain && <p>{lead.pain.slice(0, 160)}{lead.pain.length > 160 ? "…" : ""}</p>}
-                    {lead.qualification && (
-                      <div className="outreach-qualification">
-                        <span className={`fit-${lead.qualification.fit}`}>{lead.qualification.fit.replace("_", " ")}</span>
-                        <small>Intent {Math.round(lead.qualification.buyingIntent * 100)}% · {lead.qualification.model} · confidence {Math.round(lead.qualification.fitConfidence * 100)}%</small>
+              {leads.map(lead => {
+                const enriched = enrichedBuyers[lead.id];
+                const tier = enriched?.intentTier || classifyIntentTier(Math.round((lead.qualification?.buyingIntent || 0.6) * 100));
+
+                return (
+                  <article className="outreach-prospect" key={lead.id}>
+                    <div className="outreach-prospect-info">
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
+                        <strong>{lead.name}</strong>
+                        {tier === "hot" && <span className="pumpgtm-tier-hot"><Flame size={10}/> HOT TIER</span>}
+                        {tier === "warm" && <span className="pumpgtm-tier-warm"><Zap size={10}/> WARM</span>}
+                        {tier === "watching" && <span className="pumpgtm-tier-watching">WATCHING</span>}
                       </div>
-                    )}
-                  </div>
-                  <div className="outreach-contact">
-                    <button className="btn btn-outline" onClick={() => assessProspect(lead)} disabled={!lead.pain || (!capabilities.decisionModels.laya && !capabilities.decisionModels.anyjev) || busy === `qualify-${lead.id}`}>
-                      {busy === `qualify-${lead.id}` ? "Assessing…" : lead.qualification ? "Reassess fit" : "Assess fit"}<Target size={14}/>
-                    </button>
-                    
-                    {/* Action: OpenReply ManyChat trigger */}
-                    <button
-                      className="btn btn-outline"
-                      style={{ color: "#db2777", borderColor: "#fbcfe8", background: "#fdf2f8", marginBottom: "6px", fontSize: "10px" }}
-                      onClick={() => attachProspectToOpenReply(lead)}
-                    >
-                      <MessageCircle size={13}/> OpenReply Comment-to-DM
-                    </button>
 
-                    {/* Action: CogSend Multi-Platform Social Draft */}
-                    <button
-                      className="btn btn-dark"
-                      style={{ background: "#4c1d95", borderColor: "#4c1d95", color: "#fff", marginBottom: "8px", fontSize: "10px" }}
-                      onClick={() => draftMultiPlatformOutreach(lead)}
-                    >
-                      <Share2 size={13}/> Draft CogSend Outreach
-                    </button>
+                      <span>{lead.company || lead.role || "Discussion Lead"} · {lead.stage}</span>
+                      {lead.pain && <p>{lead.pain.slice(0, 160)}{lead.pain.length > 160 ? "…" : ""}</p>}
+                      
+                      {lead.qualification && (
+                        <div className="outreach-qualification">
+                          <span className={`fit-${lead.qualification.fit}`}>{lead.qualification.fit.replace("_", " ")}</span>
+                          <small>Intent {Math.round(lead.qualification.buyingIntent * 100)}% · {lead.qualification.model} · confidence {Math.round(lead.qualification.fitConfidence * 100)}%</small>
+                        </div>
+                      )}
 
-                    <label htmlFor={`contact-${lead.id}`}>Verified email</label>
-                    <div>
-                      <input id={`contact-${lead.id}`} type="email" value={emailValues[lead.id] || ""} onChange={event => setEmailValues({ ...emailValues, [lead.id]: event.target.value })} placeholder="name@company.com"/>
-                      <button className="btn btn-outline" onClick={() => saveEmailAddress(lead)} disabled={busy === `email-${lead.id}`}>
-                        {busy === `email-${lead.id}` ? "Saving…" : "Save"}
+                      {/* PumpGTM Enriched Buyer Drawer */}
+                      {enriched && (
+                        <div className="pumpgtm-enrich-card">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                            <span style={{ fontSize: "10px", fontWeight: 800, color: "#3730a3" }}>PUMPGTM BUYER SIGNALS</span>
+                            <span style={{ fontSize: "9px", color: "#6366f1", fontWeight: 700 }}>Score: {enriched.intentScore}/100</span>
+                          </div>
+                          <div style={{ fontSize: "10px", color: "#312e81", marginBottom: "4px" }}>
+                            <strong>Hiring Intent:</strong> {enriched.hiringSignals[0]}
+                          </div>
+                          <div style={{ marginBottom: "6px" }}>
+                            {enriched.techStack.map(tech => (
+                              <span key={tech} className="pumpgtm-chip">{tech}</span>
+                            ))}
+                          </div>
+                          <div style={{ fontSize: "10px", color: "#4338ca", fontStyle: "italic", background: "#eef2ff", padding: "6px 8px", borderRadius: "6px" }}>
+                            "{enriched.conversationalHook}"
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="outreach-contact">
+                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "6px" }}>
+                        <button className="btn btn-outline" style={{ fontSize: "10px", padding: "4px 8px" }} onClick={() => assessProspect(lead)} disabled={!lead.pain || busy === `qualify-${lead.id}`}>
+                          {busy === `qualify-${lead.id}` ? "Assessing…" : "Assess fit"}<Target size={12}/>
+                        </button>
+                        
+                        {/* Action: PumpGTM Buyer Enrichment */}
+                        <button
+                          className="btn btn-outline"
+                          style={{ fontSize: "10px", padding: "4px 8px", color: "#4f46e5", borderColor: "#c7d2fe", background: "#eef2ff" }}
+                          onClick={() => handleEnrichProspect(lead)}
+                        >
+                          <Zap size={11}/> Enrich Buyer
+                        </button>
+                      </div>
+
+                      {/* Action: OpenReply ManyChat trigger */}
+                      <button
+                        className="btn btn-outline"
+                        style={{ color: "#db2777", borderColor: "#fbcfe8", background: "#fdf2f8", marginBottom: "6px", fontSize: "10px" }}
+                        onClick={() => attachProspectToOpenReply(lead)}
+                      >
+                        <MessageCircle size={13}/> OpenReply Comment-to-DM
+                      </button>
+
+                      {/* Action: CogSend Multi-Platform Social Draft */}
+                      <button
+                        className="btn btn-dark"
+                        style={{ background: "#4c1d95", borderColor: "#4c1d95", color: "#fff", marginBottom: "8px", fontSize: "10px" }}
+                        onClick={() => draftMultiPlatformOutreach(lead)}
+                      >
+                        <Share2 size={13}/> Draft CogSend Outreach
+                      </button>
+
+                      <label htmlFor={`contact-${lead.id}`}>Verified email</label>
+                      <div>
+                        <input id={`contact-${lead.id}`} type="email" value={emailValues[lead.id] || ""} onChange={event => setEmailValues({ ...emailValues, [lead.id]: event.target.value })} placeholder="name@company.com"/>
+                        <button className="btn btn-outline" onClick={() => saveEmailAddress(lead)} disabled={busy === `email-${lead.id}`}>
+                          {busy === `email-${lead.id}` ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                      <button className="text-link" onClick={() => generateEmail(lead)} disabled={!lead.email || !capabilities.emailAiProvider || busy === `draft-${lead.id}`}>
+                        {busy === `draft-${lead.id}` ? "Drafting…" : "Draft an email"}<ArrowUpRight size={14}/>
                       </button>
                     </div>
-                    <button className="text-link" onClick={() => generateEmail(lead)} disabled={!lead.email || !capabilities.emailAiProvider || busy === `draft-${lead.id}`}>
-                      {busy === `draft-${lead.id}` ? "Drafting…" : "Draft an email"}<ArrowUpRight size={14}/>
-                    </button>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <div className="outreach-empty">
@@ -600,7 +704,7 @@ export default function PortalOutreach({
       </div>
 
       <aside className="outreach-column outreach-side">
-        {/* WORKBENCH SELECTOR: OPENREPLY vs COGSEND vs EMAIL */}
+        {/* WORKBENCH SELECTOR: OPENREPLY vs COGSEND vs EMAIL vs PUMPGTM TRIAGE */}
         <section className="mini-card outreach-panel">
           <div className="cogsend-mode-toggle" style={{ flexWrap: "wrap", gap: "6px" }}>
             <button
@@ -608,19 +712,26 @@ export default function PortalOutreach({
               onClick={() => setWorkbenchMode("openreply")}
               style={workbenchMode === "openreply" ? { background: "linear-gradient(135deg, #e1306c, #833ab4)", borderColor: "#e1306c" } : {}}
             >
-              <MessageCircle size={13}/> OpenReply (Comment-to-DM)
+              <MessageCircle size={13}/> OpenReply (DM)
             </button>
             <button
               className={`cogsend-mode-btn ${workbenchMode === "cogsend" ? "active" : ""}`}
               onClick={() => setWorkbenchMode("cogsend")}
             >
-              <Share2 size={13}/> CogSend (Social Scheduler)
+              <Share2 size={13}/> CogSend (Social)
             </button>
             <button
               className={`cogsend-mode-btn ${workbenchMode === "email" ? "active" : ""}`}
               onClick={() => setWorkbenchMode("email")}
             >
               <Mail size={13}/> Email (SES)
+            </button>
+            <button
+              className={`cogsend-mode-btn ${workbenchMode === "triage" ? "active" : ""}`}
+              onClick={() => setWorkbenchMode("triage")}
+              style={workbenchMode === "triage" ? { background: "#1e1b4b", borderColor: "#1e1b4b" } : {}}
+            >
+              <Inbox size={13}/> PumpGTM Triage
             </button>
           </div>
 
@@ -865,14 +976,12 @@ export default function PortalOutreach({
 
                       {simResult.matched && (
                         <>
-                          {/* Public comment reply */}
                           {simResult.publicReplyText && (
                             <div className="openreply-public-reply-box">
                               <strong>Public comment reply:</strong> "{simResult.publicReplyText}"
                             </div>
                           )}
 
-                          {/* DM Mockup */}
                           <div className="openreply-dm-mockup">
                             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", borderBottom: "1px solid #ede8f2", paddingBottom: "6px" }}>
                               <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#e1306c", color: "#fff", display: "grid", placeItems: "center", fontSize: "10px", fontWeight: 700 }}>T</div>
@@ -1015,7 +1124,17 @@ export default function PortalOutreach({
                       <div key={index} className="cogsend-thread-card">
                         <div className="cogsend-thread-card-header">
                           <span>Post {index + 1} of {segments.length}</span>
-                          <div style={{ display: "flex", gap: "6px" }}>
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                            {/* PumpGTM Anti-AI Slop Humanizer Button */}
+                            <button
+                              type="button"
+                              className="pumpgtm-humanize-btn"
+                              onClick={() => humanizeActiveSegment(index)}
+                              title="Rewrite with PumpGTM anti-AI slop humanizer"
+                            >
+                              <Wand2 size={11}/> Humanize
+                            </button>
+
                             {segments.length > 1 && (
                               <button
                                 type="button"
@@ -1141,7 +1260,6 @@ export default function PortalOutreach({
                         {item.baseBody.replace(/\n/g, " ")}
                       </p>
                       
-                      {/* Destination badges */}
                       <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
                         {item.platforms.map(plat => {
                           const res = item.destinations[plat];
@@ -1187,7 +1305,10 @@ export default function PortalOutreach({
             <div className="outreach-email-panel">
               <div className="outreach-panel-heading">
                 <span className="outreach-icon"><Mail size={19}/></span>
-                <div><div className="section-kicker">EMAIL WORKBENCH</div><h2>Review every message</h2></div>
+                <div>
+                  <div className="section-kicker">EMAIL WORKBENCH</div>
+                  <h2>Review every message</h2>
+                </div>
               </div>
               <div className="outreach-email-meta">
                 <span>{emails.length} saved email{emails.length === 1 ? "" : "s"}</span>
@@ -1204,11 +1325,101 @@ export default function PortalOutreach({
               {selectedEmail ? <>
                 <p className="outreach-recipient">To <strong>{selectedEmail.recipient}</strong>{selectedLead ? ` · ${selectedLead.name}` : ""}</p>
                 <label className="outreach-field" htmlFor="outreach-subject">Subject<input id="outreach-subject" value={subject} onChange={event => setSubject(event.target.value)} disabled={selectedEmail.status !== "draft"}/></label>
-                <label className="outreach-field" htmlFor="outreach-body">Message<textarea id="outreach-body" value={body} onChange={event => setBody(event.target.value)} rows={10} disabled={selectedEmail.status !== "draft"}/></label>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "10px 0 4px" }}>
+                  <label className="outreach-field" style={{ margin: 0 }} htmlFor="outreach-body">Message</label>
+                  {/* PumpGTM 1-Click Humanize */}
+                  <button
+                    type="button"
+                    className="pumpgtm-humanize-btn"
+                    onClick={humanizeEmailBody}
+                    title="PumpGTM: Strip bot openers, em dashes, and salesy buzzwords"
+                  >
+                    <Wand2 size={11}/> ⚡ Humanize (PumpGTM)
+                  </button>
+                </div>
+                
+                <textarea id="outreach-body" value={body} onChange={event => setBody(event.target.value)} rows={10} disabled={selectedEmail.status !== "draft"}/>
+                
                 {selectedEmail.status === "draft" ? <div className="outreach-email-actions"><button className="btn btn-outline" onClick={saveDraft} disabled={busy === "save"}>{busy === "save" ? "Saving…" : "Save draft"}</button><a className="btn btn-outline" href={mailto}>Open in email app</a><button className="btn btn-dark" onClick={sendEmail} disabled={!capabilities.emailOutreach || busy === "send" || !subject.trim() || !body.trim()}>{busy === "send" ? "Sending…" : "Review & send"}<Send size={15}/></button></div> : <p className="outreach-help">{selectedEmail.status === "sent" ? `Sent ${selectedEmail.sent_at ? new Date(selectedEmail.sent_at).toLocaleString() : ""}.` : "Delivery is being checked. Threadly will not retry automatically."}</p>}
                 {!capabilities.emailOutreach && selectedEmail.status === "draft" && <p className="outreach-help">Connect Amazon SES to enable in-app sending. You can still open this reviewed draft in your email app.</p>}
               </> : <div className="outreach-empty"><Mail size={19}/><span>Add a verified email to a prospect, then choose “Draft an email.”</span></div>}
               {bookingUrl && <p className="outreach-booking-note">New drafts can include your booking link: <a href={bookingUrl} target="_blank" rel="noopener noreferrer">{bookingUrl}</a></p>}
+            </div>
+          )}
+
+          {/* TAB 4: PUMPGTM INBOUND REPLY TRIAGE */}
+          {workbenchMode === "triage" && (
+            <div>
+              <div className="outreach-panel-heading">
+                <span className="outreach-icon" style={{ background: "#e0e7ff", color: "#4338ca" }}><Inbox size={19}/></span>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span className="pumpgtm-badge">PUMPGTM ENGINE</span>
+                    <span style={{ fontSize: "9px", color: "#6366f1", fontWeight: 700 }}>HUMAN DECISION HUB</span>
+                  </div>
+                  <h2>Inbound Reply Triage</h2>
+                </div>
+              </div>
+              <p>Every inbound reply across LinkedIn, X and Email is triaged into action buckets (Interested, Question, Referral, Objection). AI drafts the humanized response, you decide before sending.</p>
+
+              <div style={{ margin: "14px 0" }}>
+                <label className="outreach-field">Prospect Name / Handle</label>
+                <input
+                  type="text"
+                  value={triageProspectName}
+                  onChange={e => setTriageProspectName(e.target.value)}
+                  style={{ fontSize: "11px", padding: "6px 8px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8", marginBottom: "8px" }}
+                />
+
+                <label className="outreach-field">Inbound Reply Message</label>
+                <textarea
+                  rows={3}
+                  value={triageInput}
+                  onChange={e => setTriageInput(e.target.value)}
+                  style={{ fontSize: "11px", padding: "8px 10px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8" }}
+                />
+
+                <button
+                  type="button"
+                  className="btn btn-dark"
+                  style={{ width: "100%", background: "#1e1b4b", borderColor: "#1e1b4b", fontSize: "11px", marginTop: "8px", display: "flex", justifyContent: "center", alignItems: "center", gap: "6px" }}
+                  onClick={handleRunTriage}
+                >
+                  <Bot size={13}/> Triage & Draft Response
+                </button>
+              </div>
+
+              {triageResult && (
+                <div className="pumpgtm-triage-card">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", color: triageResult.sentiment === "positive" ? "#166534" : "#1e1b4b" }}>
+                      Category: {triageResult.category} ({Math.round(triageResult.confidence * 100)}% fit)
+                    </span>
+                    <span style={{ fontSize: "9px", padding: "2px 6px", borderRadius: "4px", background: triageResult.sentiment === "positive" ? "#dcfce7" : "#f1f5f9", color: triageResult.sentiment === "positive" ? "#15803d" : "#475569", fontWeight: 700 }}>
+                      {triageResult.sentiment.toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: "11px", color: "#4b5563", marginBottom: "8px" }}>
+                    <strong>Recommended Next Step:</strong> {triageResult.recommendedAction}
+                  </div>
+
+                  <label className="outreach-field">Suggested Humanized Response</label>
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", color: "#1e293b", lineHeight: 1.5, marginBottom: "8px" }}>
+                    "{triageResult.suggestedHumanizedReply}"
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ fontSize: "10px", padding: "6px 10px", display: "flex", alignItems: "center", gap: "4px" }}
+                    onClick={applyTriagedReplyToComposer}
+                  >
+                    <Send size={12}/> Load into Email Workbench
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </section>
