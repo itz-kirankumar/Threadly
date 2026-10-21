@@ -890,3 +890,83 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   }
 }
+
+/* ============================================================
+   PORTAL ALIGNMENT & RESPONSIVE POLISH
+   ============================================================ */
+
+/* Seamless sidebar: no scrollbar cuts, clean layout */
+#wisentry-portal.app-shell > .sidebar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 20px 12px 16px;
+}
+#wisentry-portal.app-shell > .sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+#wisentry-portal .sidebar-brand {
+  padding: 2px 8px 18px;
+}
+
+#wisentry-portal .workspace-switch {
+  margin: 0 0 18px;
+}
+
+#wisentry-portal .nav-list {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+#wisentry-portal .nav-list::-webkit-scrollbar {
+  display: none;
+}
+
+#wisentry-portal .sidebar-bottom {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+/* Content Area & Dashboard Grid Alignment */
+#wisentry-portal .content-area {
+  max-width: 1480px;
+  margin: 0;
+  padding: 30px clamp(20px, 3vw, 44px) 60px;
+}
+
+#wisentry-portal .dashboard-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.62fr) minmax(320px, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+
+#wisentry-portal .dashboard-main-column {
+  min-width: 0;
+}
+
+#wisentry-portal .dashboard-columns .bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 0;
+}
+
+/* Platform badge styling */
+#wisentry-portal .platform-reddit { background: #ff4500; color: #fff; }
+#wisentry-portal .platform-hacker-news { background: #ff6600; color: #fff; }
+#wisentry-portal .platform-indie-hackers { background: #1e3a8a; color: #fff; }
+#wisentry-portal .platform-github { background: #24292e; color: #fff; }
+#wisentry-portal .platform-web { background: #7c3aed; color: #fff; }
+
+@media (max-width: 1100px) {
+  #wisentry-portal .dashboard-columns {
+    grid-template-columns: 1fr;
+  }
+  #wisentry-portal .dashboard-columns .bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}

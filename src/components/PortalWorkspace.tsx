@@ -521,30 +521,6 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
           <LogOut size={18}/>
           <span>Log out</span>
         </button>
-        <div className="sidebar-help">
-          <span>✦</span>
-          <strong>Growth Operating System</strong>
-          <p>Capture signals, run sequences, optimize spend.</p>
-          <button onClick={() => go("Campaigns")}>Open Campaign Command <ArrowRight size={14}/></button>
-        </div>
-        <div className="sidebar-profile-card">
-          <button className="profile-info-btn" type="button" onClick={() => go("Settings")} title="Account Settings" aria-label="View account settings">
-            <span className="profile-avatar">{firstName.charAt(0).toUpperCase()}</span>
-            <span className="profile-text">
-              <strong>{name}</strong>
-              <small>{email}</small>
-            </span>
-          </button>
-          <button
-            type="button"
-            className="sidebar-logout-btn"
-            onClick={() => void signOutAction()}
-            title="Log out"
-            aria-label="Log out of Threadly"
-          >
-            <LogOut size={15}/>
-          </button>
-        </div>
       </div>
     </aside>
 
@@ -748,19 +724,51 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
             </div>
 
             <div className="dashboard-columns">
-              <section className="surface-section">
-                <div className="section-heading">
-                  <div>
-                    <div className="section-kicker">THE SIGNAL</div>
-                    <h2>Saved conversations</h2>
+              <div className="dashboard-main-column" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <section className="surface-section">
+                  <div className="section-heading">
+                    <div>
+                      <div className="section-kicker">THE SIGNAL · MULTI-CHANNEL INTENT</div>
+                      <h2>Saved conversations</h2>
+                    </div>
+                    <button className="text-link" onClick={() => go("Radar")}>View all <ArrowRight size={16}/></button>
                   </div>
-                  <button className="text-link" onClick={() => go("Radar")}>View all <ArrowRight size={16}/></button>
+                  <div className="opportunity-list">
+                    {!data.opportunities.length && <p className="muted-copy">No conversations yet. Open Discover to find high-intent posts across Reddit, Hacker News, X, and forums.</p>}
+                    {data.opportunities.slice(0, 3).map((o, i) => <OpportunityRow key={o.id} o={o} index={i} onOpen={() => { go("Radar"); setSelected(o); }} onDraft={() => openStudio(o)}/>)}
+                  </div>
+                </section>
+
+                <div className="bottom-grid" style={{ marginTop: 0 }}>
+                  <div className="mini-card">
+                    <div className="section-heading compact">
+                      <h3>Upcoming content</h3>
+                      <button className="text-link" onClick={() => go("Calendar")}>View calendar <ArrowRight size={15}/></button>
+                    </div>
+                    {data.drafts.filter(d => d.scheduled_at).length ? data.drafts.filter(d => d.scheduled_at).slice(0, 2).map(d => (
+                      <div className="activity-row" key={d.id}>
+                        <CalendarDays size={17}/>
+                        <span>{d.platform} · Publishing reminder</span>
+                        <strong>{formatDate(d.scheduled_at!)}</strong>
+                      </div>
+                    )) : <p className="muted-copy">Your calendar is clear. Approve a draft to plan your next post.</p>}
+                  </div>
+
+                  <div className="mini-card">
+                    <div className="section-heading compact">
+                      <h3>Recent leads</h3>
+                      <button className="text-link" onClick={() => go("Leads")}>View pipeline <ArrowRight size={15}/></button>
+                    </div>
+                    {data.leads.length ? data.leads.slice(0, 2).map(l => (
+                      <div className="activity-row" key={l.id}>
+                        <Users size={17}/>
+                        <span>{l.name}</span>
+                        <strong>{l.stage}</strong>
+                      </div>
+                    )) : <p className="muted-copy">No leads saved yet. Start from a promising conversation.</p>}
+                  </div>
                 </div>
-                <div className="opportunity-list">
-                  {!data.opportunities.length && <p className="muted-copy">No X posts yet. Open Discover to search a customer problem.</p>}
-                  {data.opportunities.slice(0, 3).map((o, i) => <OpportunityRow key={o.id} o={o} index={i} onOpen={() => { go("Radar"); setSelected(o); }} onDraft={() => openStudio(o)}/>)}
-                </div>
-              </section>
+              </div>
 
               <aside className="right-column">
                 <div className="insight-card">
@@ -788,36 +796,6 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                   <button className="text-link" onClick={() => go("Content Studio")}>Open Content Studio <ArrowRight size={15}/></button>
                 </div>
               </aside>
-            </div>
-
-            <div className="bottom-grid">
-              <div className="mini-card">
-                <div className="section-heading compact">
-                  <h3>Upcoming content</h3>
-                  <button className="text-link" onClick={() => go("Calendar")}>View calendar <ArrowRight size={15}/></button>
-                </div>
-                {data.drafts.filter(d => d.scheduled_at).length ? data.drafts.filter(d => d.scheduled_at).slice(0, 2).map(d => (
-                  <div className="activity-row" key={d.id}>
-                    <CalendarDays size={17}/>
-                    <span>{d.platform} · Manual publishing reminder</span>
-                    <strong>{formatDate(d.scheduled_at!)}</strong>
-                  </div>
-                )) : <p className="muted-copy">Your calendar is clear. Approve a draft to plan your next post.</p>}
-              </div>
-
-              <div className="mini-card">
-                <div className="section-heading compact">
-                  <h3>Recent leads</h3>
-                  <button className="text-link" onClick={() => go("Leads")}>View pipeline <ArrowRight size={15}/></button>
-                </div>
-                {data.leads.length ? data.leads.slice(0, 2).map(l => (
-                  <div className="activity-row" key={l.id}>
-                    <Users size={17}/>
-                    <span>{l.name}</span>
-                    <strong>{l.stage}</strong>
-                  </div>
-                )) : <p className="muted-copy">No leads saved yet. Start from a promising conversation.</p>}
-              </div>
             </div>
           </>}
 
@@ -1146,8 +1124,8 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 <p>{page === "Radar" ? "Keep promising conversations and your next action together." : "Collect the questions your customers are already asking."}</p>
               </div>
               <div className="page-actions">
-                <span className="source-notice"><span className="tiny-dot"/> {"X sources only"}</span>
-                <button className="btn btn-dark" onClick={() => go("Discover")}><Search size={16}/> Search X</button>
+                <span className="source-notice"><span className="tiny-dot"/> Multi-source radar: Tavily + X</span>
+                <button className="btn btn-dark" onClick={() => go("Discover")}><Search size={16}/> Discover Signals</button>
               </div>
             </div>
 
@@ -1179,7 +1157,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 </div>
               </div>
               <div className="list-meta">
-                <strong>{visible.length} X conversations</strong>
+                <strong>{visible.length} discussions & conversations</strong>
                 <span>Recently saved first <ChevronDown size={14}/></span>
               </div>
               <div className="radar-grid">

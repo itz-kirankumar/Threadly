@@ -442,7 +442,7 @@ export async function getState(uid: string) {
       xProvider: isDemo ? "Connected (Live & Sim)" : xConnection.provider,
       xProviderStatus: (isDemo ? "connected" : xConnection.status) as "connected" | "configured" | "unverified" | "not_configured",
       tavily: Boolean(process.env.TAVILY_API_KEY) || isDemo,
-      tavilyStatus: (Boolean(process.env.TAVILY_API_KEY) ? "connected" : "not_configured") as "connected" | "not_configured",
+      tavilyStatus: (process.env.TAVILY_API_KEY ? "connected" : "not_configured") as "connected" | "not_configured",
       publishing: false,
       manualCapture: true,
       emailOutreach: Boolean(process.env.USE_AWS === "true" && process.env.FROM_EMAIL) || isDemo,
