@@ -12,6 +12,7 @@ interface PortalPreloaderProps {
   onContinueDemo?: () => void;
   onGoogleSignIn?: () => Promise<void> | void;
   signingIn?: boolean;
+  showSignInLink?: boolean;
 }
 
 export default function PortalPreloader({
@@ -21,6 +22,7 @@ export default function PortalPreloader({
   onContinueDemo,
   onGoogleSignIn,
   signingIn = false,
+  showSignInLink = true,
 }: PortalPreloaderProps) {
   const [statusIndex, setStatusIndex] = useState(0);
   const [showFallbackActions, setShowFallbackActions] = useState(false);
@@ -75,8 +77,8 @@ export default function PortalPreloader({
             </div>
           </div>
           <Image
-            src="/logo.png"
-            alt="Wisentry"
+            src="/threadly-logo.svg"
+            alt="Threadly"
             width={168}
             height={52}
             className="preloader-logo-image"
@@ -104,9 +106,9 @@ export default function PortalPreloader({
                   {signingIn ? "Connecting to Google…" : "Continue with Google"}
                 </button>
               )}
-              <Link href="/portal/login" className="btn btn-outline" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              {showSignInLink && <Link href="/portal/login" className="btn btn-outline" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 Open sign-in page <ArrowRight size={13} />
-              </Link>
+              </Link>}
               {onContinueDemo && (
                 <button type="button" className="btn btn-demo-outline" onClick={onContinueDemo}>
                   Explore demo workspace <ArrowRight size={14} />
@@ -168,7 +170,7 @@ export default function PortalPreloader({
         )}
 
         <div className="preloader-footer">
-          <span>WISENTRY · FOUNDER REVENUE INTELLIGENCE</span>
+          <span>THREADLY · FOUNDER REVENUE INTELLIGENCE</span>
         </div>
       </div>
     </div>

@@ -28,6 +28,31 @@
           ".indexOn": ["status", "email", "created_at", "token"]
         }
       }
+    },
+    "betaWaitlist": {
+      ".read": "auth != null && auth.token.email_verified === true && auth.token.email === 'kiran160703kumar@gmail.com'",
+      "$uid": {
+        ".read": "auth != null && auth.token.email_verified === true && (auth.uid === $uid || auth.token.email === 'kiran160703kumar@gmail.com')",
+        ".write": "auth != null && auth.token.email_verified === true && (auth.token.email === 'kiran160703kumar@gmail.com' || (auth.uid === $uid && (!data.exists() || data.child('status').val() !== 'approved') && newData.child('status').val() === 'pending' && newData.child('email').val() === auth.token.email))",
+        ".validate": "newData.hasChildren(['uid', 'email', 'fullName', 'startupName', 'industry', 'url', 'challenge1', 'challenge2', 'status', 'createdAt']) && newData.child('uid').val() === $uid && (newData.child('status').val() === 'pending' || newData.child('status').val() === 'approved' || newData.child('status').val() === 'rejected')"
+      }
+    },
+    "communityMembers": {
+      "$uid": {
+        ".read": "auth != null && auth.token.email_verified === true && auth.uid === $uid",
+        ".write": "auth != null && auth.token.email_verified === true && auth.uid === $uid && newData.child('email').val() === auth.token.email",
+        ".validate": "newData.hasChildren(['email', 'uid', 'createdAt']) && newData.child('uid').val() === $uid"
+      }
+    },
+    "apiRateLimits": {
+      "$uid": {
+        "$bucket": {
+          ".read": "auth != null && auth.token.email_verified === true && auth.uid === $uid",
+          ".write": "auth != null && auth.token.email_verified === true && auth.uid === $uid && ((!data.exists() && newData.child('count').val() === 1) || (data.exists() && data.child('resetAt').val() > now && newData.child('resetAt').val() === data.child('resetAt').val() && newData.child('count').val() === data.child('count').val() + 1) || (data.exists() && data.child('resetAt').val() <= now && newData.child('count').val() === 1))",
+          ".validate": "newData.hasChildren(['count', 'resetAt']) && newData.child('count').isNumber() && newData.child('count').val() >= 1 && newData.child('count').val() <= 100000 && newData.child('resetAt').isNumber() && newData.child('resetAt').val() > now && newData.child('resetAt').val() <= now + 3600000",
+          "$other": { ".validate": false }
+        }
+      }
     }
   }
 }

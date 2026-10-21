@@ -4,8 +4,8 @@ import Footer from "@/components/Footer";
 import { ShieldCheck, Lock, Key, Server, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Security & Trust | Wisentry",
-  description: "Learn about Wisentry's enterprise-grade security, data protection, and encryption protocols.",
+  title: "Security & Trust | Threadly",
+  description: "Learn about Threadly's enterprise-grade security, data protection, and encryption protocols.",
 };
 
 export default function SecurityPage() {
@@ -21,7 +21,7 @@ export default function SecurityPage() {
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-black text-gray-900 tracking-tight mb-4">
-            Security at Wisentry
+            Security at Threadly
           </h1>
           <p className="text-lg text-gray-600 mb-12">
             We treat your startup data, user feedback, and brand integrity with utmost care.
@@ -52,7 +52,7 @@ export default function SecurityPage() {
           <div className="p-8 sm:p-10 rounded-3xl bg-white border-2 border-gray-200 shadow-md space-y-4 text-sm text-gray-700">
             <h2 className="text-xl font-black text-gray-900 mb-2">Responsible Disclosure</h2>
             <p>
-              If you discover a security vulnerability or concern within the Wisentry platform, please let us know immediately by emailing security@wisentry.com. We acknowledge all reports within 24 hours.
+              If you discover a security vulnerability or concern within the Threadly platform, please let us know immediately by emailing security@threadly.com. We acknowledge all reports within 24 hours.
             </p>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { analyzeOutreachWebsite } from "@/lib/outreach-website";
 import { getState, updateContext } from "@/lib/portal-data";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { withWorkspace } from "@/lib/portal-db";
+import { requireApprovedIdentity } from "@/lib/admin-auth";
 import { checkRateLimit, rateLimitUnavailable, tooManyRequests } from "@/lib/rate-limit";
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 
@@ -9,9 +10,8 @@ export const maxDuration = 45;
 
 export async function POST(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
-    if (!user) return Response.json({ error: "Sign in required" }, { status: 401 });
-    const limit = await checkRateLimit(`website-analysis:${user.uid}`, 10, 60 * 60);
+    const user = await requireApprovedIdentity(request);
+    const limit = await checkRateLimit(`website-analysis:${user.uid}`, 10, 60 * 60, user);
     if (!limit) return rateLimitUnavailable();
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
     const parsedBody = await readJsonBody(request, 8 * 1024);

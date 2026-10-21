@@ -59,8 +59,8 @@ export default function PortalLogin() {
 
   return <main id="wisentry-portal" className="portal-auth">
     <header className="portal-auth-header">
-      <Link href="/" className="portal-auth-logo" aria-label="Wisentry home">
-        <Image src="/logo.png" alt="Wisentry" width={184} height={56} priority />
+      <Link href="/" className="portal-auth-logo" aria-label="Threadly home">
+        <Image src="/threadly-logo.svg" alt="Threadly" width={184} height={56} priority />
       </Link>
       <span className="portal-auth-label">FOUNDER WORKSPACE</span>
     </header>
@@ -74,21 +74,21 @@ export default function PortalLogin() {
           <button className="btn btn-dark" type="submit" disabled={busy}>
             <span aria-hidden="true" className="google-g">G</span>{busy ? "Connecting to Google…" : "Continue with Google"}<span aria-hidden="true">↗</span>
           </button>
-          <Link href="/" className="btn btn-outline">Back to Wisentry</Link>
+          <Link href="/" className="btn btn-outline">Back to Threadly</Link>
         </form>
         {error && <div className="portal-auth-notice" role="alert"><span className="portal-auth-icon" aria-hidden="true">!</span><div><strong>Sign-in needs attention</strong><p>{error}</p></div></div>}
         <div className="portal-auth-privacy"><span className="tiny-dot"/> Your workspace is private to your Google account.</div>
       </section>
 
-      <aside className="portal-auth-preview" aria-label="Wisentry workspace features">
+      <aside className="portal-auth-preview" aria-label="Threadly workspace features">
         <div className="portal-auth-preview-head"><span>WISE GROWTH, IN FOCUS</span><span className="portal-auth-live"><i/> PRIVATE</span></div>
         <div className="portal-auth-preview-title">A clearer path from signal to customer.</div>
         <div className="portal-auth-preview-row"><span className="preview-icon">⌕</span><div><strong>Discover real conversations</strong><small>Listen for the problems you solve</small></div></div>
         <div className="portal-auth-preview-row"><span className="preview-icon">✦</span><div><strong>Write with context</strong><small>Thoughtful replies, in your voice</small></div></div>
         <div className="portal-auth-preview-row"><span className="preview-icon">↗</span><div><strong>Keep momentum</strong><small>Track leads and plan follow-ups</small></div></div>
-        <div className="portal-auth-preview-foot"><span>ONE PRIVATE WORKSPACE</span><span>WISENTRY<span className="brand-dot">.</span></span></div>
+        <div className="portal-auth-preview-foot"><span>ONE PRIVATE WORKSPACE</span><span>THREADLY<span className="brand-dot">.</span></span></div>
       </aside>
     </div>
-    <footer className="portal-auth-footer"><span>WISENTRY · FOUNDER GROWTH PORTAL</span><Link href="/privacy">Privacy</Link></footer>
+    <footer className="portal-auth-footer"><span>THREADLY · FOUNDER GROWTH PORTAL</span><Link href="/privacy">Privacy</Link></footer>
   </main>;
 }

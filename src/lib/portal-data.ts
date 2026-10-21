@@ -141,6 +141,7 @@ type WorkspaceData = {
 const contextKeys = [
   "website", "description", "industry", "customer", "icp", "titles",
   "painPoints", "competitors", "voice", "objective", "bookingUrl", "outreachSearchPhrases",
+  "averageDealValue",
 ];
 const blankContext = Object.fromEntries(contextKeys.map(key => [key, ""]));
 const now = () => new Date().toISOString();
@@ -198,26 +199,26 @@ const defaultWorkflows: Workflow[] = [
   },
 ];
 
-export async function ensureWorkspace(uid: string, founderEmail = "founder@wisentry.io", founderName = "Founder"): Promise<void> {
+export async function ensureWorkspace(uid: string, founderEmail = "founder@threadly.io", founderName = "Founder"): Promise<void> {
   const workspace = await readData<Workspace>("workspace");
   if (!workspace) {
     const isDemo = uid === "demo-founder-uid";
     const initialWorkspace: Workspace = {
       id: uid,
-      name: isDemo ? "Wisentry Intelligence" : "My company",
-      legalName: isDemo ? "Wisentry Inc." : "",
-      website: isDemo ? "https://wisentry.io" : "",
+      name: isDemo ? "Threadly Growth Lab" : "My company",
+      legalName: isDemo ? "Threadly Inc." : "",
+      website: isDemo ? "https://threadly.io" : "",
       industry: isDemo ? "B2B SaaS / Growth Tech" : "",
       stage: isDemo ? "Series A / Seed" : "Seed",
       country: isDemo ? "United States" : "",
       region: isDemo ? "California" : "",
       defaultTimezone: isDemo ? "America/New_York" : "UTC",
-      logoUrl: "/logo.png",
-      domain: isDemo ? "wisentry.io" : "",
+      logoUrl: "/threadly-logo.svg",
+      domain: isDemo ? "threadly.io" : "",
       context: {
         ...blankContext,
         ...(isDemo ? {
-          website: "https://wisentry.io",
+          website: "https://threadly.io",
           description: "Revenue intelligence & founder-led outreach OS that turns real customer conversations into qualified pipeline.",
           industry: "B2B SaaS / Growth Tech",
           customer: "Founders, Head of Growth, GTM teams building early traction",
@@ -226,6 +227,7 @@ export async function ensureWorkspace(uid: string, founderEmail = "founder@wisen
           voice: "Conversational, direct, authentic, value-first",
           objective: "Secure qualified founder-to-founder exploratory calls",
           outreachSearchPhrases: "looking for alternative to outreach, need better gtm tool, sick of cold email spam",
+          averageDealValue: "4800",
         } : {}),
       },
       created_at: now(),
@@ -240,7 +242,7 @@ export async function ensureWorkspace(uid: string, founderEmail = "founder@wisen
     const ownerMember: TeamMember = {
       id: safeId(`member-${uid}`),
       name: founderName || "Founder",
-      email: founderEmail || "founder@wisentry.io",
+      email: founderEmail || "founder@threadly.io",
       role: "Owner",
       status: "active",
       joined_at: now(),
@@ -259,7 +261,7 @@ export async function ensureWorkspace(uid: string, founderEmail = "founder@wisen
       const demoCollaborator: TeamMember = {
         id: "member-demo-collab",
         name: "Elena Rostova",
-        email: "elena@growth.wisentry.io",
+        email: "elena@growth.threadly.io",
         role: "Growth Lead",
         status: "active",
         joined_at: now(),
@@ -277,7 +279,7 @@ export async function ensureWorkspace(uid: string, founderEmail = "founder@wisen
       const demoCollaborator2: TeamMember = {
         id: "member-demo-collab2",
         name: "Kiran Kumar",
-        email: "kiran@wisentry.io",
+        email: "kiran@threadly.io",
         role: "Admin",
         status: "active",
         joined_at: now(),
@@ -311,30 +313,111 @@ export async function ensureWorkspace(uid: string, founderEmail = "founder@wisen
       };
       await writeData("opportunities", { [demoOpp.id]: demoOpp });
 
-      // Demo sample lead
-      const demoLead: Lead = {
-        id: "lead-demo-1",
-        opportunity_id: "x-sample-1",
-        name: "@alexaborig",
-        email: "alex@hypergrowth.tech",
-        company: "HyperGrowth Tech",
-        role: "CEO & Co-Founder",
-        platform: "X",
-        pain: "Looking for an outreach workflow that doesn't feel like robotic spam",
-        stage: "qualified",
-        notes: "Founder expressed frustration with cold spam. Reached out with personalized reply.",
-        owner: founderEmail,
-        created_at: now(),
-        qualification: {
-          fit: "strong_fit",
-          fitConfidence: 0.94,
-          buyingIntent: 0.88,
-          model: "AnyJev",
-          route: "confidence",
-          assessedAt: now(),
+      // Demo sample leads across the pipeline
+      const demoLeads: Lead[] = [
+        {
+          id: "lead-demo-1",
+          opportunity_id: "x-sample-1",
+          name: "@alexaborig",
+          email: "alex@hypergrowth.tech",
+          company: "HyperGrowth Tech",
+          role: "CEO & Co-Founder",
+          platform: "X",
+          pain: "Looking for an outreach workflow that doesn't feel like robotic spam",
+          stage: "qualified",
+          notes: "Founder expressed frustration with cold spam. Reached out with personalized reply.",
+          owner: founderEmail,
+          created_at: now(),
+          qualification: {
+            fit: "strong_fit",
+            fitConfidence: 0.94,
+            buyingIntent: 0.88,
+            model: "AnyJev",
+            route: "confidence",
+            assessedAt: now(),
+          },
         },
-      };
-      await writeData("leads", { [demoLead.id]: demoLead });
+        {
+          id: "lead-demo-2",
+          opportunity_id: null,
+          name: "@maya.builds",
+          email: "maya@lumen.app",
+          company: "Lumen",
+          role: "Co-founder",
+          platform: "X",
+          pain: "Reddit thread: “what actually replaced cold email for you?”",
+          stage: "conversation",
+          notes: "Replied to sequence step 2. Evaluating this quarter.",
+          owner: founderEmail,
+          created_at: now(),
+          qualification: {
+            fit: "strong_fit",
+            fitConfidence: 0.91,
+            buyingIntent: 0.82,
+            model: "AnyJev",
+            route: "confidence",
+            assessedAt: now(),
+          },
+        },
+        {
+          id: "lead-demo-3",
+          opportunity_id: null,
+          name: "@diego.ramos",
+          email: "diego@kite.so",
+          company: "Kite",
+          role: "Head of Growth",
+          platform: "X",
+          pain: "Spend attribution is a mess across Meta and Google",
+          stage: "engaged",
+          notes: "Opened the first email twice, no reply yet.",
+          owner: founderEmail,
+          created_at: now(),
+          qualification: {
+            fit: "possible_fit",
+            fitConfidence: 0.68,
+            buyingIntent: 0.54,
+            model: "Laya",
+            route: "language",
+            assessedAt: now(),
+          },
+        },
+        {
+          id: "lead-demo-4",
+          opportunity_id: null,
+          name: "@priya.slate",
+          email: "priya@slate.ai",
+          company: "Slate AI",
+          role: "Founder",
+          platform: "X",
+          pain: "ChatGPT keeps recommending competitors in our category",
+          stage: "converted",
+          notes: "Closed won. Now tracking GEO citation gaps with us.",
+          owner: founderEmail,
+          created_at: now(),
+          qualification: {
+            fit: "strong_fit",
+            fitConfidence: 0.97,
+            buyingIntent: 0.93,
+            model: "AnyJev",
+            route: "confidence",
+            assessedAt: now(),
+          },
+        },
+        {
+          id: "lead-demo-5",
+          opportunity_id: null,
+          name: "@tom.fleet",
+          company: "Fleet Ops",
+          role: "Ops Lead",
+          platform: "X",
+          pain: "Trying to find buyers before they start searching",
+          stage: "identified",
+          notes: "No email yet. Verify fit before outreach.",
+          owner: founderEmail,
+          created_at: now(),
+        },
+      ];
+      await writeData("leads", Object.fromEntries(demoLeads.map(lead => [lead.id, lead])));
     }
 
     await writeData("team", teamMap);
@@ -346,11 +429,41 @@ export async function getState(uid: string) {
   const xConnection = await getXProviderStatus();
   const data = await readData<WorkspaceData>("") || {};
   const isDemo = uid === "demo-founder-uid";
+  const records = selectRecords(uid, data);
 
-  const workspace = data.workspace || {
+  return {
+    ...records,
+    team: values(data.team),
+    invites: values(data.invites),
+    capabilities: {
+      ai: Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY) || isDemo,
+      liveSources: Boolean(xConnection.provider) || isDemo,
+      xProvider: isDemo ? "Connected (Live & Sim)" : xConnection.provider,
+      xProviderStatus: (isDemo ? "connected" : xConnection.status) as "connected" | "configured" | "unverified" | "not_configured",
+      publishing: false,
+      manualCapture: true,
+      emailOutreach: Boolean(process.env.USE_AWS === "true" && process.env.FROM_EMAIL) || isDemo,
+      websiteAiProvider: getAiProviderLabel("website-analysis") || (isDemo ? "Threadly AI Flash" : null),
+      emailAiProvider: getAiProviderLabel("outreach-email") || (isDemo ? "Threadly AI Pro" : null),
+      contentAiProvider: getAiProviderLabel("content-drafts") || (isDemo ? "Threadly AI Engine" : null),
+      decisionModels: isDemo ? { laya: true, anyjev: true } : getDecisionModelStatus(),
+    },
+  };
+}
+
+/** The records every growth module reads, without the slower capability checks. */
+export type WorkspaceRecords = ReturnType<typeof selectRecords>;
+
+export async function getWorkspaceRecords(uid: string): Promise<WorkspaceRecords> {
+  return selectRecords(uid, await readData<WorkspaceData>("") || {});
+}
+
+function selectRecords(uid: string, data: WorkspaceData) {
+  const isDemo = uid === "demo-founder-uid";
+  const workspace: Workspace = data.workspace || {
     id: uid,
-    name: isDemo ? "Wisentry Intelligence" : "My company",
-    logoUrl: "/logo.png",
+    name: isDemo ? "Threadly Growth Lab" : "My company",
+    logoUrl: "/threadly-logo.svg",
     domain: "",
     context: blankContext,
     created_at: now(),
@@ -372,7 +485,7 @@ export async function getState(uid: string) {
   }));
 
   return {
-    workspace,
+    workspace: { ...workspace, context: { ...blankContext, ...(workspace.context || {}) } },
     opportunities: values(data.opportunities)
       .filter(item => item.platform === "X" && (isDemo || item.source_kind !== "demo"))
       .sort((a, b) => b.observed_at.localeCompare(a.observed_at)),
@@ -385,21 +498,6 @@ export async function getState(uid: string) {
     outreachEmails: values(data.outreachEmails)
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),
     workflows: finalWorkflows,
-    team: values(data.team),
-    invites: values(data.invites),
-    capabilities: {
-      ai: Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY) || isDemo,
-      liveSources: Boolean(xConnection.provider) || isDemo,
-      xProvider: isDemo ? "Connected (Live & Sim)" : xConnection.provider,
-      xProviderStatus: (isDemo ? "connected" : xConnection.status) as "connected" | "configured" | "unverified" | "not_configured",
-      publishing: false,
-      manualCapture: true,
-      emailOutreach: Boolean(process.env.USE_AWS === "true" && process.env.FROM_EMAIL) || isDemo,
-      websiteAiProvider: getAiProviderLabel("website-analysis") || (isDemo ? "Wisentry AI Flash" : null),
-      emailAiProvider: getAiProviderLabel("outreach-email") || (isDemo ? "Wisentry AI Pro" : null),
-      contentAiProvider: getAiProviderLabel("content-drafts") || (isDemo ? "Wisentry AI Engine" : null),
-      decisionModels: isDemo ? { laya: true, anyjev: true } : getDecisionModelStatus(),
-    },
     demo: isDemo,
   };
 }

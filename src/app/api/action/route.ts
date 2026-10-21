@@ -30,10 +30,35 @@ import {
   updateOpportunity,
   updateTeamRole,
 } from "@/lib/portal-data";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { withWorkspace } from "@/lib/portal-db";
+import { requireApprovedIdentity } from "@/lib/admin-auth";
 import { sendFounderOutreachEmail } from "@/lib/mailer";
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { checkRateLimit, rateLimitUnavailable, tooManyRequests } from "@/lib/rate-limit";
+import {
+  addGeoQuery,
+  advanceSequence,
+  createCampaign,
+  createSegment,
+  createSequence,
+  enrollLeadsInSequence,
+  optimizeCampaign,
+  recordAdSpend,
+  refreshLeadScores,
+  refreshSegments,
+  removeContentSlot,
+  scanGeo,
+  suggestContentSlots,
+  toggleCampaign,
+  toggleSequence,
+  updateContentSlot,
+  type Campaign,
+  type CampaignChannel,
+  type ContentSlot,
+  type GeoQuery,
+  type SegmentRule,
+  type Sequence,
+} from "@/lib/threadly-engine";
 
 export const runtime = "nodejs";
 
@@ -59,8 +84,7 @@ function companyContext(value: unknown): Record<string, string> {
 
 export async function POST(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
-    if (!user) return Response.json({ error: "Sign in required" }, { status: 401 });
+    const user = await requireApprovedIdentity(request);
     const parsedBody = await readJsonBody(request);
     if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody) || typeof (parsedBody as { action?: unknown }).action !== "string") {
       return Response.json({ error: "Choose a valid workspace action." }, { status: 400 });
@@ -73,10 +97,14 @@ export async function POST(request: Request) {
       qualifyLead: { limit: 30, windowSeconds: 60 * 60 },
       outreachGenerate: { limit: 30, windowSeconds: 60 * 60 },
       outreachSend: { limit: 30, windowSeconds: 60 * 60 },
+      campaignOptimize: { limit: 60, windowSeconds: 60 * 60 },
+      sequenceAdvance: { limit: 120, windowSeconds: 60 * 60 },
+      geoScan: { limit: 60, windowSeconds: 60 * 60 },
+      scoreRefresh: { limit: 60, windowSeconds: 60 * 60 },
     };
     const quota = costlyActions[action];
     if (quota && user.idToken !== "demo-token") {
-      const limit = await checkRateLimit(`action:${action}:${user.uid}`, quota.limit, quota.windowSeconds);
+      const limit = await checkRateLimit(`action:${action}:${user.uid}`, quota.limit, quota.windowSeconds, user);
       if (!limit) return rateLimitUnavailable();
       if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
     }
@@ -239,6 +267,149 @@ export async function POST(request: Request) {
             name: text(body, "name", 120, true),
           });
           break;
+
+        // --- Threadly growth engine: campaigns -----------------
+        case "campaignCreate": {
+          const { leads } = await getState(user.uid);
+          const campaign = await createCampaign(user.uid, leads, {
+            name: text(body, "name", 160)!,
+            objective: text(body, "objective", 300, true),
+            budget: Number(body.budget),
+            targetRoas: body.targetRoas === undefined ? undefined : Number(body.targetRoas),
+            channels: Array.isArray(body.channels) ? (body.channels as CampaignChannel[]) : undefined,
+          });
+          return Response.json({ ok: true, campaign });
+        }
+        case "campaignOptimize": {
+          const { leads } = await getState(user.uid);
+          const result = await optimizeCampaign(user.uid, leads, text(body, "campaignId", 160)!);
+          return Response.json({ ok: true, ...result });
+        }
+        case "campaignToggle": {
+          const { leads } = await getState(user.uid);
+          await toggleCampaign(
+            user.uid,
+            leads,
+            text(body, "campaignId", 160)!,
+            (body.status as Campaign["status"]) || "active",
+          );
+          break;
+        }
+        case "campaignSpend": {
+          const { leads } = await getState(user.uid);
+          const record = await recordAdSpend(user.uid, leads, {
+            campaignId: text(body, "campaignId", 160)!,
+            channel: (body.channel as CampaignChannel) || "google_search",
+            amount: Number(body.amount),
+            revenue: body.revenue === undefined ? undefined : Number(body.revenue),
+            conversions: body.conversions === undefined ? undefined : Number(body.conversions),
+          });
+          return Response.json({ ok: true, record });
+        }
+
+        // --- Threadly growth engine: sequences -----------------
+        case "sequenceCreate": {
+          const { leads } = await getState(user.uid);
+          const sequence = await createSequence(user.uid, leads, {
+            name: text(body, "name", 160)!,
+            description: text(body, "description", 500, true),
+          });
+          return Response.json({ ok: true, sequence });
+        }
+        case "sequenceToggle": {
+          const { leads } = await getState(user.uid);
+          await toggleSequence(
+            user.uid,
+            leads,
+            text(body, "sequenceId", 160)!,
+            (body.status as Sequence["status"]) || "active",
+          );
+          break;
+        }
+        case "sequenceEnroll": {
+          const { leads } = await getState(user.uid);
+          const leadIds = Array.isArray(body.leadIds)
+            ? (body.leadIds as unknown[]).filter((value): value is string => typeof value === "string")
+            : [];
+          const enrolled = await enrollLeadsInSequence(
+            user.uid,
+            leads,
+            text(body, "sequenceId", 160)!,
+            leadIds,
+          );
+          return Response.json({ ok: true, enrolled });
+        }
+        case "sequenceAdvance": {
+          const { leads } = await getState(user.uid);
+          const result = await advanceSequence(user.uid, leads, text(body, "sequenceId", 160)!);
+          return Response.json({ ok: true, ...result });
+        }
+
+        // --- Threadly growth engine: segments ------------------
+        case "segmentCreate": {
+          const { leads } = await getState(user.uid);
+          const rules = Array.isArray(body.rules) ? (body.rules as SegmentRule[]) : [];
+          const segment = await createSegment(user.uid, leads, {
+            name: text(body, "name", 160)!,
+            description: text(body, "description", 300, true),
+            rules,
+            color: body.color as "orange" | "violet" | "ink" | undefined,
+          });
+          return Response.json({ ok: true, segment });
+        }
+        case "segmentRefresh": {
+          const { leads } = await getState(user.uid);
+          const segments = await refreshSegments(user.uid, leads);
+          return Response.json({ ok: true, segments });
+        }
+
+        // --- Threadly growth engine: best-time slots -----------
+        case "slotSuggest": {
+          const { leads } = await getState(user.uid);
+          const slot = await suggestContentSlots(user.uid, leads, {
+            channel: body.channel as ContentSlot["channel"] | undefined,
+            title: text(body, "title", 200, true),
+            group: text(body, "group", 120, true),
+          });
+          return Response.json({ ok: true, slot });
+        }
+        case "slotUpdate": {
+          const { leads } = await getState(user.uid);
+          const slot = await updateContentSlot(user.uid, leads, text(body, "slotId", 160)!, {
+            status: body.status as ContentSlot["status"] | undefined,
+            title: text(body, "title", 200, true),
+            scheduledFor: text(body, "scheduledFor", 80, true),
+          });
+          return Response.json({ ok: true, slot });
+        }
+        case "slotRemove": {
+          const { leads } = await getState(user.uid);
+          await removeContentSlot(user.uid, leads, text(body, "slotId", 160)!);
+          break;
+        }
+
+        // --- Threadly growth engine: GEO visibility ------------
+        case "geoScan": {
+          const { leads } = await getState(user.uid);
+          const geo = await scanGeo(user.uid, leads, text(body, "queryId", 160, true));
+          return Response.json({ ok: true, geo });
+        }
+        case "geoAdd": {
+          const { leads } = await getState(user.uid);
+          const query = await addGeoQuery(user.uid, leads, {
+            query: text(body, "query", 240)!,
+            intent: body.intent as GeoQuery["intent"] | undefined,
+            volume: body.volume === undefined ? undefined : Number(body.volume),
+          });
+          return Response.json({ ok: true, query });
+        }
+
+        // --- Threadly growth engine: lead scoring --------------
+        case "scoreRefresh": {
+          const { leads } = await getState(user.uid);
+          const scores = await refreshLeadScores(user.uid, leads);
+          return Response.json({ ok: true, scores });
+        }
 
         default:
           return Response.json({ error: "Unknown action" }, { status: 400 });

@@ -1,15 +1,40 @@
 import { NextResponse } from "next/server";
-import { insertWaitlist } from "@/lib/db";
+import { getWaitlistRequest, insertWaitlist } from "@/lib/db";
+import { getFirebaseIdentity } from "@/lib/portal-db";
 import { errorResponse, readJsonBody } from "@/lib/api-request";
-import { checkRateLimit, rateLimitUnavailable, requestAddressKey, tooManyRequests } from "@/lib/rate-limit";
+import { checkRateLimit, rateLimitUnavailable, tooManyRequests } from "@/lib/rate-limit";
+import { isAdminEmail } from "@/lib/admin-auth";
+import { sendBetaEmail } from "@/lib/resend";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  try {
+    const user = await getFirebaseIdentity(request);
+    if (!user) return NextResponse.json({ error: "Sign in with Google to continue." }, { status: 401 });
+    if (isAdminEmail(user.email)) {
+      return NextResponse.json({ application: null, accessGranted: true, role: "admin" }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const application = await getWaitlistRequest(user.uid, user.idToken);
+    return NextResponse.json({ accessGranted: application?.status === "approved", application: application ? {
+      status: application.status || "pending",
+      createdAt: application.createdAt,
+      reviewedAt: application.reviewedAt || null,
+    } : null }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return errorResponse(error, "Waitlist status");
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    const limit = await checkRateLimit(`waitlist:${requestAddressKey(request)}`, 3, 10 * 60);
+    const user = await getFirebaseIdentity(request);
+    if (!user) return NextResponse.json({ error: "Sign in with Google to join the waitlist." }, { status: 401 });
+    const limit = await checkRateLimit(`waitlist:${user.uid}`, 3, 10 * 60, user);
     if (!limit) return rateLimitUnavailable();
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+
     const data = await readJsonBody(request, 16 * 1024);
     if (!data || typeof data !== "object" || Array.isArray(data)) {
       return NextResponse.json({ error: "Complete the required fields." }, { status: 400 });
@@ -27,17 +52,32 @@ export async function POST(request: Request) {
       try { if (new URL(form.url).protocol !== "https:") throw new Error(); }
       catch { return NextResponse.json({ error: "Use a valid HTTPS website address." }, { status: 400 }); }
     }
+    if (!user.email) return NextResponse.json({ error: "Your Google account needs a verified email address." }, { status: 400 });
 
+    const previous = await getWaitlistRequest(user.uid, user.idToken);
     await insertWaitlist({
+      uid: user.uid,
+      email: user.email.trim().toLowerCase(),
       fullName: String(form.fullName).trim(),
       startupName: String(form.startupName).trim(),
       industry: String(form.industry).trim(),
       url: typeof form.url === "string" ? form.url.trim() : "",
       challenge1: String(form.challenge1).trim(),
       challenge2: typeof form.challenge2 === "string" ? form.challenge2.trim() : "",
-    });
+    }, user.idToken);
 
-    return NextResponse.json({ success: true });
+    const application = await getWaitlistRequest(user.uid, user.idToken);
+    let emailSent: boolean | undefined;
+    if (!previous || previous.status === "rejected") {
+      try {
+        await sendBetaEmail({ to: user.email, name: String(form.fullName).trim(), kind: "waitlist" });
+        emailSent = true;
+      } catch (error) {
+        emailSent = false;
+        console.error("Waitlist confirmation email failed", error instanceof Error ? error.message : "Unknown Resend error");
+      }
+    }
+    return NextResponse.json({ success: true, status: application?.status || "pending", emailSent });
   } catch (error) {
     return errorResponse(error, "Waitlist submission");
   }

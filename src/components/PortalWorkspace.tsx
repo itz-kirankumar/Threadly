@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   Activity, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, Bell, CalendarClock, CalendarDays,
-  Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Clock3,
+  Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp, Clock3,
   Compass, Copy, ExternalLink, FileText, Filter, Flame, Globe, LayoutDashboard, Lightbulb,
   LogOut, Mail, MapPin, Menu, MessageCircle, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Play,
   Plus, Radio, RefreshCw, Search, Send, Settings, ShieldCheck, Sparkles, Target, Trash2,
@@ -13,7 +13,18 @@ import {
 } from "lucide-react";
 import XDiscovery from "./PortalXDiscovery";
 import PortalOutreach from "./PortalOutreach";
+import {
+  CampaignsPage,
+  GeoPage,
+  LiveFeed,
+  RevenuePage,
+  SchedulerPage,
+  SegmentsPage,
+  SequencesPage,
+  useLiveStream,
+} from "./ThreadlyModules";
 import type { TeamInvite, TeamMember, Workflow } from "@/lib/portal-data";
+import type { GrowthSnapshot } from "@/lib/threadly-engine";
 import {
   detectBrowserTimezone,
   formatMemberTime,
@@ -64,23 +75,30 @@ type State = {
     contentAiProvider: string | null;
     decisionModels: { laya: boolean; anyjev: boolean };
   };
+  growth: GrowthSnapshot;
   demo: boolean;
 };
 
-type Page = "Dashboard" | "Discover" | "Outreach" | "Workflows" | "Radar" | "Content Studio" | "Calendar" | "Leads" | "Team" | "Analytics" | "AI Insights" | "Workspace" | "Settings";
+type Page =
+  | "Dashboard" | "Discover" | "Outreach" | "Workflows" | "Radar" | "Content Studio"
+  | "Calendar" | "Leads" | "Team" | "Analytics" | "AI Insights" | "Workspace" | "Settings"
+  | "Campaigns" | "Sequences" | "Segments" | "Scheduler" | "Revenue" | "GEO";
 
 const nav: { label: Page; icon: typeof LayoutDashboard }[] = [
   { label: "Dashboard", icon: LayoutDashboard },
-  { label: "Discover", icon: Compass },
-  { label: "Outreach", icon: Send },
-  { label: "Workflows", icon: Zap },
   { label: "Radar", icon: Radio },
+  { label: "Segments", icon: Target },
+  { label: "Outreach", icon: Send },
+  { label: "Sequences", icon: Mail },
+  { label: "Campaigns", icon: CircleDollarSign },
+  { label: "Scheduler", icon: CalendarClock },
   { label: "Content Studio", icon: WandSparkles },
   { label: "Calendar", icon: CalendarDays },
   { label: "Leads", icon: UserCheck },
+  { label: "GEO", icon: Globe },
+  { label: "Revenue", icon: Activity },
+  { label: "Workflows", icon: Zap },
   { label: "Team", icon: Users },
-  { label: "Analytics", icon: Activity },
-  { label: "AI Insights", icon: Lightbulb },
 ];
 
 const stages = ["identified", "engaged", "qualified", "conversation", "converted"];
@@ -100,8 +118,8 @@ const contextFields: [string, string][] = [
 ];
 
 const logoPresets = [
-  { label: "Standard Brand", url: "/logo.png" },
-  { label: "Deep Purple Compass", url: "/Deep Purple WISENTRY Compass Logo.png" },
+  { label: "Standard Brand", url: "/threadly-logo.svg" },
+  { label: "Deep Purple Compass", url: "/Deep Purple THREADLY Compass Logo.png" },
   { label: "Star Emblem", url: "/Purple Four-Point Star Emblem.png" },
 ];
 
@@ -121,13 +139,14 @@ function timeAgo(date?: string | null) {
   return `${days}d ago`;
 }
 
-export default function Workspace({ email, name, getIdToken, signOutAction }: { email: string; name: string; getIdToken: () => Promise<string>; signOutAction: () => Promise<void> }) {
+export default function Workspace({ email, name, isAdmin = false, getIdToken, signOutAction }: { email: string; name: string; isAdmin?: boolean; getIdToken: () => Promise<string>; signOutAction: () => Promise<void> }) {
   const [data, setData] = useState<State | null>(null);
   const [page, setPage] = useState<Page>("Dashboard");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [growth, setGrowth] = useState<GrowthSnapshot | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [query, setQuery] = useState("");
@@ -143,7 +162,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
   const [leadForm, setLeadForm] = useState({ name: "", email: "", company: "", role: "", notes: "", platform: "X" });
   const [context, setContext] = useState<Record<string, string>>({});
   const [companyName, setCompanyName] = useState("");
-  const [companyLogo, setCompanyLogo] = useState("/logo.png");
+  const [companyLogo, setCompanyLogo] = useState("/threadly-logo.svg");
   const [companyDomain, setCompanyDomain] = useState("");
   const [companyLegalName, setCompanyLegalName] = useState("");
   const [companyWebsite, setCompanyWebsite] = useState("");
@@ -189,7 +208,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
   const [selectedSlotFinderMembers, setSelectedSlotFinderMembers] = useState<string[]>([]);
   const [commonSlots, setCommonSlots] = useState<CommonSlot[]>([]);
   const [meetingBookingModal, setMeetingBookingModal] = useState<{ slot: CommonSlot; leadId?: string } | null>(null);
-  const [meetingTitle, setMeetingTitle] = useState("Wisentry Prospect Discovery Session");
+  const [meetingTitle, setMeetingTitle] = useState("Threadly Prospect Discovery Session");
   const [meetingAttendees, setMeetingAttendees] = useState("");
 
   // Custom Workflow modal state
@@ -224,9 +243,10 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not load workspace");
       setData(result);
+      if (result.growth) setGrowth(result.growth);
       setContext(result.workspace.context || {});
       setCompanyName(result.workspace.name || "My company");
-      setCompanyLogo(result.workspace.logoUrl || "/logo.png");
+      setCompanyLogo(result.workspace.logoUrl || "/threadly-logo.svg");
       setCompanyDomain(result.workspace.domain || "");
       setCompanyLegalName(result.workspace.legalName || "");
       setCompanyWebsite(result.workspace.website || "");
@@ -244,7 +264,11 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
   }, [getIdToken]);
 
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { if (page === "Discover" || page === "Outreach" || page === "Workflows" || page === "Team") void refresh(); }, [page, refresh]);
+  useEffect(() => {
+    if (["Discover", "Outreach", "Workflows", "Team", "Campaigns", "Sequences", "Segments", "Scheduler", "Revenue", "GEO"].includes(page)) void refresh();
+  }, [page, refresh]);
+
+  const { events: liveEvents, connected: liveConnected } = useLiveStream(!!data, growth?.events || [], getIdToken);
 
   // Clock ticker for live timezone updates
   useEffect(() => {
@@ -397,8 +421,8 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
       const { slot, leadId } = meetingBookingModal;
       const attendees = meetingAttendees.split(",").map(e => e.trim()).filter(Boolean);
       const meetingResult = await scheduleGoogleMeeting({
-        title: meetingTitle || "Wisentry Growth Sync",
-        description: `Scheduled via Wisentry Workspace. Active timezone: ${zone}`,
+        title: meetingTitle || "Threadly Growth Sync",
+        description: `Scheduled via Threadly Workspace. Active timezone: ${zone}`,
         start: new Date(slot.start),
         end: new Date(slot.end),
         timezone: zone,
@@ -444,8 +468,8 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
   return <div id="wisentry-portal" className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
     {mobileNav && <button className="sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileNav(false)}/>}
     <aside id="portal-sidebar" className={`sidebar ${mobileNav ? "sidebar-open" : ""}`} aria-label="Portal navigation">
-      <button className="sidebar-brand" type="button" onClick={() => go("Dashboard")} aria-label="Wisentry dashboard">
-        <Image className="sidebar-brand-full" src="/logo.png" alt="Wisentry" width={155} height={47} priority/>
+      <button className="sidebar-brand" type="button" onClick={() => go("Dashboard")} aria-label="Threadly dashboard">
+        <Image className="sidebar-brand-full" src="/threadly-logo.svg" alt="Threadly" width={155} height={47} priority/>
         <Image className="sidebar-brand-mark" src="/favicon.svg" alt="" width={34} height={34}/>
       </button>
 
@@ -496,9 +520,9 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
         </button>
         <div className="sidebar-help">
           <span>✦</span>
-          <strong>Automated Growth OS</strong>
-          <p>Turn real market conversations into active pipeline.</p>
-          <button onClick={() => go("Workflows")}>View workflows <ArrowRight size={14}/></button>
+          <strong>Growth Operating System</strong>
+          <p>Capture signals, run sequences, optimize spend.</p>
+          <button onClick={() => go("Campaigns")}>Open Campaign Command <ArrowRight size={14}/></button>
         </div>
         <div className="sidebar-profile-card">
           <button className="profile-info-btn" type="button" onClick={() => go("Settings")} title="Account Settings" aria-label="View account settings">
@@ -513,7 +537,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
             className="sidebar-logout-btn"
             onClick={() => void signOutAction()}
             title="Log out"
-            aria-label="Log out of Wisentry"
+            aria-label="Log out of Threadly"
           >
             <LogOut size={15}/>
           </button>
@@ -578,6 +602,15 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
                 >
                   <Settings size={15} /> Account Settings
                 </button>
+                {isAdmin && <a
+                  className="dropdown-item"
+                  href="/admin/waitlist"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setUserMenuOpen(false)}
+                >
+                  <Users size={15} /> Review beta requests <ExternalLink size={13} />
+                </a>}
                 <button
                   type="button"
                   className="dropdown-item"
@@ -705,10 +738,10 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
             </div>
 
             <div className="stats-grid">
-              <Stat label="OPPORTUNITIES" value={stats.opportunities} delta="Ready to explore" icon={Target} onClick={() => go("Radar")}/>
-              <Stat label="CONVERSATIONS" value={stats.conversations} delta="High intent signals" icon={MessageCircle} onClick={() => go("Radar")}/>
-              <Stat label="ACTIVE WORKFLOWS" value={stats.workflows} delta="Running automated" icon={Zap} onClick={() => go("Workflows")}/>
-              <Stat label="LEADS" value={stats.leads} delta="In your pipeline" icon={Users} onClick={() => go("Leads")}/>
+              <Stat label="PIPELINE" value={data.growth?.metrics.pipelineValue || 0} display={`$${Math.round(data.growth?.metrics.pipelineValue || 0).toLocaleString("en-US")}`} delta={`${stats.leads} leads in play`} icon={Target} onClick={() => go("Revenue")}/>
+              <Stat label="REPLY RATE" value={data.growth?.metrics.replyRate || 0} display={`${data.growth?.metrics.replyRate || 0}%`} delta={`${data.growth?.metrics.enrolledProspects || 0} enrolled`} icon={MessageCircle} onClick={() => go("Sequences")}/>
+              <Stat label="BLENDED ROAS" value={data.growth?.metrics.blendedRoas || 0} display={`${(data.growth?.metrics.blendedRoas || 0).toFixed(2)}×`} delta={`${data.growth?.metrics.activeCampaigns || 0} campaigns live`} icon={Flame} onClick={() => go("Campaigns")}/>
+              <Stat label="GEO SHARE" value={data.growth?.metrics.geoShare || 0} display={`${data.growth?.metrics.geoShare || 0}%`} delta="AI answer citations" icon={Globe} onClick={() => go("GEO")}/>
             </div>
 
             <div className="dashboard-columns">
@@ -734,6 +767,8 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
                   <p>AI dual-model qualification evaluates incoming leads and generates personalized first-touch replies.</p>
                   <button onClick={() => go("Workflows")}>Configure workflows <ArrowUpRight size={16}/></button>
                 </div>
+
+                <LiveFeed events={liveEvents} connected={liveConnected} compact/>
 
                 <div className="mini-card">
                   <div className="section-heading compact">
@@ -810,7 +845,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
             <div className="workflow-quick-bar">
               <div className="workflow-quick-copy">
                 <h3>Autonomous Pipeline Orchestrator</h3>
-                <p>Wisentry continuously captures X conversations matching your customer problems and triggers appropriate actions.</p>
+                <p>Threadly continuously captures X conversations matching your customer problems and triggers appropriate actions.</p>
               </div>
               <div className="workflow-quick-actions">
                 <button className="workflow-quick-btn" onClick={() => go("Discover")}><Search size={14}/> Run Discovery Scan</button>
@@ -1077,7 +1112,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
                           style={{ width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 12px" }}
                           onClick={() => {
                             setMeetingBookingModal({ slot });
-                            setMeetingTitle(`Wisentry Team Sync`);
+                            setMeetingTitle(`Threadly Team Sync`);
                             setMeetingAttendees(data.team?.map(m => m.email).filter(Boolean).join(", ") || "");
                           }}
                         >
@@ -1479,7 +1514,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
 
             <div className="assistant-panel">
               <div>
-                <div className="assistant-heading"><Sparkles size={19}/><strong>Ask Wisentry AI</strong></div>
+                <div className="assistant-heading"><Sparkles size={19}/><strong>Ask Threadly AI</strong></div>
                 <p>{assistantQuestion ? `“${assistantQuestion}”` : "Ask about your opportunities, leads, or what to prioritize."}</p>
                 {assistantQuestion && (
                   <div className="assistant-answer">
@@ -1490,7 +1525,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
                 )}
               </div>
               <form onSubmit={e => { e.preventDefault(); setAssistantQuestion(assistantInput); setAssistantInput(""); }}>
-                <input aria-label="Ask Wisentry AI" placeholder="Which conversation should I prioritize?" value={assistantInput} onChange={e => setAssistantInput(e.target.value)}/>
+                <input aria-label="Ask Threadly AI" placeholder="Which conversation should I prioritize?" value={assistantInput} onChange={e => setAssistantInput(e.target.value)}/>
                 <button aria-label="Ask" disabled={!assistantInput.trim()}><Send size={17}/></button>
               </form>
               <small>Answers summarize available workspace records and conversation intelligence.</small>
@@ -1535,7 +1570,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
 
                 <div className="company-logo-preview-row">
                   <div className="company-logo-preview-box">
-                    <Image src={companyLogo || "/logo.png"} alt="Company logo" width={60} height={60} className="object-contain" />
+                    <Image src={companyLogo || "/threadly-logo.svg"} alt="Company logo" width={60} height={60} className="object-contain" />
                   </div>
                   <div>
                     <strong style={{ display: "block", fontSize: 13, marginBottom: 4 }}>Workspace Logo</strong>
@@ -1570,29 +1605,29 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
                   <input
                     value={companyLogo}
                     onChange={e => setCompanyLogo(e.target.value)}
-                    placeholder="https://yourcompany.com/logo.png or /logo.png"
+                    placeholder="https://yourcompany.com/logo.png or /threadly-logo.svg"
                   />
                 </label>
 
                 <div className="dialog-grid">
                   <label>
                     PRODUCT / DISPLAY NAME
-                    <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Wisentry"/>
+                    <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Threadly"/>
                   </label>
                   <label>
                     LEGAL ENTITY NAME
-                    <input value={companyLegalName} onChange={e => setCompanyLegalName(e.target.value)} placeholder="Wisentry Technologies Inc."/>
+                    <input value={companyLegalName} onChange={e => setCompanyLegalName(e.target.value)} placeholder="Threadly Technologies Inc."/>
                   </label>
                 </div>
 
                 <div className="dialog-grid">
                   <label>
                     PRIMARY DOMAIN
-                    <input value={companyDomain} onChange={e => setCompanyDomain(e.target.value)} placeholder="wisentry.io"/>
+                    <input value={companyDomain} onChange={e => setCompanyDomain(e.target.value)} placeholder="threadly.io"/>
                   </label>
                   <label>
                     WEBSITE URL
-                    <input value={companyWebsite} onChange={e => setCompanyWebsite(e.target.value)} placeholder="https://wisentry.io"/>
+                    <input value={companyWebsite} onChange={e => setCompanyWebsite(e.target.value)} placeholder="https://threadly.io"/>
                   </label>
                 </div>
 
@@ -1689,6 +1724,26 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
               </aside>
             </div>
           </>}
+
+          {/* THREADLY GROWTH MODULES */}
+          {page === "Campaigns" && data.growth && (
+            <CampaignsPage growth={data.growth} act={act} busy={busy}/>
+          )}
+          {page === "Sequences" && data.growth && (
+            <SequencesPage growth={data.growth} leads={data.leads} act={act} busy={busy}/>
+          )}
+          {page === "Segments" && data.growth && (
+            <SegmentsPage growth={data.growth} leads={data.leads} act={act} busy={busy}/>
+          )}
+          {page === "Scheduler" && data.growth && (
+            <SchedulerPage growth={data.growth} act={act} busy={busy}/>
+          )}
+          {page === "Revenue" && data.growth && (
+            <RevenuePage growth={data.growth} leads={data.leads}/>
+          )}
+          {page === "GEO" && data.growth && (
+            <GeoPage growth={data.growth} act={act} busy={busy}/>
+          )}
 
           {/* SETTINGS */}
           {page === "Settings" && (
@@ -2016,7 +2071,7 @@ export default function Workspace({ email, name, getIdToken, signOutAction }: { 
             <input
               value={meetingTitle}
               onChange={e => setMeetingTitle(e.target.value)}
-              placeholder="e.g. Wisentry Prospect Discovery Sync"
+              placeholder="e.g. Threadly Prospect Discovery Sync"
               required
             />
           </label>
@@ -2206,20 +2261,21 @@ function PortalSettings({ name, email, capabilities, onCompanyContext, signOutAc
       <aside className="mini-card portal-privacy-card">
         <div className="section-kicker">DATA SECURITY</div>
         <h3>Your workspace stays private.</h3>
-        <p>Workspace data is stored under your account credentials. Wisentry never leaks your lead pipeline or private outreach drafts.</p>
+        <p>Workspace data is stored under your account credentials. Threadly never leaks your lead pipeline or private outreach drafts.</p>
         <Link href="/privacy" className="text-link">Read the privacy policy <ArrowUpRight size={14}/></Link>
       </aside>
     </div>
   </>;
 }
 
-function Stat({ label, value, delta, icon: Icon, onClick }: { label: string; value: number; delta: string; icon: typeof Target; onClick?: () => void }) {
+function Stat({ label, value, display, delta, icon: Icon, onClick }: { label: string; value: number | string; display?: string; delta: string; icon: typeof Target; onClick?: () => void }) {
+  const text = display ?? (typeof value === "number" ? value.toString().padStart(2, "0") : value);
   return <button className="stat-card" onClick={onClick}>
     <div>
       <span>{label}</span>
       <Icon size={19}/>
     </div>
-    <strong>{value.toString().padStart(2, "0")}</strong>
+    <strong>{text}</strong>
     <small><ArrowUpRight size={13}/>{delta}</small>
   </button>;
 }

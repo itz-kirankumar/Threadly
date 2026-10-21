@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   try {
     const user = await getFirebaseIdentity(request, true);
     const key = user?.uid || requestKey(request);
-    const limit = await checkRateLimit(`x-search:${key}`, 5, 10 * 60);
+    const limit = await checkRateLimit(`x-search:${key}`, 5, 10 * 60, user || undefined);
     if (!limit) return rateLimitUnavailable();
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
     const topic = searchTopic((body as { topic?: unknown } | null)?.topic);

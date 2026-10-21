@@ -1,103 +1,101 @@
-import { randomUUID } from "node:crypto";
-import Database from "better-sqlite3";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
-import fs from "node:fs";
-import path from "node:path";
+export type WaitlistStatus = "pending" | "approved" | "rejected";
+export type WaitlistRequest = {
+  id: string;
+  uid: string;
+  email: string;
+  fullName: string;
+  startupName: string;
+  industry: string;
+  url: string;
+  challenge1: string;
+  challenge2: string;
+  status: WaitlistStatus;
+  createdAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+};
 
-const useDynamoDb = process.env.USE_DYNAMODB === "true";
-const waitlistTable = process.env.APP_AWS_WAITLIST_TABLE || "Wisentry_Waitlist";
-const communityTable = process.env.APP_AWS_COMMUNITY_TABLE || "Wisentry_Community";
-let sqlite: Database.Database | null = null;
-let dynamo: DynamoDBDocumentClient | null = null;
-
-function getSqlite() {
-  if (useDynamoDb) throw new Error("Local SQLite is unavailable while USE_DYNAMODB=true.");
-  if (process.env.NODE_ENV === "production" && !process.env.WISENTRY_DB_PATH) {
-    throw new Error("Configure WISENTRY_DB_PATH for persistent production storage, or use DynamoDB.");
-  }
-  if (!sqlite) {
-    const dbPath = path.resolve(process.env.WISENTRY_DB_PATH || path.join(process.cwd(), ".wisentry-data", "wisentry.db"));
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    sqlite = new Database(dbPath);
-    sqlite.pragma("journal_mode = WAL");
-    sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS waitlist (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fullName TEXT NOT NULL,
-        startupName TEXT NOT NULL,
-        industry TEXT NOT NULL,
-        url TEXT,
-        challenge1 TEXT,
-        challenge2 TEXT,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_waitlist_created_at ON waitlist(createdAt);
-      CREATE INDEX IF NOT EXISTS idx_waitlist_industry ON waitlist(industry);
-      CREATE INDEX IF NOT EXISTS idx_waitlist_startup ON waitlist(startupName);
-
-      CREATE TABLE IF NOT EXISTS community (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT NOT NULL UNIQUE,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_community_email ON community(email);
-      CREATE INDEX IF NOT EXISTS idx_community_created_at ON community(createdAt);
-    `);
-  }
-  return sqlite;
+function databaseUrl() {
+  const url = process.env.FIREBASE_DATABASE_URL
+    || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL
+    || "https://wisentry-510811-default-rtdb.firebaseio.com";
+  return url.replace(/\/+$/, "");
 }
 
-function getDynamo() {
-  if (!dynamo) {
-    const accessKeyId = process.env.APP_AWS_ACCESS_KEY_ID?.trim();
-    const secretAccessKey = process.env.APP_AWS_SECRET_ACCESS_KEY?.trim();
-    dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({
-      region: process.env.APP_AWS_REGION || process.env.AWS_REGION || "eu-north-1",
-      ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
-    }));
+function databasePath(path: string, idToken: string) {
+  const segments = path.split("/").filter(Boolean).map(encodeURIComponent);
+  return `${databaseUrl()}/${segments.join("/")}.json?auth=${encodeURIComponent(idToken)}`;
+}
+
+async function databaseRequest<T>(path: string, idToken: string, init?: RequestInit): Promise<T | null> {
+  const response = await fetch(databasePath(path, idToken), { ...init, cache: "no-store" });
+  if (!response.ok) {
+    const detail = response.status === 401 || response.status === 403
+      ? "Firebase denied access. Check the Realtime Database rules and sign in again."
+      : "Could not access Firebase Realtime Database.";
+    throw new Error(detail);
   }
-  return dynamo;
+  return response.json();
+}
+
+export async function getWaitlistRequest(uid: string, idToken: string): Promise<WaitlistRequest | null> {
+  const request = await databaseRequest<WaitlistRequest>(`betaWaitlist/${uid}`, idToken);
+  return request ? { ...request, id: uid, uid } : null;
 }
 
 export async function insertWaitlist(data: {
+  uid: string;
+  email: string;
   fullName: string;
   startupName: string;
   industry: string;
   url?: string;
   challenge1: string;
   challenge2?: string;
-}) {
-  if (useDynamoDb) {
-    await getDynamo().send(new PutCommand({
-      TableName: waitlistTable,
-      Item: { id: randomUUID(), ...data, createdAt: new Date().toISOString() },
-      ConditionExpression: "attribute_not_exists(id)",
-    }));
-    return;
-  }
-  getSqlite().prepare(`
-    INSERT INTO waitlist (fullName, startupName, industry, url, challenge1, challenge2)
-    VALUES (@fullName, @startupName, @industry, @url, @challenge1, @challenge2)
-  `).run(data);
+}, idToken: string) {
+  const previous = await getWaitlistRequest(data.uid, idToken);
+  if (previous?.status === "approved") return;
+  const request: WaitlistRequest = {
+    id: data.uid,
+    ...data,
+    url: data.url || "",
+    challenge2: data.challenge2 || "",
+    status: "pending",
+    createdAt: previous?.createdAt || new Date().toISOString(),
+  };
+  await databaseRequest(`betaWaitlist/${data.uid}`, idToken, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
 }
 
-export async function insertCommunityMember(email: string) {
-  if (useDynamoDb) {
-    try {
-      await getDynamo().send(new PutCommand({
-        TableName: communityTable,
-        Item: { email, createdAt: new Date().toISOString() },
-        ConditionExpression: "attribute_not_exists(email)",
-      }));
-    } catch (error) {
-      if ((error as { name?: string })?.name !== "ConditionalCheckFailedException") throw error;
-    }
-    return;
-  }
-  try {
-    getSqlite().prepare("INSERT INTO community (email) VALUES (@email)").run({ email });
-  } catch (error) {
-    if ((error as { code?: string })?.code !== "SQLITE_CONSTRAINT_UNIQUE") throw error;
-  }
+export async function listWaitlistRequests(idToken: string): Promise<WaitlistRequest[]> {
+  const requests = await databaseRequest<Record<string, Omit<WaitlistRequest, "id"> & { id?: string }>>("betaWaitlist", idToken);
+  return Object.entries(requests || {})
+    .filter(([, request]) => Boolean(request?.uid))
+    .map(([uid, request]) => ({ ...request, id: uid, uid }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function reviewWaitlistRequest(id: string, status: WaitlistStatus, reviewedBy: string, idToken: string): Promise<boolean> {
+  const existing = await getWaitlistRequest(id, idToken);
+  if (!existing) return false;
+  const reviewedAt = new Date().toISOString();
+  await databaseRequest(`betaWaitlist/${id}`, idToken, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, reviewedAt, reviewedBy }),
+  });
+  return true;
+}
+
+export async function insertCommunityMember(email: string, uid: string, idToken: string) {
+  const existing = await databaseRequest<{ uid: string }>(`communityMembers/${uid}`, idToken);
+  if (existing) return;
+  await databaseRequest(`communityMembers/${uid}`, idToken, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), uid, createdAt: new Date().toISOString() }),
+  });
 }

@@ -1,725 +1,500 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { 
-  Copy, Check, ArrowRight, ShieldCheck, X, Zap, Globe, Users, 
-  Target, Sparkles, AlertTriangle, CheckCircle2, MessageSquare, 
-  BarChart3, ChevronRight, Layers, Search, Cpu, ArrowUpRight, 
-  Play, Star, Flame, Compass, FileText, Send
-} from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import Footer from "./Footer";
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type User } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
+import {
+  Activity, ArrowRight, ArrowUpRight, BarChart3, CalendarClock, Check, ChevronRight,
+  CircleDollarSign, Copy, Flame, Globe2, Layers, Mail, Radar, Search, Sparkles,
+  Target, TrendingUp, Users, Workflow, X, Zap,
+} from "lucide-react";
 
-// Define animation variants
-const fadeInUp: Variants = {
-  hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
-};
+/* ------------------------------------------------------------------ */
+/* Content                                                             */
+/* ------------------------------------------------------------------ */
 
-const staggerContainer: Variants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.12 } },
-};
+const modules = [
+  {
+    tag: "01 · Capture",
+    title: "Signal Radar",
+    copy: "Listen across X, Reddit and communities for the exact words buyers use. Threadly scores intent, dedupes the noise, and hands you the thread worth joining.",
+    stat: "+148% qualified conversations",
+    accent: "orange" as const,
+    icon: Radar,
+    points: ["Intent scoring", "Pain-point clustering", "Saved segments"],
+  },
+  {
+    tag: "02 · Qualify",
+    title: "Lead Intelligence",
+    copy: "Every prospect gets a fit score, buying-intent estimate and a reason. Segments build themselves from behaviour, not spreadsheets.",
+    stat: "0% manual triage",
+    accent: "violet" as const,
+    icon: Users,
+    points: ["Dual-model scoring", "Auto-enrichment", "Dynamic segments"],
+  },
+  {
+    tag: "03 · Convert",
+    title: "Sequence Engine",
+    copy: "Multi-step outreach with conditional branches, A/B variants and best-time delivery. Every send is reviewed — no fire-and-forget spam.",
+    stat: "31% reply rate",
+    accent: "orange" as const,
+    icon: Mail,
+    points: ["Conditional steps", "A/B subject lines", "Reply detection"],
+  },
+  {
+    tag: "04 · Amplify",
+    title: "Campaign Command",
+    copy: "Run paid and organic together. Threadly watches ROAS by channel and shifts budget to the winners while they're still winning.",
+    stat: "2.4× blended ROAS",
+    accent: "violet" as const,
+    icon: CircleDollarSign,
+    points: ["Budget reallocation", "Creative variants", "Spend guardrails"],
+  },
+  {
+    tag: "05 · Publish",
+    title: "Best-Time Scheduler",
+    copy: "Content slots are chosen from your own audience's behaviour, not a generic listicle. Group posts into threads, campaigns and launches.",
+    stat: "+22% engagement",
+    accent: "orange" as const,
+    icon: CalendarClock,
+    points: ["Best-time slots", "Group scheduling", "Queue health"],
+  },
+  {
+    tag: "06 · Compound",
+    title: "GEO & SEO",
+    copy: "Track how ChatGPT, Perplexity, Gemini and Google answer the questions your buyers ask. Then fix it — structure, citations and source coverage.",
+    stat: "38% answer share",
+    accent: "violet" as const,
+    icon: Globe2,
+    points: ["AI answer monitoring", "Citation gaps", "Entity coverage"],
+  },
+];
+
+const liveEvents = [
+  { who: "Signal Radar", what: "Detected buying intent in 12 new X threads", when: "now", tone: "orange" },
+  { who: "Sequence Engine", what: "Step 2 delivered · 41% open rate on variant B", when: "2s", tone: "violet" },
+  { who: "Lead Intelligence", what: "Scored 8 prospects · 3 strong-fit", when: "6s", tone: "orange" },
+  { who: "Campaign Command", what: "Reallocated $240 from Meta → Google · ROAS 3.1", when: "11s", tone: "violet" },
+  { who: "GEO Monitor", what: "ChatGPT now cites you for “outreach automation”", when: "18s", tone: "orange" },
+];
+
+const stack = [
+  "HubSpot", "Salesforce", "Apollo", "Clay", "Calendly", "Stripe", "LinkedIn",
+  "Google Ads", "Meta Ads", "Reddit", "X", "Slack", "Notion", "Zapier",
+];
+
+/* ------------------------------------------------------------------ */
+/* Component                                                           */
+/* ------------------------------------------------------------------ */
 
 export default function LandingClient() {
-  const [modalState, setModalState] = useState<"closed" | "waitlist" | "community" | "revealed">("closed");
-  const [scrolled, setScrolled] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [applicationChecked, setApplicationChecked] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
+  const [confirmationEmailSent, setConfirmationEmailSent] = useState<boolean | null>(null);
+  const [formError, setFormError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [liveIndex, setLiveIndex] = useState(0);
 
-  // Form states
-  const [waitlistData, setWaitlistData] = useState({
+  const [form, setForm] = useState({
     fullName: "",
     startupName: "",
     industry: "",
     url: "",
     challenge1: "",
-    challenge2: "",
   });
-  const [email, setEmail] = useState("");
-
-  const challenges = [
-    "Distribution / getting first real users",
-    "Finding high-intent social leads",
-    "Validating pricing & product-market fit",
-    "Scaling user retention",
-    "Avoiding paid ads burn",
-  ];
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 40);
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = onAuthStateChanged(getFirebaseAuth(), async user => {
+        setAuthUser(user);
+        setAuthReady(true);
+        setAuthError("");
+        if (!user) {
+          setApplicationStatus(null);
+          setApplicationChecked(true);
+          return;
+        }
+        setApplicationChecked(false);
+        setForm(current => ({ ...current, fullName: current.fullName || user.displayName || "" }));
+        try {
+          const response = await fetch("/api/waitlist", {
+            headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+            cache: "no-store",
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || "Could not check your beta request.");
+          setApplicationStatus(data.application?.status || null);
+        } catch (error) {
+          setFormError(error instanceof Error ? error.message : "Could not check your beta request.");
+        } finally {
+          setApplicationChecked(true);
+        }
+      });
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Google sign-in is not configured.");
+      setAuthReady(true);
+    }
+    return () => unsubscribe();
   }, []);
 
-  const handleWaitlistSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!waitlistData.fullName || !waitlistData.startupName || !waitlistData.industry || !email || !waitlistData.challenge1) {
-      alert("Please fill in all required fields.");
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveIndex((index) => (index + 1) % liveEvents.length);
+    }, 2600);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setModalOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [modalOpen]);
+
+  useEffect(() => {
+    const openFromHash = () => {
+      if (window.location.hash === "#waitlist") setModalOpen(true);
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, []);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setFormError("");
+    if (!authUser) {
+      setFormError("Sign in with Google before sending your beta request.");
       return;
     }
-    
-    try {
-      const res = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...waitlistData, email }),
-      });
-      if (res.ok) {
-        setModalState("community");
-      } else {
-        const data = await res.json();
-        alert(data.error || "Something went wrong");
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Failed to join waitlist");
+    if (!form.fullName || !form.startupName || !form.industry || !form.challenge1) {
+      setFormError("Fill in the required fields so we can route your workspace.");
+      return;
     }
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await authUser.getIdToken()}` },
+        body: JSON.stringify(form),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not save your request.");
+      setApplicationStatus(data.status || "pending");
+      setConfirmationEmailSent(typeof data.emailSent === "boolean" ? data.emailSent : null);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function signInForBeta() {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(getFirebaseAuth(), provider);
+    } catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
+        setAuthError(error instanceof Error ? error.message : "Google sign-in failed. Please try again.");
+      }
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  const openWaitlist = () => {
+    setFormError("");
+    setConfirmationEmailSent(null);
+    setModalOpen(true);
   };
 
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
-  };
+  const visibleEvents = Array.from({ length: 4 }, (_, offset) => liveEvents[(liveIndex + offset) % liveEvents.length]);
 
   return (
-    <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="min-h-screen flex flex-col bg-[#fdfcff] text-[#02010a] font-sans selection:bg-brand-pastel selection:text-white">
-      
+    <div className="min-h-screen bg-brand-paper text-brand-black selection:bg-brand-orange selection:text-white">
       {/* ============================================================ */}
-      {/* 1. NAVBAR - Optimizely-style with tactile pill CTA            */}
+      {/* Nav                                                          */}
       {/* ============================================================ */}
-      <header className={`w-full fixed top-0 z-50 transition-all duration-300 ${scrolled ? "bg-white/90 backdrop-blur-md border-b border-gray-200/80 shadow-sm py-3" : "bg-transparent py-5"}`}>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 flex items-center justify-between">
-          
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="relative w-36 h-9 md:w-44 md:h-10 flex items-center overflow-hidden">
-              <Image 
-                src="/logo.png" 
-                alt="Wisentry Logo" 
-                fill
-                className="object-contain object-left"
-                priority
-              />
-            </div>
-          </div>
-
-          {/* Nav Links */}
-          <nav className="hidden lg:flex items-center gap-8 text-sm font-semibold text-gray-700">
-            <a href="#platform" className="hover:text-brand-violet transition-colors">Platform</a>
-            <a href="#tools" className="hover:text-brand-violet transition-colors">Tools</a>
-            <a href="#ai" className="hover:text-brand-violet transition-colors">AI Engine</a>
-            <a href="#paths" className="hover:text-brand-violet transition-colors">Paths to Growth</a>
-            <a href="#stories" className="hover:text-brand-violet transition-colors">Stories</a>
+      <header className="fixed inset-x-0 top-0 z-50 border-b-2 border-brand-black bg-brand-paper/95 backdrop-blur-md">
+        <div className="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between px-5 max-[380px]:px-3 lg:px-8">
+          <a href="/" className="flex items-center gap-3 max-[640px]:gap-2" aria-label="Threadly home">
+            <Image src="/threadly-mark.svg" alt="" width={34} height={34} className="h-[34px] w-[34px] max-[640px]:h-7 max-[640px]:w-7" priority />
+            <span className="text-[26px] font-black leading-none tracking-[-0.05em] max-[640px]:text-[22px]">
+              threadly<span className="text-brand-orange">.</span>
+            </span>
+          </a>
+          <nav className="hidden items-center gap-1 lg:flex">
+            {[
+              ["Platform", "#platform"],
+              ["Modules", "#modules"],
+              ["Live workspace", "#workspace"],
+              ["Stories", "#stories"],
+            ].map(([label, href]) => (
+              <a
+                key={label}
+                href={href}
+                className="rounded-full px-4 py-2 text-[13px] font-bold text-brand-muted transition-colors hover:bg-white hover:text-brand-black"
+              >
+                {label}
+              </a>
+            ))}
           </nav>
-
-          {/* Action CTA */}
-          <div className="flex items-center gap-3">
-            <a href="/portal" className="rounded-full border border-brand-violet/30 px-3 py-2.5 text-xs font-extrabold text-brand-violet transition-colors hover:bg-purple-50 sm:px-4">
-              Portal
-            </a>
-            <button 
-              onClick={() => setModalState("waitlist")}
-              className="btn-tactile-violet inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-full bg-brand-violet border-2 border-brand-violet text-white text-xs sm:text-sm font-extrabold tracking-wide cursor-pointer focus:outline-none"
-              aria-label="Let's grow CTA"
+          <div className="flex items-center gap-2.5">
+            <a
+              href="/portal/login"
+              className="inline-flex shrink-0 whitespace-nowrap rounded-full border-2 border-brand-black px-3 py-2.5 text-[11px] font-extrabold transition-colors hover:bg-white sm:px-4 sm:text-[12px] max-[380px]:px-1 max-[380px]:text-[10px]"
             >
-              <span>Let&apos;s grow</span>
-              <ArrowRight className="w-4 h-4 text-brand-pastel" />
+              Sign in
+            </a>
+            <button
+              type="button"
+              onClick={openWaitlist}
+              aria-label="Join the beta waitlist"
+              className="btn-tactile-orange inline-flex items-center gap-2 rounded-full border-2 border-brand-orange bg-brand-orange px-3 py-2.5 text-[11px] font-extrabold text-white sm:px-5 sm:text-[12px] max-[380px]:gap-1.5 max-[380px]:px-2"
+            >
+              <span className="max-[640px]:hidden">Join the beta</span>
+              <span className="hidden max-[380px]:inline">Beta</span>
+              <span className="hidden max-[640px]:inline max-[380px]:hidden">Join beta</span>
+              <ArrowRight className="h-4 w-4 max-[380px]:h-3.5 max-[380px]:w-3.5" />
             </button>
           </div>
         </div>
       </header>
 
       {/* ============================================================ */}
-      {/* 2. HERO SECTION - "You're free to grow" style                */}
+      {/* Hero                                                         */}
       {/* ============================================================ */}
-      <section className="relative w-full pt-32 pb-20 md:pt-44 md:pb-28 overflow-hidden bg-gradient-to-b from-purple-50/50 via-[#fdfcff] to-[#f8f5fd]">
-        
-        {/* Ambient atmospheric glows */}
-        <div className="absolute top-10 right-1/4 w-[600px] h-[600px] bg-brand-pastel/15 rounded-full blur-[140px] pointer-events-none"></div>
-        <div className="absolute top-40 left-10 w-[500px] h-[500px] bg-brand-electric/10 rounded-full blur-[120px] pointer-events-none"></div>
+      <section className="relative overflow-hidden pt-[132px] pb-20 lg:pt-[164px] lg:pb-28">
+        <div className="paper-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+        <div
+          className="pointer-events-none absolute -right-32 top-10 h-[520px] w-[520px] rounded-full opacity-40 blur-[120px]"
+          style={{ background: "radial-gradient(circle, #ff4500 0%, transparent 68%)" }}
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -left-40 top-64 h-[460px] w-[460px] rounded-full opacity-30 blur-[120px]"
+          style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 68%)" }}
+          aria-hidden
+        />
 
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 relative z-10 flex flex-col items-center text-center">
-          
-          {/* Top Announcement Pill */}
-          <motion.div variants={fadeInUp} className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white border border-brand-violet/20 shadow-sm text-brand-violet text-xs sm:text-sm font-semibold mb-8 hover:border-brand-violet/40 transition-colors">
-            <span className="flex h-2 w-2 rounded-full bg-brand-electric animate-ping" />
-            <span>Wisentry Early Access • Free for the first 100 B2C startups</span>
-            <ChevronRight className="w-4 h-4 text-brand-bush" />
-          </motion.div>
-
-          {/* Signature Optimizely 3D Extruded Headline */}
-          <motion.h1 variants={fadeInUp} className="max-w-5xl text-5xl sm:text-6xl md:text-7xl lg:text-[96px] font-black tracking-tight leading-[1.05] text-[#02010a] mb-6">
-            <span className="block">You&apos;re free to</span>
-            <span className="block mt-1 sm:mt-2 text-brand-bush extruded-violet">
-              grow again.
-            </span>
-          </motion.h1>
-
-          {/* Subtitle */}
-          <motion.p variants={fadeInUp} className="max-w-2xl text-lg sm:text-xl md:text-2xl text-gray-600 font-normal leading-relaxed mb-10">
-            The AI platform to discover high-intent consumers and scale your B2C startup. So the experience-makers can do the work they love.
-          </motion.p>
-
-          {/* Action Buttons */}
-          <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mb-16 w-full sm:w-auto">
-            <button 
-              onClick={() => setModalState("waitlist")}
-              className="btn-tactile-violet w-full sm:w-auto px-8 py-4 rounded-2xl bg-brand-violet border-2 border-brand-violet text-white text-base sm:text-lg font-black flex items-center justify-center gap-3 cursor-pointer"
+        <div className="relative mx-auto grid min-w-0 grid-cols-1 max-w-[1240px] items-center gap-14 px-5 lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
+          <div className="min-w-0">
+            <a
+              href="#modules"
+              className="inline-flex items-center gap-2.5 rounded-full border-2 border-brand-black bg-white px-3.5 py-2 text-[11px] font-extrabold shadow-[3px_3px_0_#0a0a0a]"
             >
-              <span>Let&apos;s grow</span>
-              <ArrowRight className="w-5 h-5 text-brand-pastel" />
-            </button>
-
-            <a 
-              href="#tools"
-              className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-white border-2 border-gray-200 text-gray-800 text-base font-bold hover:border-brand-violet/40 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Play className="w-4 h-4 fill-brand-violet text-brand-violet" />
-              <span>Explore tools</span>
+              <span className="live-dot" />
+              <span>THREADLY 2.0 · PRIVATE BETA IS OPEN</span>
+              <ChevronRight className="h-3.5 w-3.5" />
             </a>
-          </motion.div>
 
-          {/* Hero Visual Card with Lifestyle & Floating Micro-Widgets */}
-          <motion.div variants={fadeInUp} className="relative w-full max-w-5xl rounded-3xl overflow-hidden border-2 border-brand-violet/20 bg-white shadow-2xl p-3 sm:p-5">
-            <div className="relative w-full h-[320px] sm:h-[460px] md:h-[540px] rounded-2xl overflow-hidden bg-gradient-to-tr from-brand-violet via-brand-bush to-brand-pastel">
-              {/* High-quality background visual */}
-              <Image
-                src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1920&q=80"
-                alt="Builders collaborating and scaling"
-                fill
-                sizes="(max-width: 768px) 100vw, 1200px"
-                className="object-cover object-center opacity-75 mix-blend-multiply"
-              />
+            <h1 className="mt-7 text-[clamp(38px,7.2vw,92px)] font-black leading-[0.92] tracking-[-0.065em]">
+              <span className="block">Every growth</span>
+              <span className="block">channel, on</span>
+              <span className="mt-1 block">
+                one{" "}
+                <span className="relative inline-block text-brand-orange">
+                  thread
+                  <svg
+                    viewBox="0 0 300 26"
+                    className="absolute -bottom-2 left-0 h-4 w-full"
+                    preserveAspectRatio="none"
+                    aria-hidden
+                  >
+                    <path
+                      d="M2 18C60 6 150 24 298 8"
+                      fill="none"
+                      stroke="#7c3aed"
+                      strokeWidth="7"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <span className="text-brand-orange">.</span>
+              </span>
+            </h1>
 
-              {/* Overlay Gradient */}
-              <div className="absolute inset-0 bg-gradient-to-t from-brand-haiti/90 via-brand-haiti/30 to-transparent"></div>
-
-              {/* Floating Widget 1: Intent Signals */}
-              <div className="absolute top-6 left-6 sm:top-8 sm:left-8 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-2xl p-3 sm:p-4 shadow-xl flex items-center gap-3 text-left max-w-xs animate-in fade-in duration-700">
-                <div className="w-10 h-10 rounded-xl bg-brand-violet/10 text-brand-violet flex items-center justify-center shrink-0">
-                  <Target className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">Live Signal Radar</div>
-                  <div className="text-sm font-extrabold text-gray-900">+1,420 High-Intent Leads</div>
-                </div>
-              </div>
-
-              {/* Floating Widget 2: Conversion Lift */}
-              <div className="absolute top-6 right-6 sm:top-8 sm:right-8 bg-white/95 backdrop-blur-md border border-gray-200/80 rounded-2xl p-3 sm:p-4 shadow-xl flex items-center gap-3 text-left max-w-xs animate-in fade-in duration-700">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                  <BarChart3 className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">Verified Outcome</div>
-                  <div className="text-sm font-extrabold text-gray-900">82% Conversion Lift</div>
-                </div>
-              </div>
-
-              {/* Floating Bottom Card: Cohort Testers */}
-              <div className="absolute bottom-6 left-6 right-6 sm:bottom-8 sm:left-8 sm:right-8 bg-white/90 backdrop-blur-xl border border-white/40 rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4 text-left">
-                  <div className="w-12 h-12 rounded-2xl bg-brand-violet text-white flex items-center justify-center shrink-0 shadow-md">
-                    <Users className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-base sm:text-lg font-black text-gray-900">Pre-Vetted B2C Tester Collective</h3>
-                    <p className="text-xs sm:text-sm text-gray-600">Access 1,000+ early adopters ready to test, give qualitative feedback, and evangelize.</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setModalState("waitlist")}
-                  className="btn-tactile-violet px-5 py-2.5 rounded-xl bg-brand-violet text-white text-xs sm:text-sm font-bold shrink-0 cursor-pointer"
-                >
-                  Join Cohort
-                </button>
-              </div>
-
-            </div>
-          </motion.div>
-
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 3. SPOTLIGHT BANNER - Optimizely "Save your spot" event style */}
-      {/* ============================================================ */}
-      <section className="w-full py-12 px-4 sm:px-6 lg:px-12 bg-[#f8f5fd]">
-        <div className="container mx-auto max-w-6xl">
-          <div className="relative rounded-3xl overflow-hidden border-2 border-brand-violet/20 bg-white shadow-xl flex flex-col md:flex-row items-center justify-between p-6 sm:p-10 md:p-12 gap-8">
-            <div className="relative z-10 max-w-2xl text-left">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-brand-violet/10 text-brand-violet text-xs font-bold uppercase tracking-wider mb-4">
-                <Sparkles className="w-3.5 h-3.5 text-brand-electric" />
-                Special Access Cohort #1
-              </div>
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-gray-900 leading-tight mb-3">
-                Save your spot in Wisentry 1.0
-              </h2>
-              <p className="text-sm font-mono font-bold text-brand-bush mb-3">
-                ONLINE • GLOBAL ACCESS • LIMITED TO 100 STARTUPS
-              </p>
-              <p className="text-gray-600 text-sm sm:text-base leading-relaxed">
-                Join the ambitious founders, growth hackers, and consumer builders gearing up to launch without the startup tarpit.
-              </p>
-            </div>
-
-            <div className="relative z-10 shrink-0 w-full sm:w-auto">
-              <button 
-                onClick={() => setModalState("waitlist")}
-                className="btn-tactile-violet w-full sm:w-auto px-8 py-4 rounded-2xl bg-brand-violet border-2 border-brand-violet text-white text-base font-extrabold flex items-center justify-center gap-3 cursor-pointer"
-              >
-                <span>Register now</span>
-                <ArrowRight className="w-5 h-5 text-brand-pastel" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 4. LOGO MARQUEE - Trusted by founders from                    */}
-      {/* ============================================================ */}
-      <section className="w-full py-14 bg-white border-y border-gray-100">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 text-center">
-          <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-gray-500 mb-8">
-            Built for founders from leading ecosystems & communities
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8">
-            {["Y Combinator Alumni", "Product Hunt Top #1", "Indie Hackers", "Subreddit Builders", "Discord Collectives", "Techstars"].map((name) => (
-              <div 
-                key={name}
-                className="px-5 py-2.5 rounded-2xl bg-[#faf8fc] border border-gray-200/70 text-gray-700 text-xs sm:text-sm font-bold shadow-sm hover:border-brand-violet/30 hover:text-brand-violet transition-colors"
-              >
-                {name}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 5. TOOLS TO GET YOU GROWING AGAIN - Optimizely 3-Card Grid   */}
-      {/* ============================================================ */}
-      <section id="tools" className="w-full py-24 md:py-32 bg-[#faf8fc]">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 max-w-6xl">
-          
-          {/* Section Header with 3D Extruded Text */}
-          <div className="text-center mb-16 sm:mb-20">
-            <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-gray-900 leading-tight">
-              <span>Tools to get you </span>
-              <span className="block extruded-violet text-brand-bush mt-1">growing again</span>
-            </h2>
-            <p className="text-gray-600 text-base sm:text-lg max-w-2xl mx-auto mt-4">
-              Autonomous modules designed to turn social chaos into a predictable engine of early adopters.
+            <p className="mt-7 max-w-xl text-[17px] leading-relaxed text-brand-muted">
+              Threadly finds the buyers already describing your product&apos;s problem, qualifies them,
+              runs the outreach, optimizes the ads, schedules the content and measures what actually
+              made money — in a single live workspace.
             </p>
-          </div>
 
-          {/* 3 Showcase Product Cards */}
-          <div className="grid lg:grid-cols-3 gap-8">
-            
-            {/* Card 1: Agentic Signal Radar */}
-            <div className="rounded-3xl border-2 border-gray-200/90 bg-white p-6 sm:p-8 flex flex-col justify-between shadow-lg hover:border-brand-violet/40 hover:shadow-xl transition-all group">
-              <div>
-                <div className="w-full h-48 rounded-2xl bg-gradient-to-br from-brand-violet/10 via-purple-50 to-brand-pastel/15 border border-purple-100 p-4 mb-6 relative overflow-hidden flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-xs font-mono text-brand-violet font-bold">
-                    <span>LIVE RADAR</span>
-                    <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="bg-white/90 p-2.5 rounded-xl border border-purple-100 shadow-sm text-xs text-gray-800">
-                      <span className="font-bold text-brand-violet">r/SideProject:</span> &quot;Need a clean tool to track habits without ads...&quot;
-                    </div>
-                    <div className="bg-white/90 p-2 rounded-xl border border-purple-100 shadow-sm text-[11px] text-gray-500 flex items-center justify-between">
-                      <span>Intent Score: 94%</span>
-                      <span className="text-emerald-600 font-bold">Matched ICP</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs font-bold text-brand-violet uppercase tracking-wider mb-2">Let creators create</div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 group-hover:text-brand-violet transition-colors">Agentic Signal Radar</h3>
-                <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                  Publish your niche and automatically detect real people complaining about competitors across Reddit, X, and forums.
-                </p>
-              </div>
-              <button 
-                onClick={() => setModalState("waitlist")}
-                className="btn-tactile-violet w-full py-3.5 rounded-xl bg-brand-violet text-white text-sm font-black flex items-center justify-center gap-2 cursor-pointer"
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={openWaitlist}
+                className="btn-tactile-orange inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-orange bg-brand-orange px-7 py-4 text-[15px] font-black text-white"
               >
-                <span>Let&apos;s build</span>
-                <ArrowRight className="w-4 h-4 text-brand-pastel" />
+                Request beta access <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-black bg-white px-7 py-4 text-[15px] font-black transition-colors hover:bg-brand-orangeLight"
+              >
+                Join the beta waitlist <ArrowUpRight className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Card 2: Agentic Beta Collective */}
-            <div className="rounded-3xl border-2 border-gray-200/90 bg-white p-6 sm:p-8 flex flex-col justify-between shadow-lg hover:border-brand-violet/40 hover:shadow-xl transition-all group">
-              <div>
-                <div className="w-full h-48 rounded-2xl bg-gradient-to-br from-purple-100/60 via-brand-pastel/20 to-brand-bush/10 border border-purple-100 p-4 mb-6 relative overflow-hidden flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-xs font-mono text-brand-bush font-bold">
-                    <span>COHORT ANALYTICS</span>
-                    <span className="text-xs bg-white px-2 py-0.5 rounded-md font-bold text-brand-violet">Beta v1.2</span>
-                  </div>
-                  <div className="bg-white/95 p-3 rounded-xl border border-purple-100 shadow-sm">
-                    <div className="flex justify-between items-center text-xs font-bold text-gray-800 mb-1">
-                      <span>Activation Rate</span>
-                      <span className="text-emerald-600">+82% vs avg</span>
-                    </div>
-                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                      <div className="bg-brand-bush h-full w-[82%] rounded-full"></div>
-                    </div>
-                    <div className="mt-2 text-[11px] text-gray-500">1,024 Verified Consumer Testers</div>
-                  </div>
-                </div>
-                <div className="text-xs font-bold text-brand-violet uppercase tracking-wider mb-2">Turn traffic into retention</div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 group-hover:text-brand-violet transition-colors">Agentic Experimentation</h3>
-                <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                  Continuously test onboarding, pricing thresholds, and core features with 1,000+ early adopters. Then prove true market demand.
-                </p>
-              </div>
-              <button 
-                onClick={() => setModalState("waitlist")}
-                className="btn-tactile-violet w-full py-3.5 rounded-xl bg-brand-violet text-white text-sm font-black flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Let&apos;s test</span>
-                <ArrowRight className="w-4 h-4 text-brand-pastel" />
-              </button>
-            </div>
-
-            {/* Card 3: Autonomous Outreach Engine */}
-            <div className="rounded-3xl border-2 border-gray-200/90 bg-white p-6 sm:p-8 flex flex-col justify-between shadow-lg hover:border-brand-violet/40 hover:shadow-xl transition-all group">
-              <div>
-                <div className="w-full h-48 rounded-2xl bg-gradient-to-br from-brand-violet/10 via-purple-50 to-brand-electric/10 border border-purple-100 p-4 mb-6 relative overflow-hidden flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-xs font-mono text-brand-electric font-bold">
-                    <span>AGENT STATUS</span>
-                    <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-bold">Active</span>
-                  </div>
-                  <div className="bg-white/95 p-3 rounded-xl border border-purple-100 shadow-sm space-y-1">
-                    <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
-                      <Cpu className="w-3.5 h-3.5 text-brand-electric" />
-                      <span>Warm Conversation Bot</span>
-                    </div>
-                    <p className="text-[11px] text-gray-500 leading-tight">Crafting bespoke, value-first replies without spamming or triggering bans.</p>
-                  </div>
-                </div>
-                <div className="text-xs font-bold text-brand-violet uppercase tracking-wider mb-2">Put AI agents to work</div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 group-hover:text-brand-violet transition-colors">Agent Platform</h3>
-                <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                  Automate outreach, remove distribution bottlenecks, and scale your initial user base without hiring marketing headcount.
-                </p>
-              </div>
-              <button 
-                onClick={() => setModalState("waitlist")}
-                className="btn-tactile-violet w-full py-3.5 rounded-xl bg-brand-violet text-white text-sm font-black flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Let&apos;s automate</span>
-                <ArrowRight className="w-4 h-4 text-brand-pastel" />
-              </button>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 6. AI TO MAKE YOU UNSTOPPABLE - Optimizely High-Contrast Dark */}
-      {/* ============================================================ */}
-      <section id="ai" className="relative w-full bg-[#120524] text-white pt-24 pb-28 md:pt-36 md:pb-36 rounded-t-[3rem] lg:rounded-t-[4.5rem] overflow-hidden">
-        
-        {/* Cosmic Ambient Background Glows */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-brand-electric/20 rounded-full blur-[160px] pointer-events-none"></div>
-        <div className="absolute -bottom-20 right-10 w-[500px] h-[500px] bg-brand-bush/30 rounded-full blur-[140px] pointer-events-none"></div>
-
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 max-w-6xl relative z-10 text-center">
-          
-          {/* Header */}
-          <div className="max-w-3xl mx-auto mb-16">
-            <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-none mb-4">
-              <span>AI to make you</span>
-              <span className="block extruded-electric text-white mt-2">unstoppable</span>
-            </h2>
-            <p className="text-gray-300 text-base sm:text-xl font-normal leading-relaxed mt-4 max-w-2xl mx-auto">
-              The infinite workforce your great ideas have been waiting for. Here to run your workflows, save you costs, and free your sanity.
-            </p>
-          </div>
-
-          {/* Central Glowing 3D Orb / Capability Cluster */}
-          <div className="relative my-12 py-10 flex flex-col items-center justify-center">
-            
-            {/* Holographic Glowing Orb */}
-            <div className="relative w-56 h-56 sm:w-72 sm:h-72 rounded-full bg-gradient-to-tr from-brand-violet via-brand-electric to-[#d8b4fe] p-1 shadow-[0_0_90px_rgba(177,41,255,0.4)] animate-pulse">
-              <div className="w-full h-full rounded-full bg-[#180632] flex items-center justify-center p-6 text-center">
-                <div className="flex flex-col items-center">
-                  <Sparkles className="w-12 h-12 text-brand-electric mb-2" />
-                  <div className="text-xl font-black text-white">Wisentry AI</div>
-                  <div className="text-xs text-brand-pastel font-mono">Autonomous Core</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Orbiting Capability Chips */}
-            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 max-w-3xl mt-12">
+            <div className="mt-10 grid w-full min-w-0 max-w-lg grid-cols-2 gap-3 sm:grid-cols-3">
               {[
-                "🔥 Live Social Signal Mining",
-                "💬 Value-First Conversation Scripts",
-                "🎯 Competitor Complaint Interception",
-                "👥 1,000+ Pre-Seeded Testers",
-                "📊 Willingness-To-Pay Predictor",
-                "⚡ Zero-Ad-Spend Funnel Architecture"
-              ].map((pill) => (
-                <div 
-                  key={pill}
-                  className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-xs sm:text-sm font-semibold hover:bg-white/20 hover:scale-105 transition-all shadow-lg"
-                >
-                  {pill}
+                ["2.4×", "blended ROAS"],
+                ["31%", "reply rate"],
+                ["< 6 min", "signal → outreach"],
+              ].map(([value, label], index) => (
+                <div key={label} className={`min-w-0 rounded-2xl border-2 border-brand-black bg-white px-4 py-3 ${index === 2 ? "col-span-2 sm:col-span-1" : ""}`}>
+                  <div className="text-[22px] font-black leading-none tracking-[-0.05em]">{value}</div>
+                  <div className="mt-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-brand-muted">
+                    {label}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Dark Section CTA */}
-          <div className="mt-12 flex justify-center">
-            <button 
-              onClick={() => setModalState("waitlist")}
-              className="btn-tactile-electric px-8 py-4 rounded-2xl bg-brand-electric text-white text-base font-black flex items-center gap-3 cursor-pointer hover:bg-white hover:text-brand-jaguar transition-colors"
-            >
-              <span>Try and stop me</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          </div>
-
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 7. YES, YOU CAN TEST HERE - Optimizely Chunky Badges Row      */}
-      {/* ============================================================ */}
-      <section className="w-full py-24 md:py-32 bg-[#faf8fc] border-t border-gray-200">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 max-w-6xl text-center">
-          
-          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-gray-900 mb-4">
-            Yes, you can test here. And the rest!
-          </h2>
-          <p className="text-gray-600 text-base sm:text-lg max-w-2xl mx-auto mb-16">
-            Everything consumer makers need to discover intent, validate ideas, and turn curiosity into revenue.
-          </p>
-
-          {/* 5 Expressive Optimizely-style Feature Badges */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 sm:gap-6">
-            
-            <div className="p-6 rounded-2xl bg-white border-2 border-gray-200 shadow-md flex flex-col items-center text-center hover:border-brand-violet hover:-translate-y-1 transition-all">
-              <div className="w-14 h-14 rounded-2xl bg-purple-50 text-brand-violet flex items-center justify-center mb-4">
-                <Search className="w-7 h-7" />
-              </div>
-              <h3 className="font-extrabold text-gray-900 text-base mb-1">Discover</h3>
-              <p className="text-xs text-gray-500">Live Intent Signals</p>
+          {/* Live product mock ------------------------------------ */}
+          <div className="relative min-w-0">
+            <div className="absolute -right-3 -top-4 z-20 hidden rotate-3 items-center gap-2 rounded-full border-2 border-brand-black bg-brand-orange px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white shadow-[3px_3px_0_#0a0a0a] sm:flex">
+              <span className="live-dot !bg-white !shadow-none" /> Live
             </div>
 
-            <div className="p-6 rounded-2xl bg-white border-2 border-gray-200 shadow-md flex flex-col items-center text-center hover:border-brand-violet hover:-translate-y-1 transition-all">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4">
-                <Sparkles className="w-7 h-7" />
-              </div>
-              <h3 className="font-extrabold text-gray-900 text-base mb-1">Create</h3>
-              <p className="text-xs text-gray-500">Outreach Playbooks</p>
-            </div>
-
-            <div className="p-6 rounded-2xl bg-white border-2 border-gray-200 shadow-md flex flex-col items-center text-center hover:border-brand-violet hover:-translate-y-1 transition-all">
-              <div className="w-14 h-14 rounded-2xl bg-brand-violet/10 text-brand-violet flex items-center justify-center mb-4">
-                <Users className="w-7 h-7" />
-              </div>
-              <h3 className="font-extrabold text-gray-900 text-base mb-1">Test</h3>
-              <p className="text-xs text-gray-500">1,000 Beta Cohort</p>
-            </div>
-
-            <div className="p-6 rounded-2xl bg-white border-2 border-gray-200 shadow-md flex flex-col items-center text-center hover:border-brand-violet hover:-translate-y-1 transition-all">
-              <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4">
-                <FileText className="w-7 h-7" />
-              </div>
-              <h3 className="font-extrabold text-gray-900 text-base mb-1">Save</h3>
-              <p className="text-xs text-gray-500">Feedback Archives</p>
-            </div>
-
-            <div className="p-6 rounded-2xl bg-white border-2 border-gray-200 shadow-md flex flex-col items-center text-center hover:border-brand-violet hover:-translate-y-1 transition-all col-span-2 md:col-span-1">
-              <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
-                <BarChart3 className="w-7 h-7" />
-              </div>
-              <h3 className="font-extrabold text-gray-900 text-base mb-1">Scale</h3>
-              <p className="text-xs text-gray-500">Viral Referrals</p>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 8. ONE PLATFORM. THREE PATHS TO GROWTH - Alternating Rows    */}
-      {/* ============================================================ */}
-      <section id="paths" className="w-full py-24 md:py-32 bg-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 max-w-6xl">
-          
-          <div className="text-center mb-20">
-            <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-gray-900">
-              <span>One platform. </span>
-              <span className="block extruded-violet text-brand-bush mt-1">Three paths to growth.</span>
-            </h2>
-          </div>
-
-          <div className="space-y-16">
-            
-            {/* Path 1 */}
-            <div className="flex flex-col md:flex-row items-center gap-8 lg:gap-16 p-8 sm:p-10 rounded-3xl bg-[#faf8fc] border-2 border-gray-200">
-              <div className="flex-1 text-left">
-                <div className="text-xs font-bold text-brand-violet uppercase tracking-wider mb-2">Path 01 • Organic Listening</div>
-                <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-4">Catch buyers when intent is peaking</h3>
-                <p className="text-gray-600 text-sm sm:text-base leading-relaxed mb-6">
-                  Instead of interrupting people with annoying banner ads, listen to where they are actively looking for solutions. Connect with real buyers complaining about broken competitors.
-                </p>
-                <div className="flex items-center gap-2 text-xs font-bold text-brand-violet">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  Real-time Subreddit & X Thread Tracking
+            <div className="overflow-hidden rounded-[22px] border-2 border-brand-black bg-white shadow-[10px_10px_0_#0a0a0a]">
+              <div className="flex items-center justify-between border-b-2 border-brand-black bg-brand-black px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-brand-orange" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-brand-violetPastel" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-white/40" />
                 </div>
+                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/60">
+                  threadly · command
+                </span>
+                <span className="rounded-md bg-white/10 px-2 py-1 font-mono text-[9px] font-bold text-white/70">
+                  ⌘K
+                </span>
               </div>
-              <div className="w-full md:w-80 h-56 rounded-2xl bg-white border border-gray-200 p-5 shadow-md flex flex-col justify-center">
-                <div className="text-xs font-mono text-gray-400 mb-2">Live Matching Engine</div>
-                <div className="p-3 bg-purple-50 rounded-xl text-xs text-brand-violet font-semibold mb-2">
-                  &quot;Any alternative to [Competitor]? It keeps crashing on iOS.&quot;
+
+              <div className="grid grid-cols-3 gap-2.5 border-b border-brand-line p-4">
+                {[
+                  ["Pipeline", "$184k", "+18%"],
+                  ["Reply rate", "31.4%", "+6.2"],
+                  ["ROAS", "2.41×", "+0.36"],
+                ].map(([label, value, delta]) => (
+                  <div key={label} className="rounded-xl border border-brand-line bg-brand-paper px-3 py-2.5">
+                    <div className="font-mono text-[8px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                      {label}
+                    </div>
+                    <div className="mt-1 text-[19px] font-black leading-none tracking-[-0.04em]">{value}</div>
+                    <div className="mt-1 font-mono text-[9px] font-bold text-brand-orange">{delta}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_100px] gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_126px]">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-brand-quiet">
+                      Real-time activity
+                    </span>
+                    <span className="flex items-center gap-1.5 font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-brand-orange">
+                      <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-orange" /> streaming
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {visibleEvents.map((event, index) => (
+                      <div
+                        key={`${event.what}-${index}`}
+                        className="flex items-start gap-2.5 rounded-xl border border-brand-line bg-white px-2.5 py-2 transition-all"
+                        style={{ opacity: 1 - index * 0.16 }}
+                      >
+                        <span
+                          className={`mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-md ${
+                            event.tone === "orange"
+                              ? "bg-brand-orangeLight text-brand-orangeDark"
+                              : "bg-brand-violetLight text-brand-violetDark"
+                          }`}
+                        >
+                          <Zap className="h-3 w-3" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate text-[10px] font-bold">{event.who}</div>
+                          <div className="truncate text-[9px] leading-snug text-brand-muted">{event.what}</div>
+                        </div>
+                        <span className="ml-auto shrink-0 font-mono text-[8px] text-brand-quiet">{event.when}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> High Buying Intent Detected
+
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-brand-line bg-brand-paper p-2.5">
+                    <div className="font-mono text-[8px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                      Best time
+                    </div>
+                    <div className="mt-1 text-[15px] font-black leading-none">14:00</div>
+                    <div className="mt-1 text-[8px] text-brand-muted">Tue · ET</div>
+                    <div className="mt-2 space-y-1">
+                      {[0.9, 0.55, 0.32].map((width, index) => (
+                        <div key={index} className="h-1 rounded-full bg-brand-line">
+                          <div
+                            className="h-1 rounded-full bg-brand-violet"
+                            style={{ width: `${width * 100}%` }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border-2 border-brand-black bg-brand-black p-2.5 text-white">
+                    <div className="font-mono text-[8px] font-bold uppercase tracking-[0.1em] text-brand-orange">
+                      GEO share
+                    </div>
+                    <div className="mt-1 text-[15px] font-black leading-none">38%</div>
+                    <div className="mt-1 text-[8px] text-white/50">↑ 9 pts this week</div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Path 2 */}
-            <div className="flex flex-col md:flex-row-reverse items-center gap-8 lg:gap-16 p-8 sm:p-10 rounded-3xl bg-[#faf8fc] border-2 border-gray-200">
-              <div className="flex-1 text-left">
-                <div className="text-xs font-bold text-brand-bush uppercase tracking-wider mb-2">Path 02 • Beta Collective</div>
-                <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-4">Stress-test your UX before spending budget</h3>
-                <p className="text-gray-600 text-sm sm:text-base leading-relaxed mb-6">
-                  Never launch to silence. Our curated community of 1,000+ tech-forward consumer testers tests your flows, flags confusing UI, and gives unfiltered feedback.
-                </p>
-                <div className="flex items-center gap-2 text-xs font-bold text-brand-violet">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  48-Hour Qualitative Voice of Customer
-                </div>
-              </div>
-              <div className="w-full md:w-80 h-56 rounded-2xl bg-white border border-gray-200 p-5 shadow-md flex flex-col justify-center">
-                <div className="text-xs font-mono text-gray-400 mb-2">Tester Collective</div>
-                <div className="p-3 bg-emerald-50 rounded-xl text-xs text-emerald-800 font-semibold mb-2">
-                  &quot;Onboarding step 3 was confusing, but the core feature is 10/10.&quot;
-                </div>
-                <div className="text-[11px] text-brand-bush font-bold">142 Testers Responded in 24h</div>
-              </div>
-            </div>
-
-            {/* Path 3 */}
-            <div className="flex flex-col md:flex-row items-center gap-8 lg:gap-16 p-8 sm:p-10 rounded-3xl bg-[#faf8fc] border-2 border-gray-200">
-              <div className="flex-1 text-left">
-                <div className="text-xs font-bold text-brand-electric uppercase tracking-wider mb-2">Path 03 • Viral Multipliers</div>
-                <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-4">Turn your first 100 believers into 1,000</h3>
-                <p className="text-gray-600 text-sm sm:text-base leading-relaxed mb-6">
-                  Built-in referral loops, beta invitations, and exclusive member codes give your early adopters an incentive to champion your product to their friends.
-                </p>
-                <div className="flex items-center gap-2 text-xs font-bold text-brand-violet">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  Organic K-Factor Growth Blueprint
-                </div>
-              </div>
-              <div className="w-full md:w-80 h-56 rounded-2xl bg-white border border-gray-200 p-5 shadow-md flex flex-col justify-center">
-                <div className="text-xs font-mono text-gray-400 mb-2">Viral Referral Engine</div>
-                <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-900 font-semibold mb-2">
-                  Invites Sent: 4.2 per user
-                </div>
-                <div className="text-[11px] text-brand-electric font-bold">Exponential K-Factor &gt; 1.3</div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 9. STORIES OF SUCCESS - Editorial Case Study Proof            */}
-      {/* ============================================================ */}
-      <section id="stories" className="w-full py-24 bg-[#faf8fc] border-t border-gray-200">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 max-w-6xl text-center">
-          
-          <h2 className="text-4xl sm:text-5xl font-black text-gray-900 mb-14">
-            Stories of success
-          </h2>
-
-          <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
-            
-            <div className="rounded-3xl bg-white border-2 border-gray-200 p-8 text-left shadow-lg flex flex-col justify-between">
+            <div className="absolute -bottom-5 -left-4 hidden rotate-[-3deg] items-center gap-2 rounded-xl border-2 border-brand-black bg-white px-3 py-2 shadow-[4px_4px_0_#7c3aed] sm:flex">
+              <TrendingUp className="h-4 w-4 text-brand-violet" />
               <div>
-                <div className="text-5xl font-black text-brand-violet mb-2">82%</div>
-                <div className="text-sm font-extrabold uppercase text-gray-500 tracking-wider mb-4">Conversion Lift</div>
-                <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                  &quot;Wisentry replaced our $3,500/mo Meta ad spend with hyper-relevant Reddit conversations. Our early retention doubled.&quot;
-                </p>
-              </div>
-              <div className="pt-4 border-t border-gray-100 text-xs font-bold text-gray-900">
-                Founder, B2C FinTech App
+                <div className="text-[10px] font-black leading-none">Sequence step 2</div>
+                <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.08em] text-brand-quiet">
+                  41% open · variant B
+                </div>
               </div>
             </div>
-
-            <div className="rounded-3xl bg-white border-2 border-gray-200 p-8 text-left shadow-lg flex flex-col justify-between">
-              <div>
-                <div className="text-5xl font-black text-brand-bush mb-2">400+</div>
-                <div className="text-sm font-extrabold uppercase text-gray-500 tracking-wider mb-4">Hours Saved</div>
-                <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                  &quot;We avoided 4 months of building the wrong feature because Wisentry testers showed us what was actually blocking signups.&quot;
-                </p>
-              </div>
-              <div className="pt-4 border-t border-gray-100 text-xs font-bold text-gray-900">
-                Co-Founder, AI Creation Studio
-              </div>
-            </div>
-
-            <div className="rounded-3xl bg-white border-2 border-gray-200 p-8 text-left shadow-lg flex flex-col justify-between">
-              <div>
-                <div className="text-5xl font-black text-brand-electric mb-2">1,000</div>
-                <div className="text-sm font-extrabold uppercase text-gray-500 tracking-wider mb-4">Users in 12 Days</div>
-                <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                  &quot;From zero followers to a vibrant 1,000-user Discord community before our public Product Hunt launch.&quot;
-                </p>
-              </div>
-              <div className="pt-4 border-t border-gray-100 text-xs font-bold text-gray-900">
-                CEO, Consumer Productivity Tool
-              </div>
-            </div>
-
           </div>
         </div>
       </section>
 
       {/* ============================================================ */}
-      {/* 10. FULL-WIDTH INTEGRATION BANNER                            */}
+      {/* Integration marquee                                          */}
       {/* ============================================================ */}
-      <section className="relative w-full py-28 md:py-36 overflow-hidden bg-gradient-to-r from-brand-violet via-brand-bush to-brand-haiti text-white text-center">
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-xs"></div>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-12 relative z-10 max-w-4xl">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-white text-xs font-bold mb-6">
-            <Layers className="w-4 h-4 text-brand-pastel" />
-            Seamless Compatibility
-          </div>
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight mb-6">
-            Slots straight into your existing stack
-          </h2>
-          <p className="text-lg sm:text-xl text-white/80 max-w-2xl mx-auto mb-10">
-            Export leads directly to your CRM, connect webhooks to Discord, or sync waitlist analytics with your favorite data tools.
-          </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 max-w-3xl mx-auto">
-            {["Reddit", "X / Twitter", "Discord", "Product Hunt", "TikTok", "Stripe", "PostHog", "Supabase", "Slack"].map((tool) => (
-              <span key={tool} className="px-5 py-2.5 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-bold text-xs sm:text-sm">
-                {tool}
+      <section className="overflow-hidden border-y-2 border-brand-black bg-white py-5">
+        <div className="mx-auto max-w-[1240px] px-5 lg:px-8">
+          <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
+            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-brand-quiet">
+              Plays well with
+            </span>
+            {stack.map((name) => (
+              <span key={name} className="text-[12px] font-extrabold text-brand-muted/80">
+                {name}
               </span>
             ))}
           </div>
@@ -727,289 +502,512 @@ export default function LandingClient() {
       </section>
 
       {/* ============================================================ */}
-      {/* 11. EMBEDDED INTAKE FORM - "Let's grow"                      */}
+      {/* Platform strip                                               */}
       {/* ============================================================ */}
-      <section className="w-full py-24 md:py-32 bg-[#faf8fc] px-4 sm:px-6 lg:px-12">
-        <div className="container mx-auto max-w-5xl">
-          
-          <div className="rounded-3xl border-2 border-brand-violet/20 bg-white shadow-2xl overflow-hidden grid lg:grid-cols-12">
-            
-            {/* Left Visual Area */}
-            <div className="lg:col-span-5 bg-gradient-to-br from-brand-violet via-brand-bush to-brand-haiti text-white p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-brand-electric/20 rounded-full blur-3xl pointer-events-none"></div>
-              <div className="relative z-10">
-                <span className="text-xs font-mono font-bold text-brand-pastel uppercase tracking-wider block mb-3">
-                  WISENTRY ACCESS PASS
-                </span>
-                <h3 className="text-3xl sm:text-4xl font-black leading-tight mb-4">
-                  Let&apos;s get your first 1,000 users.
-                </h3>
-                <p className="text-white/80 text-sm leading-relaxed mb-6">
-                  Fill in your startup details to join the priority cohort. We will review your application and send you custom intent matches within 24 hours.
-                </p>
-              </div>
+      <section id="platform" className="mx-auto max-w-[1240px] px-5 py-20 lg:px-8 lg:py-28">
+        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+          <div>
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-brand-orange">
+              One operating system
+            </span>
+            <h2 className="mt-4 text-[clamp(34px,4.6vw,60px)] font-black leading-[0.95] tracking-[-0.055em]">
+              Stop stitching six tools
+              <br />
+              into{" "}
+              <span className="extruded-violet text-brand-violet">a funnel</span>.
+            </h2>
+          </div>
+          <p className="max-w-xl text-[15px] leading-relaxed text-brand-muted">
+            Most growth stacks break at the handoff: the signal lives in one tab, the CRM in another,
+            the ad account in a third, and nobody can tell which channel actually paid for the last
+            deal. Threadly keeps the whole thread — from the first public complaint to the closed
+            contract — in one workspace with one source of truth.
+          </p>
+        </div>
 
-              <div className="relative z-10 pt-6 border-t border-white/10 text-xs text-brand-pastel space-y-2">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Free for the first 100 startups</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Instant Discord community unlock</span>
-                </div>
-              </div>
+        <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: Radar, title: "Capture", copy: "Signals from X, Reddit and communities." },
+            { icon: Workflow, title: "Automate", copy: "Workflows that qualify, draft and follow up." },
+            { icon: BarChart3, title: "Optimize", copy: "Spend and content steered by live results." },
+            { icon: Layers, title: "Compound", copy: "SEO and AI answers built on the same insight." },
+          ].map((item) => (
+            <div
+              key={item.title}
+              className="group rounded-2xl border-2 border-brand-black bg-white p-5 transition-transform hover:-translate-y-1"
+            >
+              <item.icon className="h-5 w-5 text-brand-orange" />
+              <h3 className="mt-4 text-[15px] font-black tracking-[-0.03em]">{item.title}</h3>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-brand-muted">{item.copy}</p>
             </div>
+          ))}
+        </div>
+      </section>
 
-            {/* Right Form Area */}
-            <div className="lg:col-span-7 p-8 sm:p-12">
-              <form onSubmit={handleWaitlistSubmit} className="space-y-4 text-left">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Full Name *</label>
-                    <input
-                      type="text"
-                      placeholder="Alex Rivera"
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={waitlistData.fullName}
-                      onChange={(e) => setWaitlistData({ ...waitlistData, fullName: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Email Address *</label>
-                    <input
-                      type="email"
-                      placeholder="alex@startup.com"
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                </div>
+      {/* ============================================================ */}
+      {/* Modules                                                      */}
+      {/* ============================================================ */}
+      <section id="modules" className="border-y-2 border-brand-black bg-brand-black py-20 text-white lg:py-28">
+        <div className="mx-auto max-w-[1240px] px-5 lg:px-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-brand-orange">
+                The modules
+              </span>
+              <h2 className="mt-4 max-w-2xl text-[clamp(34px,4.6vw,60px)] font-black leading-[0.95] tracking-[-0.055em]">
+                Six engines.
+                <br />
+                <span className="text-brand-violetPastel">One compounding loop.</span>
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={openWaitlist}
+              className="inline-flex shrink-0 items-center gap-2 self-start rounded-full border-2 border-white px-5 py-3 text-[12px] font-extrabold transition-colors hover:bg-white hover:text-brand-black lg:self-auto"
+            >
+              Request beta access <ArrowUpRight className="h-4 w-4" />
+            </button>
+          </div>
 
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Startup Name *</label>
-                    <input
-                      type="text"
-                      placeholder="Wisentry App"
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={waitlistData.startupName}
-                      onChange={(e) => setWaitlistData({ ...waitlistData, startupName: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Industry / Niche *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. AI Consumer, FinTech"
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={waitlistData.industry}
-                      onChange={(e) => setWaitlistData({ ...waitlistData, industry: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Primary Growth Challenge *</label>
-                  <select
-                    required
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900 appearance-none cursor-pointer"
-                    value={waitlistData.challenge1}
-                    onChange={(e) => setWaitlistData({ ...waitlistData, challenge1: e.target.value })}
+          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {modules.map((module) => (
+              <article
+                key={module.title}
+                className="group relative overflow-hidden rounded-2xl border border-white/15 bg-white/[0.035] p-6 transition-all hover:border-white/30 hover:bg-white/[0.06]"
+              >
+                <div
+                  className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full opacity-0 blur-3xl transition-opacity group-hover:opacity-100"
+                  style={{
+                    background:
+                      module.accent === "orange"
+                        ? "rgba(255,69,0,0.6)"
+                        : "rgba(124,58,237,0.6)",
+                  }}
+                  aria-hidden
+                />
+                <div className="flex items-start justify-between">
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-white/45">
+                    {module.tag}
+                  </span>
+                  <span
+                    className={`grid h-9 w-9 place-items-center rounded-lg ${
+                      module.accent === "orange"
+                        ? "bg-brand-orange/15 text-brand-orange"
+                        : "bg-brand-violet/25 text-brand-violetPastel"
+                    }`}
                   >
-                    <option value="" disabled>Select your primary challenge</option>
-                    {challenges.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+                    <module.icon className="h-[18px] w-[18px]" />
+                  </span>
                 </div>
-
-                <button 
-                  type="submit"
-                  className="btn-tactile-violet w-full py-4 rounded-xl bg-brand-violet text-white text-base font-black flex items-center justify-center gap-2 cursor-pointer mt-4"
-                >
-                  <span>Let&apos;s grow</span>
-                  <ArrowRight className="w-5 h-5 text-brand-pastel" />
-                </button>
-              </form>
-            </div>
-
+                <h3 className="mt-5 text-[21px] font-black tracking-[-0.04em]">{module.title}</h3>
+                <p className="mt-2 text-[12.5px] leading-relaxed text-white/55">{module.copy}</p>
+                <ul className="mt-4 space-y-1.5">
+                  {module.points.map((point) => (
+                    <li key={point} className="flex items-center gap-2 text-[11px] font-semibold text-white/70">
+                      <Check className="h-3 w-3 text-brand-orange" /> {point}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-5 border-t border-white/10 pt-3 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-orange">
+                  {module.stat}
+                </div>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
       {/* ============================================================ */}
-      {/* 12. GIANT RETRO 3D FOOTER - Optimizely Brand Finale          */}
+      {/* Workspace preview                                            */}
       {/* ============================================================ */}
+      <section id="workspace" className="mx-auto max-w-[1240px] px-5 py-20 lg:px-8 lg:py-28">
+        <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+          <div>
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-brand-violet">
+              The workspace
+            </span>
+            <h2 className="mt-4 text-[clamp(34px,4.2vw,54px)] font-black leading-[0.96] tracking-[-0.055em]">
+              A command center,
+              <br />
+              not a{" "}
+              <span className="text-brand-orange">dashboard graveyard</span>.
+            </h2>
+            <p className="mt-5 text-[15px] leading-relaxed text-brand-muted">
+              Every module shares the same leads, the same activity log and the same clock. Move a
+              prospect and the sequence, the calendar and the analytics all update — live.
+            </p>
+
+            <ul className="mt-8 space-y-4">
+              {[
+                ["Real-time everything", "Server-sent events push new signals, sends and scores the moment they land."],
+                ["Human in the loop", "Automation drafts; you approve. Nothing leaves without a review."],
+                ["One activity thread", "Every module writes to the same auditable timeline."],
+              ].map(([title, copy]) => (
+                <li key={title} className="flex gap-3">
+                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-orange text-white">
+                    <Check className="h-3.5 w-3.5" />
+                  </span>
+                  <div>
+                    <div className="text-[13px] font-black">{title}</div>
+                    <div className="text-[12px] leading-relaxed text-brand-muted">{copy}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <button
+              type="button"
+              onClick={openWaitlist}
+              className="btn-tactile-orange mt-9 inline-flex items-center gap-2 rounded-2xl border-2 border-brand-orange bg-brand-orange px-6 py-3.5 text-[14px] font-black text-white"
+            >
+              Request beta access <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="relative">
+            <div className="absolute -inset-3 rounded-[28px] border-2 border-dashed border-brand-black/15" aria-hidden />
+            <div className="relative overflow-hidden rounded-[20px] border-2 border-brand-black bg-white shadow-[10px_10px_0_#ff4500]">
+              <div className="grid grid-cols-[52px_1fr]">
+                <div className="flex flex-col items-center gap-3 border-r-2 border-brand-black bg-brand-paper py-4">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-black text-white">
+                    <Image src="/threadly-mark.svg" alt="" width={18} height={18} />
+                  </span>
+                  {[Radar, Users, Mail, CircleDollarSign, CalendarClock, Globe2, BarChart3].map((Icon, index) => (
+                    <span
+                      key={index}
+                      className={`grid h-7 w-7 place-items-center rounded-md ${
+                        index === 0 ? "bg-brand-black text-brand-orange" : "text-brand-quiet"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </span>
+                  ))}
+                </div>
+
+                <div className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-mono text-[8px] font-bold uppercase tracking-[0.13em] text-brand-quiet">
+                        Campaign command
+                      </div>
+                      <div className="mt-1 text-[18px] font-black tracking-[-0.04em]">Q4 Pipeline Sprint</div>
+                    </div>
+                    <span className="rounded-full bg-brand-orangeLight px-2.5 py-1 font-mono text-[8px] font-bold uppercase tracking-[0.08em] text-brand-orangeDark">
+                      Active
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    {[
+                      ["Spend", "$4,280"],
+                      ["Revenue", "$10,296"],
+                      ["ROAS", "2.41×"],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-lg border border-brand-line px-2.5 py-2">
+                        <div className="font-mono text-[7.5px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                          {label}
+                        </div>
+                        <div className="mt-0.5 text-[13px] font-black">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 rounded-xl border border-brand-line p-3">
+                    <div className="mb-2 flex items-center justify-between font-mono text-[8px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                      <span>Channel allocation</span>
+                      <span className="text-brand-violet">auto-optimized</span>
+                    </div>
+                    {[
+                      ["Google Search", 78, "bg-brand-orange"],
+                      ["LinkedIn", 54, "bg-brand-violet"],
+                      ["Reddit", 36, "bg-brand-orangeDark"],
+                      ["X", 22, "bg-brand-black"],
+                    ].map(([channel, width, color]) => (
+                      <div key={channel as string} className="mb-1.5 last:mb-0">
+                        <div className="flex items-center justify-between text-[8.5px] font-semibold text-brand-muted">
+                          <span>{channel}</span>
+                          <span>{width}%</span>
+                        </div>
+                        <div className="mt-0.5 h-1.5 rounded-full bg-brand-line">
+                          <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${width}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2 rounded-xl border-2 border-brand-black bg-brand-black px-3 py-2 text-white">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-orange" />
+                    <span className="text-[9px] leading-snug text-white/80">
+                      Threadly shifted <b className="text-white">$240</b> into Google Search after ROAS
+                      crossed 3.1×.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* Stories / proof                                              */}
+      {/* ============================================================ */}
+      <section id="stories" className="border-y-2 border-brand-black bg-white py-20 lg:py-24">
+        <div className="mx-auto max-w-[1240px] px-5 lg:px-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <h2 className="max-w-xl text-[clamp(30px,3.6vw,46px)] font-black leading-[0.98] tracking-[-0.05em]">
+              Founders who stopped guessing.
+            </h2>
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-brand-quiet">
+              Selected outcomes · 2025–2026
+            </span>
+          </div>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {[
+              {
+                quote:
+                  "The radar found a Reddit thread where our exact buyer was describing our product as “the thing that doesn't exist yet.” We closed them nine days later.",
+                name: "Maya Chen",
+                role: "Co-founder · Lumen (seed)",
+                metric: "9 days to closed won",
+              },
+              {
+                quote:
+                  "We were burning $9k/mo on Meta with no attribution. Threadly reallocated to search, and ROAS went from 1.1× to 2.6× without new creative.",
+                name: "Diego Ramos",
+                role: "Head of Growth · Kite",
+                metric: "2.6× blended ROAS",
+              },
+              {
+                quote:
+                  "Getting cited in ChatGPT answers moved more pipeline than any campaign we ran all year. The GEO tracker told us exactly which pages were missing.",
+                name: "Priya Nair",
+                role: "Founder · Slate AI",
+                metric: "38% AI answer share",
+              },
+            ].map((story) => (
+              <figure
+                key={story.name}
+                className="flex flex-col justify-between rounded-2xl border-2 border-brand-black bg-brand-paper p-6 transition-transform hover:-translate-y-1"
+              >
+                <blockquote className="text-[13.5px] leading-relaxed text-brand-black">
+                  “{story.quote}”
+                </blockquote>
+                <figcaption className="mt-6 border-t border-brand-line pt-4">
+                  <div className="text-[12px] font-black">{story.name}</div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-brand-quiet">
+                    {story.role}
+                  </div>
+                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-orangeLight px-2.5 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.08em] text-brand-orangeDark">
+                    <Flame className="h-3 w-3" /> {story.metric}
+                  </div>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* CTA                                                          */}
+      {/* ============================================================ */}
+      <section className="relative overflow-hidden bg-brand-black py-20 text-white lg:py-28">
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[860px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-30 blur-[140px]"
+          style={{ background: "radial-gradient(circle, #ff4500 0%, #7c3aed 55%, transparent 75%)" }}
+          aria-hidden
+        />
+        <div className="relative mx-auto max-w-[1240px] px-5 text-center lg:px-8">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-brand-orange">
+            Let&apos;s grow
+          </span>
+          <h2 className="mx-auto mt-4 max-w-3xl text-[clamp(38px,5.6vw,74px)] font-black leading-[0.93] tracking-[-0.06em]">
+            Your next 1,000 customers
+            <br />
+            are already{" "}
+            <span className="extruded-electric text-white">talking</span>.
+          </h2>
+          <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-white/55">
+            Threadly is free for the first 100 teams while we tune the 2.0 engine. Bring a product
+            people actually want to talk about.
+          </p>
+          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={openWaitlist}
+              className="btn-tactile-orange inline-flex items-center gap-2 rounded-2xl border-2 border-brand-orange bg-brand-orange px-7 py-4 text-[15px] font-black text-white"
+            >
+              Request beta access <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="btn-tactile-white inline-flex items-center gap-2 rounded-2xl border-2 border-white px-7 py-4 text-[15px] font-black text-white"
+            >
+              Request early access <ArrowUpRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+
       <Footer />
 
       {/* ============================================================ */}
-      {/* 13. INTERACTIVE MODAL OVERLAY (Waitlist / Discord / Code)    */}
+      {/* Early-access modal                                           */}
       {/* ============================================================ */}
-      {modalState !== "closed" && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      {modalOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-brand-black/70 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="modal-title"
+          aria-label="Request early access"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setModalOpen(false);
+          }}
         >
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-[#02010a]/60 backdrop-blur-sm animate-in fade-in duration-300"
-            onClick={() => setModalState("closed")}
-            aria-hidden="true"
-          />
-
-          {/* Modal Content Box */}
-          <div className="relative w-full max-w-md bg-white border-2 border-brand-violet/20 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300">
-            {/* Close Button */}
-            <button 
-              onClick={() => setModalState("closed")}
-              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors z-10 focus:outline-none"
-              aria-label="Close modal"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {modalState === "waitlist" && (
-              <div className="p-6 sm:p-8">
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-violet/10 text-brand-violet text-xs font-bold uppercase mb-2">
-                    Priority Access
-                  </div>
-                  <h2 id="modal-title" className="text-2xl font-black text-gray-900">Join the Waitlist</h2>
-                  <p className="text-gray-600 text-sm mt-1">Get early access to 1,000 real consumers.</p>
+          <div className="relative w-full max-w-lg overflow-hidden rounded-[22px] border-2 border-brand-black bg-brand-paper shadow-[10px_10px_0_#ff4500]">
+            <div className="flex items-start justify-between border-b-2 border-brand-black bg-white px-6 py-4">
+              <div>
+                <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-brand-orange">
+                  Early access · cohort 01
                 </div>
-                
-                <form onSubmit={handleWaitlistSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Full Name *</label>
-                    <input
-                      type="text"
-                      placeholder="Alex Rivera"
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={waitlistData.fullName}
-                      onChange={(e) => setWaitlistData({ ...waitlistData, fullName: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Email Address *</label>
-                    <input
-                      type="email"
-                      placeholder="alex@startup.com"
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Startup Name *</label>
-                    <input
-                      type="text"
-                      placeholder="Wisentry App"
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={waitlistData.startupName}
-                      onChange={(e) => setWaitlistData({ ...waitlistData, startupName: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Industry / Niche *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. AI Consumer, Mobile App"
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={waitlistData.industry}
-                      onChange={(e) => setWaitlistData({ ...waitlistData, industry: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Biggest Challenge *</label>
-                    <select
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-violet text-sm text-gray-900"
-                      value={waitlistData.challenge1}
-                      onChange={(e) => setWaitlistData({ ...waitlistData, challenge1: e.target.value })}
-                    >
-                      <option value="" disabled>Select Challenge *</option>
-                      {challenges.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <button 
-                    type="submit"
-                    className="btn-tactile-violet w-full py-4 rounded-xl bg-brand-violet text-white font-black text-sm flex items-center justify-center gap-2 cursor-pointer mt-4"
-                  >
-                    <span>Let&apos;s grow</span>
-                    <ArrowRight className="w-5 h-5 text-brand-pastel" />
-                  </button>
-                </form>
+                <h3 className="mt-1 text-[22px] font-black tracking-[-0.045em]">Request beta access</h3>
               </div>
-            )}
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="grid h-8 w-8 place-items-center rounded-lg border-2 border-brand-black bg-white"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-            {modalState === "community" && (
-              <div className="p-6 sm:p-8 text-center flex flex-col items-center">
-                <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-inner">
-                  <Check className="w-8 h-8 text-emerald-600" />
-                </div>
-                <h2 className="text-2xl font-black text-gray-900 mb-2">You&apos;re on the list!</h2>
-                <p className="text-gray-600 text-sm mb-8 leading-relaxed">
-                  Join our exclusive Discord collective to start networking with B2C founders and testers immediately.
-                </p>
-                <a 
-                  href="https://discord.gg/xTeuQ9yE4"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-tactile-violet w-full py-4 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-xl font-bold flex items-center justify-center gap-2"
-                  onClick={() => setModalState("revealed")}
-                >
-                  <span>Join Discord Community</span>
-                  <ArrowRight className="w-5 h-5" />
-                </a>
-              </div>
-            )}
-
-            {modalState === "revealed" && (
-              <div className="p-6 sm:p-8 text-center flex flex-col items-center">
-                <div className="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center mb-6 shadow-inner">
-                  <Copy className="w-8 h-8 text-brand-violet" />
-                </div>
-                <h2 className="text-2xl font-black text-gray-900 mb-2">Welcome to Wisentry</h2>
-                <p className="text-gray-600 text-sm mb-6">Save your access code for priority cohort onboarding.</p>
-                
-                <div className="w-full p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between mb-8">
-                  <code className="text-brand-violet font-mono font-black text-lg">WSE-BETA-24</code>
-                  <button 
-                    onClick={() => copyToClipboard("WSE-BETA-24")}
-                    className="p-2 text-gray-400 hover:text-brand-violet hover:bg-purple-100 rounded-lg transition-colors"
-                    aria-label="Copy code"
-                  >
-                    {copied ? <Check className="w-5 h-5 text-emerald-500" /> : <Copy className="w-5 h-5" />}
-                  </button>
-                </div>
-                
-                <button
-                  onClick={() => setModalState("closed")}
-                  className="text-gray-500 hover:text-gray-900 font-bold text-sm transition-colors"
-                >
-                  Close & Return to site
+            {!authReady ? (
+              <div className="px-6 py-10 text-center text-sm font-semibold text-brand-muted">Checking your sign-in…</div>
+            ) : !authUser ? (
+              <div className="px-6 py-8">
+                <p className="text-[13px] leading-relaxed text-brand-muted">Sign in with Google first. We’ll use that account to track your Threadly 2.0 beta request and access approval.</p>
+                {authError && <p role="alert" className="mt-3 rounded-lg border border-brand-orange/40 bg-brand-orangeLight px-3 py-2 text-[11px] font-semibold text-brand-orangeDark">{authError}</p>}
+                <button type="button" onClick={() => void signInForBeta()} disabled={authBusy} className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl border-2 border-brand-black bg-white px-5 py-3.5 text-[13px] font-black disabled:opacity-60">
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-[#4285f4] font-sans text-[12px] font-bold text-white">G</span>
+                  {authBusy ? "Connecting to Google…" : "Continue with Google"}
                 </button>
               </div>
+            ) : !applicationChecked ? (
+              <div className="px-6 py-10 text-center text-sm font-semibold text-brand-muted">Checking your beta request…</div>
+            ) : applicationStatus === "pending" ? (
+              <div className="px-6 py-10 text-center">
+                <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-orange text-white"><Check className="h-7 w-7" /></span>
+                <h4 className="mt-5 text-[24px] font-black tracking-[-0.045em]">Request received.</h4>
+                <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-brand-muted">{confirmationEmailSent === true ? <>We sent a confirmation email to <b className="text-brand-black">{authUser.email}</b>. Your request is now under review.</> : confirmationEmailSent === false ? <>Your request is saved and under review, but we couldn’t send the confirmation email. Contact us if you need help.</> : <>Your Threadly 2.0 beta request is under review for <b className="text-brand-black">{authUser.email}</b>. Return here with this Google account to check your access.</>}</p>
+              </div>
+            ) : applicationStatus === "approved" ? (
+              <div className="px-6 py-10 text-center">
+                <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-orange text-white"><Check className="h-7 w-7" /></span>
+                <h4 className="mt-5 text-[24px] font-black tracking-[-0.045em]">You&apos;re approved.</h4>
+                <p className="mt-2 text-[13px] leading-relaxed text-brand-muted">Your Google account has access to the Threadly 2.0 workspace.</p>
+                <a href="/portal" className="btn-tactile-orange mt-6 inline-flex items-center gap-2 rounded-xl border-2 border-brand-orange bg-brand-orange px-5 py-3 text-[13px] font-black text-white">Open workspace <ArrowRight className="h-4 w-4" /></a>
+              </div>
+            ) : (
+              <form onSubmit={submit} className="px-6 py-5">
+                <div className="mb-4 rounded-xl border border-brand-line bg-white px-3 py-2.5 text-[12px] text-brand-muted">Requesting as <b className="text-brand-black">{authUser.email}</b>{applicationStatus === "rejected" && <span className="mt-1 block text-brand-orangeDark">Your previous request was declined. You may update and resubmit it.</span>}</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                      Your name *
+                    </span>
+                    <input
+                      required
+                      value={form.fullName}
+                      onChange={(event) => setForm({ ...form, fullName: event.target.value })}
+                      className="mt-1.5 w-full rounded-xl border-2 border-brand-black bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-brand-orange"
+                      placeholder="Maya Chen"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                      Company *
+                    </span>
+                    <input
+                      required
+                      value={form.startupName}
+                      onChange={(event) => setForm({ ...form, startupName: event.target.value })}
+                      className="mt-1.5 w-full rounded-xl border-2 border-brand-black bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-brand-orange"
+                      placeholder="Lumen"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                      Industry *
+                    </span>
+                    <input
+                      required
+                      value={form.industry}
+                      onChange={(event) => setForm({ ...form, industry: event.target.value })}
+                      className="mt-1.5 w-full rounded-xl border-2 border-brand-black bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-brand-orange"
+                      placeholder="B2B SaaS"
+                    />
+                  </label>
+                  <label className="block sm:col-span-2">
+                    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                      Website
+                    </span>
+                    <input
+                      value={form.url}
+                      onChange={(event) => setForm({ ...form, url: event.target.value })}
+                      className="mt-1.5 w-full rounded-xl border-2 border-brand-black bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-brand-orange"
+                      placeholder="https://company.com"
+                    />
+                  </label>
+                  <label className="block sm:col-span-2">
+                    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
+                      Biggest growth blocker *
+                    </span>
+                    <select
+                      required
+                      value={form.challenge1}
+                      onChange={(event) => setForm({ ...form, challenge1: event.target.value })}
+                      className="mt-1.5 w-full rounded-xl border-2 border-brand-black bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-brand-orange"
+                    >
+                      <option value="">Select one</option>
+                      {[
+                        "Finding high-intent leads",
+                        "Low reply rates on outreach",
+                        "Ad spend without attribution",
+                        "Content that doesn't convert",
+                        "No presence in AI answers",
+                        "Too many disconnected tools",
+                      ].map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {formError && (
+                  <p className="mt-3 rounded-lg border border-brand-orange/40 bg-brand-orangeLight px-3 py-2 text-[11px] font-semibold text-brand-orangeDark">
+                    {formError}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="btn-tactile-orange mt-5 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-brand-orange bg-brand-orange px-5 py-3.5 text-[13px] font-black text-white disabled:opacity-60"
+                >
+                  {submitting ? "Claiming your spot…" : "Join cohort 01"}
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+                <p className="mt-3 text-center font-mono text-[8.5px] uppercase tracking-[0.08em] text-brand-quiet">
+                  No card required. The Threadly team reviews every beta request.
+                </p>
+              </form>
             )}
           </div>
         </div>
       )}
-
-    </motion.div>
+    </div>
   );
 }

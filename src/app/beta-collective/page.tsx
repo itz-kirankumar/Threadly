@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Users, ArrowRight, CheckCircle2, Star, ShieldCheck, Heart, Sparkles } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Beta Collective | Wisentry",
+  title: "Beta Collective | Threadly",
   description: "Access 1,000+ pre-vetted consumer early adopters ready to test your product, give qualitative feedback, and evangelize.",
 };
 
@@ -51,7 +51,7 @@ export default function BetaCollectivePage() {
               </div>
               <h3 className="text-2xl font-black text-gray-900 mb-3">100% Real Humans</h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Zero bots or fake click farms. Every member of the Wisentry Collective is manually vetted to ensure thoughtful, authentic feedback on your app.
+                Zero bots or fake click farms. Every member of the Threadly Collective is manually vetted to ensure thoughtful, authentic feedback on your app.
               </p>
             </div>
 

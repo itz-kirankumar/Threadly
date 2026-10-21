@@ -5,8 +5,8 @@ import Link from "next/link";
 import { Sparkles, ArrowRight, ShieldCheck, Heart, Users } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "About Wisentry | Our Story & Vision",
-  description: "Learn how Wisentry was founded to solve the brutal distribution dilemma facing consumer startups.",
+  title: "About Threadly | Our Story & Vision",
+  description: "Learn how Threadly was founded to solve the brutal distribution dilemma facing consumer startups.",
 };
 
 export default function AboutPage() {
@@ -19,16 +19,16 @@ export default function AboutPage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-12 max-w-4xl text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-violet/10 text-brand-violet text-xs sm:text-sm font-bold mb-6">
             <Sparkles className="w-4 h-4 text-brand-electric" />
-            Company • The Wisentry Story
+            Company • The Threadly Story
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight text-gray-900 leading-tight mb-6">
             <span>About </span>
-            <span className="extruded-violet text-brand-bush">Wisentry</span>
+            <span className="extruded-violet text-brand-bush">Threadly</span>
           </h1>
 
           <p className="text-lg sm:text-xl text-gray-600 leading-relaxed mb-12">
-            We started Wisentry because we were tired of seeing great consumer products die in the dark.
+            We started Threadly because we were tired of seeing great consumer products die in the dark.
           </p>
         </div>
 
@@ -50,7 +50,7 @@ export default function AboutPage() {
               We believe every great product has thousands of people actively searching for it right now—complaining on Reddit, tweeting on X, and asking questions in Discord servers.
             </p>
             <p>
-              Wisentry connects those dots. By combining intelligent social intent mining with a curated collective of 1,000+ enthusiastic consumer testers, we give B2C founders the unfair distribution advantage they need to survive and thrive.
+              Threadly connects those dots. By combining intelligent social intent mining with a curated collective of 1,000+ enthusiastic consumer testers, we give B2C founders the unfair distribution advantage they need to survive and thrive.
             </p>
           </div>
         </div>

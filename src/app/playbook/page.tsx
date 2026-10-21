@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Check, Target, Compass, Sparkles, Layers } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "The 3-Step Distribution Playbook | Wisentry",
+  title: "The 3-Step Distribution Playbook | Threadly",
   description: "The complete tactical roadmap for consumer founders to go from Day 0 to their first 1,000 real active users.",
 };
 
@@ -28,7 +28,7 @@ export default function PlaybookPage() {
           </h1>
 
           <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed mb-10">
-            No vague growth hacks or wasted ad spend. Here is the exact phased system consumer founders use on Wisentry to acquire and retain their first 1,000 passionate users.
+            No vague growth hacks or wasted ad spend. Here is the exact phased system consumer founders use on Threadly to acquire and retain their first 1,000 passionate users.
           </p>
 
           <div className="flex justify-center mb-16">
@@ -36,7 +36,7 @@ export default function PlaybookPage() {
               href="/#waitlist" 
               className="btn-tactile-violet px-8 py-4 rounded-2xl bg-brand-violet text-white font-black text-base flex items-center gap-2"
             >
-              <span>Execute with Wisentry</span>
+              <span>Execute with Threadly</span>
               <ArrowRight className="w-5 h-5 text-brand-pastel" />
             </Link>
           </div>
@@ -62,7 +62,7 @@ export default function PlaybookPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-emerald-500" />
-                  <span>Configure automated keywords on Wisentry Signal Radar</span>
+                  <span>Configure automated keywords on Threadly Signal Radar</span>
                 </div>
               </div>
             </div>
@@ -76,7 +76,7 @@ export default function PlaybookPage() {
               <span className="text-xs font-bold uppercase tracking-wider text-brand-bush mb-2 block">Phase 2 • Days 8-21</span>
               <h2 className="text-3xl font-black text-gray-900 mb-4">Warm Infiltration & Beta Feedback Sprint</h2>
               <p className="text-gray-600 text-base leading-relaxed mb-6">
-                Engage live discussions using value-first responses. Invite interested users to your private beta or waitlist. Distribute your prototype to Wisentry&apos;s vetted cohort of 1,000+ testers for instant UX feedback.
+                Engage live discussions using value-first responses. Invite interested users to your private beta or waitlist. Distribute your prototype to Threadly&apos;s vetted cohort of 1,000+ testers for instant UX feedback.
               </p>
               <div className="space-y-2 text-sm text-gray-700">
                 <div className="flex items-center gap-2">

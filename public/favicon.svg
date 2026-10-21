@@ -1,4 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="15" fill="#f3ebfc"/>
-  <path d="M32 7c-1.2 14.5-3.5 22.1-22 25 18.5 2.9 20.8 10.5 22 25 1.2-14.5 3.5-22.1 22-25C35.5 29.1 33.2 21.5 32 7Z" fill="#6226a3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Threadly">
+  <rect width="64" height="64" rx="16" fill="#0a0a0a"/>
+  <path
+    d="M22 15c8.4 0 15.2 6.8 15.2 15.2S30.4 45.4 22 45.4"
+    fill="none" stroke="#ff4500" stroke-width="7" stroke-linecap="round"
+  />
+  <path
+    d="M42 49c-8.4 0-15.2-6.8-15.2-15.2S33.6 18.6 42 18.6"
+    fill="none" stroke="#7c3aed" stroke-width="7" stroke-linecap="round"
+  />
 </svg>
