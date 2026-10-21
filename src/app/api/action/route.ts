@@ -22,6 +22,7 @@ import {
   saveOutreachEmail,
   scheduleDraft,
   scheduleLeadMeeting,
+  storeDiscoveredOpportunities,
   toggleWorkflow,
   updateContext,
   updateLeadEmail,
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
       if (!limit) return rateLimitUnavailable();
       if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
     }
-    const allowedPlatforms = new Set(["X", "Reddit", "Hacker News", "Indie Hackers", "GitHub", "Quora", "Web"]);
+    const allowedPlatforms = new Set(["X", "Reddit", "Hacker News", "Indie Hackers", "GitHub", "Quora", "Web", "Google Maps"]);
     if (["draft", "lead", "generate"].includes(action) && typeof body.platform === "string" && !allowedPlatforms.has(body.platform)) {
       return Response.json({ error: "Platform not supported." }, { status: 400 });
     }
@@ -162,6 +163,26 @@ export async function POST(request: Request) {
         case "opportunity":
           await updateOpportunity(user.uid, text(body, "id", 160)!, text(body, "status", 20)!);
           break;
+        case "scrapeOpportunitySave": {
+          const oppId = text(body, "id", 160)!;
+          await storeDiscoveredOpportunities(
+            user.uid,
+            [{
+              id: oppId,
+              platform: typeof body.platform === "string" ? body.platform : "Google Maps",
+              community: text(body, "community", 120, true) || "Local Business",
+              author: text(body, "author", 160, true) || "Business",
+              title: text(body, "title", 250)!,
+              body: text(body, "body", 2000, true) || "",
+              url: text(body, "url", 500, true) || "",
+              publishedAt: text(body, "publishedAt", 80, true) || new Date().toISOString(),
+              relevanceScore: typeof body.relevanceScore === "number" ? body.relevanceScore : 90,
+            }],
+            "Google Maps Scraper",
+            { autoOutreachThreshold: 60 }
+          );
+          return Response.json({ ok: true });
+        }
         case "draft":
           await saveDraft(user.uid, { id: text(body, "id", 160, true), opportunityId: text(body, "opportunityId", 160, true), platform: "X", kind: text(body, "kind", 80)!, text: text(body, "text", 8000)! });
           break;
@@ -180,9 +201,45 @@ export async function POST(request: Request) {
         case "published":
           await markPublished(user.uid, text(body, "id", 160)!);
           break;
-        case "lead":
-          await saveLead(user.uid, { opportunityId: text(body, "opportunityId", 160, true), name: text(body, "name", 160)!, email: text(body, "email", 254, true), company: text(body, "company", 160, true), role: text(body, "role", 120, true), platform: "X", pain: text(body, "pain", 5000, true), notes: text(body, "notes", 4000, true) }, user.email);
+        case "lead": {
+          const leadPlatform = (typeof body.platform === "string" && body.platform) ? body.platform : "X";
+          await saveLead(user.uid, {
+            opportunityId: text(body, "opportunityId", 160, true),
+            name: text(body, "name", 160)!,
+            email: text(body, "email", 254, true),
+            company: text(body, "company", 160, true),
+            role: text(body, "role", 120, true),
+            platform: leadPlatform,
+            pain: text(body, "pain", 5000, true),
+            notes: text(body, "notes", 4000, true),
+          }, user.email);
           break;
+        }
+        case "importMapsLeads": {
+          const rawPlaces = Array.isArray(body.places) ? (body.places as any[]) : [];
+          let imported = 0;
+          for (const p of rawPlaces) {
+            if (!p || typeof p.title !== "string") continue;
+            const companyName = p.title.trim();
+            const contactEmail = Array.isArray(p.emails) && p.emails.length > 0 ? p.emails[0] : (typeof p.email === "string" ? p.email : undefined);
+            const phoneStr = typeof p.phone === "string" ? p.phone : "";
+            const websiteStr = typeof p.website === "string" ? p.website : "";
+            const ratingStr = typeof p.rating === "number" ? `${p.rating}★ (${p.reviewCount || 0} reviews)` : "";
+
+            await saveLead(user.uid, {
+              opportunityId: p.id || null,
+              name: p.ownerName || `${companyName} Owner`,
+              email: contactEmail,
+              company: companyName,
+              role: p.category || "Business Owner",
+              platform: "Google Maps",
+              pain: `Local business listing: ${p.address || ""}. Rating: ${ratingStr}`,
+              notes: `Scraped via Google Maps Scraper.\nCategory: ${p.category || ""}\nAddress: ${p.address || ""}\nPhone: ${phoneStr}\nWebsite: ${websiteStr}\nRating: ${ratingStr}\nMaps: ${p.mapsUrl || ""}`,
+            }, user.email);
+            imported++;
+          }
+          return Response.json({ ok: true, imported });
+        }
         case "leadEmail":
           await updateLeadEmail(user.uid, text(body, "id", 160)!, text(body, "email", 254)!);
           break;

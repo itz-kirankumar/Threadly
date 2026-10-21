@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import XDiscovery from "./PortalXDiscovery";
 import PortalOutreach from "./PortalOutreach";
+import PortalMapsScraper from "./PortalMapsScraper";
+import type { GoogleMapsPlace } from "@/lib/maps-scraper";
 import {
   CampaignsPage,
   GeoPage,
@@ -82,12 +84,13 @@ type State = {
 type Page =
   | "Dashboard" | "Discover" | "Outreach" | "Workflows" | "Radar" | "Content Studio"
   | "Calendar" | "Leads" | "Team" | "Analytics" | "AI Insights" | "Workspace" | "Settings"
-  | "Campaigns" | "Sequences" | "Segments" | "Scheduler" | "Revenue" | "GEO";
+  | "Campaigns" | "Sequences" | "Segments" | "Scheduler" | "Revenue" | "GEO" | "Maps Scraper";
 
 const nav: { label: Page; icon: typeof LayoutDashboard }[] = [
   { label: "Dashboard", icon: LayoutDashboard },
   { label: "Discover", icon: Compass },
   { label: "Radar", icon: Radio },
+  { label: "Maps Scraper", icon: MapPin },
   { label: "Segments", icon: Target },
   { label: "Outreach", icon: Send },
   { label: "Sequences", icon: Mail },
@@ -103,7 +106,7 @@ const nav: { label: Page; icon: typeof LayoutDashboard }[] = [
 ];
 
 const stages = ["identified", "engaged", "qualified", "conversation", "converted"];
-const platforms = ["All platforms", "X", "Reddit", "Hacker News", "Indie Hackers", "GitHub", "Web"];
+const platforms = ["All platforms", "X", "Reddit", "Google Maps", "Hacker News", "Indie Hackers", "GitHub", "Web"];
 const intentOptions = ["All intent", "Auto-Outreached (≥60%)", "High", "Medium", "Low"];
 const contextFields: [string, string][] = [
   ["website", "Website"],
@@ -125,7 +128,7 @@ const logoPresets = [
 ];
 
 function PlatformBadge({ platform }: { platform: string }) {
-  const icon = platform === "Reddit" ? "🔴" : platform === "Hacker News" ? "🟠" : platform === "Indie Hackers" ? "🔵" : platform === "GitHub" ? "🐙" : platform === "Web" ? "🌐" : "𝕏";
+  const icon = platform === "Google Maps" ? "🗺️" : platform === "Reddit" ? "🔴" : platform === "Hacker News" ? "🟠" : platform === "Indie Hackers" ? "🔵" : platform === "GitHub" ? "🐙" : platform === "Web" ? "🌐" : "𝕏";
   return <span className={`platform platform-${platform.toLowerCase().replace(/\s+/g, "-")}`} aria-label={platform}>{icon}</span>;
 }
 function formatDate(date: string) { return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
@@ -283,7 +286,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    if (["Discover", "Outreach", "Workflows", "Team", "Campaigns", "Sequences", "Segments", "Scheduler", "Revenue", "GEO"].includes(page)) void refresh();
+    if (["Discover", "Outreach", "Workflows", "Team", "Campaigns", "Sequences", "Segments", "Scheduler", "Revenue", "GEO", "Maps Scraper"].includes(page)) void refresh();
   }, [page, refresh]);
 
   const { events: liveEvents, connected: liveConnected } = useLiveStream(!!data, growth?.events || [], getIdToken);
@@ -1265,7 +1268,10 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 <p>{page === "Radar" ? "Keep promising conversations and your next action together." : "Collect the questions your customers are already asking."}</p>
               </div>
               <div className="page-actions">
-                <span className="source-notice"><span className="tiny-dot"/> Multi-source radar: Tavily + X</span>
+                <button className="btn btn-outline" onClick={() => go("Maps Scraper")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <MapPin size={15} style={{ color: "#ff4500" }}/> Maps Scraper
+                </button>
+                <span className="source-notice"><span className="tiny-dot"/> Multi-source radar: Tavily + X + Maps</span>
                 {page === "Discover" ? (
                   <button className="btn btn-outline" onClick={() => go("Radar")}><Radio size={16}/> View Radar</button>
                 ) : (
@@ -1330,6 +1336,60 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
               </div>
             </>}
           </>}
+
+          {/* GOOGLE MAPS & LOCAL BUSINESS SCRAPER */}
+          {page === "Maps Scraper" && (
+            <PortalMapsScraper
+              companyContext={context}
+              getIdToken={getIdToken}
+              onAddLead={async (place) => {
+                const ok = await act("lead", {
+                  opportunityId: place.id,
+                  name: place.title,
+                  email: place.emails[0] || "",
+                  company: place.title,
+                  role: place.category || "Business Owner",
+                  platform: "Google Maps",
+                  pain: `Local business listing: ${place.address}. Rating: ${place.rating}★ (${place.reviewCount} reviews).`,
+                  notes: `Scraped via Google Maps Scraper.\nCategory: ${place.category}\nAddress: ${place.address}\nPhone: ${place.phone || "N/A"}\nWebsite: ${place.website || "N/A"}\nEmails: ${place.emails.join(", ") || "N/A"}\nRating: ${place.rating}★ (${place.reviewCount} reviews)\nGoogle Maps: ${place.mapsUrl || "N/A"}`,
+                }, `Added ${place.title} to Leads`);
+                return !!ok;
+              }}
+              onSaveOpportunity={async (place) => {
+                await act("scrapeOpportunitySave", {
+                  id: place.id,
+                  platform: "Google Maps",
+                  community: place.city ? `${place.category} · ${place.city}` : place.category,
+                  author: place.title,
+                  title: `${place.title} (${place.rating}★ · ${place.reviewCount} reviews)`,
+                  body: `${place.address}. ${place.phone ? `Phone: ${place.phone}. ` : ""}${place.website ? `Website: ${place.website}. ` : ""}${place.emails.length > 0 ? `Emails: ${place.emails.join(", ")}.` : ""}`,
+                  url: place.mapsUrl || place.website || "",
+                  publishedAt: place.scrapedAt,
+                  relevanceScore: Math.min(99, Math.round(place.rating * 19)),
+                }, `Saved ${place.title} to Radar`);
+              }}
+              onDraftOutreach={(place) => {
+                setSelected({
+                  id: place.id,
+                  platform: "Google Maps",
+                  community: place.category,
+                  author: place.title,
+                  title: place.title,
+                  body: `Local business located at ${place.address}. Phone: ${place.phone || "N/A"}, Website: ${place.website || "N/A"}, Rating: ${place.rating}★ across ${place.reviewCount} reviews.`,
+                  pain: `Local presence & reputation optimization for ${place.title}`,
+                  intent: place.rating < 4.2 ? "High (Reputation management)" : "High (Growth & scaling)",
+                  relevance: 95,
+                  engagement: `${place.reviewCount} reviews`,
+                  source_url: place.mapsUrl || place.website || null,
+                  source_kind: "gmaps",
+                  observed_at: place.scrapedAt,
+                  status: "saved",
+                });
+                openStudio();
+              }}
+              setToast={setToast}
+            />
+          )}
 
           {/* OUTREACH */}
           {page === "Outreach" && (
