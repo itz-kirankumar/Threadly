@@ -1456,7 +1456,7 @@ export function RevenuePage({ growth, leads }: { growth: Growth; leads: LeadLite
   const maxRevenue = Math.max(1, ...channelTotals.map(([, value]) => value.revenue));
 
   const funnel = [
-    { label: "Signals captured", value: Math.max(leads.length * 4, 24) },
+    { label: "Signals captured", value: leads.length },
     { label: "Prospects scored", value: growth.scores.length },
     { label: "Qualified", value: growth.metrics.qualifiedLeads },
     { label: "In conversation", value: leads.filter((lead) => ["conversation", "converted"].includes(lead.stage)).length },

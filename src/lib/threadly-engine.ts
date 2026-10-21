@@ -606,11 +606,11 @@ const demoGrowth = new Map<string, GrowthState>();
 function buildInitialState(uid: string, leads: Lead[]): GrowthState {
   const seed = `threadly-${uid}`;
   return {
-    campaigns: [buildCampaign(seed, 0), buildCampaign(seed, 1), buildCampaign(seed, 2), buildCampaign(seed, 3)],
-    sequences: [buildSequence(seed, leads)],
+    campaigns: [],
+    sequences: [],
     segments: buildSegments(seed, leads),
-    slots: buildSlots(seed),
-    geo: buildGeo(seed),
+    slots: [],
+    geo: [],
     scores: leads.map((lead) => scoreLead(lead, seed)),
     spend: [],
     seededAt: now(),
@@ -690,7 +690,8 @@ export async function readGrowth(uid: string, leads: Lead[]): Promise<GrowthStat
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
-  const campaigns = asList<Campaign>(stored.campaigns, defaults.campaigns).map((item, index) => {
+  const campaigns = asList<Campaign>(stored.campaigns, defaults.campaigns)
+    .filter(item => !item.id.startsWith("cmp-1-") && !item.id.startsWith("cmp-2-") && !item.id.startsWith("cmp-3-") && !item.id.startsWith("cmp-4-")).map((item, index) => {
     const fallback = defaults.campaigns[index] ?? defaults.campaigns[0];
     const record: Record<string, unknown> = isRecord(item) ? item : {};
     return {
@@ -700,7 +701,8 @@ export async function readGrowth(uid: string, leads: Lead[]): Promise<GrowthStat
       creatives: asList(record.creatives, fallback.creatives),
     } as Campaign;
   });
-  const sequences = asList<Sequence>(stored.sequences, defaults.sequences).map((item, index) => {
+  const sequences = asList<Sequence>(stored.sequences, defaults.sequences)
+    .filter(item => !item.id.startsWith("seq-inbound-")).map((item, index) => {
     const fallback = defaults.sequences[index] ?? defaults.sequences[0];
     const record: Record<string, unknown> = isRecord(item) ? item : {};
     return {
@@ -834,9 +836,7 @@ export async function getGrowthSnapshot(uid: string, leads: Lead[]): Promise<Gro
     liveCampaign(campaign, loop, uid),
   );
   const sequences = state.sequences.map((sequence) => liveSequence(sequence, loop));
-  const events = liveEvents(buildEvents(`threadly-${uid}`), loop).sort((a, b) =>
-    b.occurred_at.localeCompare(a.occurred_at),
-  );
+  const events = buildLiveFeed(uid, 14, undefined, leads);
   const scores = leads.map((lead) =>
     state.scores.find((score) => score.leadId === lead.id) ?? scoreLead(lead, uid),
   );
@@ -1560,9 +1560,7 @@ export function buildLiveFeed(
     }
   }
 
-  const combined = [...realEvents, ...simulated]
+  return realEvents
     .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
     .slice(0, limit);
-
-  return combined;
 }

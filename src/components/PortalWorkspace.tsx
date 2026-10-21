@@ -457,11 +457,11 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
   function openStudio(opp?: Opportunity) { setSelected(opp || null); setEditingDraft(null); setDraftText(""); setDraftPlatform(opp?.platform || "X"); setDraftKind(opp ? "Discussion response" : "Educational post"); go("Content Studio"); setSelected(opp || null); }
   function editDraft(draft: Draft) { setEditingDraft(draft); setDraftText(draft.text); setDraftPlatform(draft.platform); setDraftKind(draft.kind); go("Content Studio"); setEditingDraft(draft); }
 
-  const realOpportunities = data?.opportunities.filter(o => o.source_kind !== "demo" && o.status !== "dismissed") || [];
-  const visible = useMemo(() => (data?.opportunities || []).filter(o => o.status !== "dismissed" && (data?.demo || o.source_kind !== "demo") && (platform === "All platforms" || o.platform === platform) && (intent === "All intent" || (intent.includes("60%") ? (o.relevance || 0) >= 60 : o.intent === intent)) && `${o.title} ${o.body} ${o.pain} ${o.community}`.toLowerCase().includes(query.toLowerCase())), [data, platform, intent, query]);
+  const realOpportunities = data?.opportunities.filter(o => o.source_kind !== "demo" && o.status !== "dismissed" && !o.id.startsWith("x-sample-")) || [];
+  const visible = useMemo(() => (data?.opportunities || []).filter(o => o.status !== "dismissed" && o.source_kind !== "demo" && !o.id.startsWith("x-sample-") && (platform === "All platforms" || o.platform === platform) && (intent === "All intent" || (intent.includes("60%") ? (o.relevance || 0) >= 60 : o.intent === intent)) && `${o.title} ${o.body} ${o.pain} ${o.community}`.toLowerCase().includes(query.toLowerCase())), [data, platform, intent, query]);
   const stats = {
-    opportunities: realOpportunities.length || (data?.demo ? (data?.opportunities.length || 0) : 0),
-    conversations: realOpportunities.filter(o => o.intent === "High").length || (data?.demo ? (data?.opportunities.filter(o => o.intent === "High").length || 0) : 0),
+    opportunities: realOpportunities.length,
+    conversations: realOpportunities.filter(o => o.intent === "High").length,
     drafts: data?.drafts.filter(d => (d.status === "draft" || d.status === "review")).length || 0,
     leads: data?.leads.length || 0,
     workflows: (data?.workflows || []).filter(w => w.enabled).length,
@@ -543,8 +543,8 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
             <Clock3 size={13}/>
             <span>{formatMemberTime(clockNow, zone)}</span>
           </span>
-          <span className="demo-pill"><span className="tiny-dot"/> {data?.demo ? "PREVIEW MODE" : "PRODUCTION WORKSPACE"}</span>
-          <button className="icon-button" aria-label="Help" onClick={() => setToast(data?.demo ? "This is a preview workspace with simulated signals and live pipelines." : "Your signals and team workspace are safely saved.")}><CircleHelp size={19}/></button>
+          <span className="demo-pill"><span className="tiny-dot"/> LIVE WORKSPACE</span>
+          <button className="icon-button" aria-label="Help" onClick={() => setToast("Your signals, real-time leads, and workspace data are safely saved.")}><CircleHelp size={19}/></button>
           <button className="icon-button" aria-label="Notifications" onClick={() => setToast("All outreach workflows are up to date.")}><Bell size={19}/></button>
 
           {/* User Account Menu with Logout */}
@@ -1798,7 +1798,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
           <h2>Save prospect lead</h2>
           <p>Link the conversation context directly to this prospect.</p>
           <label>NAME<input value={leadForm.name} onChange={e => setLeadForm({ ...leadForm, name: e.target.value })}/></label>
-          <label>EMAIL <input type="email" value={leadForm.email} onChange={e => setLeadForm({ ...leadForm, email: e.target.value })} placeholder="alex@company.com"/></label>
+          <label>EMAIL <input type="email" value={leadForm.email} onChange={e => setLeadForm({ ...leadForm, email: e.target.value })} placeholder="founder@company.com"/></label>
           <div className="dialog-grid">
             <label>COMPANY<input value={leadForm.company} onChange={e => setLeadForm({ ...leadForm, company: e.target.value })}/></label>
             <label>ROLE<input value={leadForm.role} onChange={e => setLeadForm({ ...leadForm, role: e.target.value })}/></label>

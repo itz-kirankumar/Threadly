@@ -107,8 +107,8 @@ export default function PortalOutreach({
   const [isCreatingCampaign, setIsCreatingCampaign] = useState<boolean>(false);
   
   // OpenReply Simulation Tester
-  const [simCommenter, setSimCommenter] = useState<string>("alex_founder");
-  const [simCommentText, setSimCommentText] = useState<string>("Can you send me the LINK? We need this for our team.");
+  const [simCommenter, setSimCommenter] = useState<string>("");
+  const [simCommentText, setSimCommentText] = useState<string>("");
   const [simIsFollower, setSimIsFollower] = useState<boolean>(false);
   const [simResult, setSimResult] = useState<ReturnType<typeof executeOpenReplyTrigger> | null>(null);
 
@@ -123,8 +123,8 @@ export default function PortalOutreach({
 
   // PumpGTM State
   const [enrichedBuyers, setEnrichedBuyers] = useState<Record<string, EnrichedBuyer>>({});
-  const [triageInput, setTriageInput] = useState<string>("Hey! Saw this, sounds super interesting. Can you send over pricing or a calendar link?");
-  const [triageProspectName, setTriageProspectName] = useState<string>("Alex");
+  const [triageInput, setTriageInput] = useState<string>("");
+  const [triageProspectName, setTriageProspectName] = useState<string>("");
   const [triageResult, setTriageResult] = useState<ReplyTriageResult | null>(null);
 
   const selectedEmail = useMemo(() => emails.find(email => email.id === selectedId) || null, [emails, selectedId]);
@@ -846,7 +846,13 @@ export default function PortalOutreach({
 
               {/* Campaign Cards */}
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {openreplyCampaigns.map(camp => {
+                {!openreplyCampaigns.length ? (
+                  <div style={{ padding: "20px 14px", textAlign: "center", border: "1px dashed #ded5e8", borderRadius: "8px", background: "#fcfaff" }}>
+                    <MessageCircle size={22} style={{ color: "#e1306c", margin: "0 auto 6px" }} />
+                    <strong style={{ display: "block", fontSize: "12px", color: "#241831" }}>No Active Automations</strong>
+                    <span style={{ fontSize: "11px", color: "#8a7b97" }}>Click &quot;+ New Campaign&quot; to set up auto-DMs triggered by post comments.</span>
+                  </div>
+                ) : openreplyCampaigns.map(camp => {
                   const isSelected = camp.id === selectedCampaignId;
                   return (
                     <div
@@ -1246,7 +1252,13 @@ export default function PortalOutreach({
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {dispatches.map(item => (
+                  {!dispatches.length ? (
+                    <div style={{ padding: "16px 12px", textAlign: "center", border: "1px dashed #ded5e8", borderRadius: "8px", background: "#fcfaff" }}>
+                      <Send size={18} style={{ color: "#7c3aed", margin: "0 auto 6px" }} />
+                      <strong style={{ display: "block", fontSize: "12px", color: "#241831" }}>No Scheduled Threads</strong>
+                      <span style={{ fontSize: "11px", color: "#8a7b97" }}>Compose a thread above to schedule or broadcast across destinations.</span>
+                    </div>
+                  ) : dispatches.map(item => (
                     <div key={item.id} className="cogsend-queue-item">
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
                         <span style={{ fontSize: "10px", fontWeight: 700, color: "#37145a" }}>
