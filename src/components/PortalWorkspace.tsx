@@ -86,6 +86,7 @@ type Page =
 
 const nav: { label: Page; icon: typeof LayoutDashboard }[] = [
   { label: "Dashboard", icon: LayoutDashboard },
+  { label: "Discover", icon: Compass },
   { label: "Radar", icon: Radio },
   { label: "Segments", icon: Target },
   { label: "Outreach", icon: Send },
@@ -1125,7 +1126,11 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
               </div>
               <div className="page-actions">
                 <span className="source-notice"><span className="tiny-dot"/> Multi-source radar: Tavily + X</span>
-                <button className="btn btn-dark" onClick={() => go("Discover")}><Search size={16}/> Discover Signals</button>
+                {page === "Discover" ? (
+                  <button className="btn btn-outline" onClick={() => go("Radar")}><Radio size={16}/> View Radar</button>
+                ) : (
+                  <button className="btn btn-dark" onClick={() => go("Discover")}><Search size={16}/> Discover Signals</button>
+                )}
               </div>
             </div>
 
