@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { patchData, readData, writeData } from "./portal-db";
-import type { Lead } from "./portal-data";
+import type { Lead, Opportunity } from "./portal-data";
 import { searchTavily } from "./tavily";
 
 /* ============================================================
@@ -1523,9 +1523,46 @@ export async function refreshLeadScores(uid: string, leads: Lead[]) {
   return state.scores;
 }
 
-export function buildLiveFeed(uid: string, limit = 14): LiveEvent[] {
+export function buildLiveFeed(
+  uid: string,
+  limit = 14,
+  realOpportunities?: Opportunity[],
+  realLeads?: Lead[]
+): LiveEvent[] {
   const loop = Math.floor(Date.now() / 6000) % 120;
-  return liveEvents(buildEvents(`threadly-${uid}`), loop)
+  const simulated = liveEvents(buildEvents(`threadly-${uid}`), loop);
+
+  const realEvents: LiveEvent[] = [];
+  if (realOpportunities?.length) {
+    for (const opp of realOpportunities.slice(0, 6)) {
+      realEvents.push({
+        id: `real-opp-${opp.id}`,
+        kind: "signal",
+        title: `Live ${opp.platform} signal: ${opp.community}`,
+        detail: opp.title,
+        actor: opp.author || "Web Source",
+        tone: "orange",
+        occurred_at: opp.observed_at || new Date().toISOString(),
+      });
+    }
+  }
+  if (realLeads?.length) {
+    for (const lead of realLeads.slice(0, 6)) {
+      realEvents.push({
+        id: `real-lead-${lead.id}`,
+        kind: lead.stage === "converted" || lead.stage === "qualified" ? "qualify" : "outreach",
+        title: `Lead ${lead.name} (${lead.platform}) · ${lead.stage}`,
+        detail: lead.pain || "Prospect in active growth funnel",
+        actor: lead.owner || "Growth OS",
+        tone: lead.stage === "converted" ? "ok" : "violet",
+        occurred_at: lead.created_at || new Date().toISOString(),
+      });
+    }
+  }
+
+  const combined = [...realEvents, ...simulated]
     .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
     .slice(0, limit);
+
+  return combined;
 }

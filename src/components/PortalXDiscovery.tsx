@@ -33,6 +33,7 @@ export default function XDiscovery({
   getIdToken,
   onResults,
   onSaveProspect,
+  onGoRadar,
 }: {
   context: Record<string, string>;
   provider: string | null;
@@ -41,6 +42,7 @@ export default function XDiscovery({
   getIdToken: () => Promise<string>;
   onResults: () => Promise<void>;
   onSaveProspect?: (item: ProspectItem) => Promise<void>;
+  onGoRadar?: () => void;
 }) {
   const [source, setSource] = useState<"web" | "x">("web");
   const [topic, setTopic] = useState((context.painPoints || '').split(/[,;\n]/)[0].slice(0, 100));
@@ -48,6 +50,7 @@ export default function XDiscovery({
   const [webResult, setWebResult] = useState<WebResults | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [savedProspectIds, setSavedProspectIds] = useState<Set<string>>(new Set());
 
   const xConnectionLabel = providerStatus === 'connected'
     ? `${provider} connected · account verified`
@@ -171,37 +174,69 @@ export default function XDiscovery({
         {/* Web Results */}
         {source === 'web' && webResult && (
           <>
-            <p>
-              <strong>{webResult.discussions.length} community discussions found</strong> · via {webResult.provider} · Retrieved {new Date(webResult.retrievedAt).toLocaleTimeString()}
-            </p>
-            <p className="muted-copy">Search used: {webResult.query}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', background: 'var(--thread-orange-light, #fff1eb)', border: '1px solid #fed7aa', padding: '12px 16px', borderRadius: '8px', margin: '14px 0' }}>
+              <div>
+                <strong style={{ color: '#9a3412', display: 'block', fontSize: '14px' }}>
+                  ✓ {webResult.discussions.length} Discussions Synced to Radar
+                </strong>
+                <span style={{ fontSize: '12px', color: '#7c2d12' }}>
+                  Real discussions from Reddit, Hacker News, and Indie Hackers are active in your Radar.
+                </span>
+              </div>
+              {onGoRadar && (
+                <button
+                  type="button"
+                  className="btn btn-dark"
+                  onClick={onGoRadar}
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
+                >
+                  Open Radar Feed →
+                </button>
+              )}
+            </div>
+
+            <p className="muted-copy">Search used: {webResult.query} · Provider: {webResult.provider}</p>
             {!webResult.discussions.length && <p>No discussions matched. Try a broader problem description.</p>}
             <div className="x-results">
               {webResult.discussions.map(d => (
                 <article key={d.id} className="x-result">
-                  <span className="status-tag">{d.platform} · {d.community}</span>
-                  {d.author && <strong> · {d.author}</strong>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span className="status-tag">{d.platform} · {d.community}</span>
+                      {d.author && <strong> · {d.author}</strong>}
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>Radar Synced ✓</span>
+                  </div>
                   <h3 style={{ margin: '8px 0 6px', fontSize: '14px', fontWeight: 600 }}>{d.title}</h3>
                   <p className="x-post-text">{d.body}</p>
-                  <p className="muted-copy">Relevance: {d.relevanceScore}% · Unqualified prospect signal</p>
+                  <p className="muted-copy">Match Relevance: {d.relevanceScore}% · Real-time market signal</p>
                   <div className="outreach-result-actions">
                     <a className="text-link" href={d.url} target="_blank" rel="noopener noreferrer">
                       Open original thread ↗
                     </a>
                     {onSaveProspect && (
-                      <button
-                        className="btn btn-outline"
-                        type="button"
-                        onClick={() => onSaveProspect({
-                          id: d.id,
-                          author: d.author,
-                          text: `${d.title} — ${d.body}`,
-                          url: d.url,
-                          platform: d.platform,
-                        })}
-                      >
-                        Add prospect
-                      </button>
+                      savedProspectIds.has(d.id) ? (
+                        <span style={{ color: "#16a34a", fontSize: "12px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px" }}>
+                          ✓ Lead in Pipeline
+                        </span>
+                      ) : (
+                        <button
+                          className="btn btn-outline"
+                          type="button"
+                          onClick={async () => {
+                            setSavedProspectIds(prev => new Set([...prev, d.id]));
+                            await onSaveProspect({
+                              id: d.id,
+                              author: d.author,
+                              text: `${d.title} — ${d.body}`,
+                              url: d.url,
+                              platform: d.platform,
+                            });
+                          }}
+                        >
+                          + Add as Lead
+                        </button>
+                      )
                     )}
                   </div>
                 </article>

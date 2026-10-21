@@ -490,13 +490,12 @@ function selectRecords(uid: string, data: WorkspaceData) {
   return {
     workspace: { ...workspace, context: { ...blankContext, ...(workspace.context || {}) } },
     opportunities: values(data.opportunities)
-      .filter(item => item.platform === "X" && (isDemo || item.source_kind !== "demo"))
+      .filter(item => (isDemo || item.source_kind !== "demo"))
       .sort((a, b) => b.observed_at.localeCompare(a.observed_at)),
     drafts: values(data.drafts)
-      .filter(item => item.platform === "X" && (isDemo || item.origin !== "sample"))
+      .filter(item => (isDemo || item.origin !== "sample"))
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),
     leads: values(data.leads)
-      .filter(item => item.platform === "X")
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),
     outreachEmails: values(data.outreachEmails)
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -767,6 +766,8 @@ export async function storeDiscoveredOpportunities(_uid: string, items: Discover
   const updates = Object.fromEntries(items.map(item => {
     const id = safeId(item.id);
     const previous = existing[id];
+    const score = item.relevanceScore || 75;
+    const intent: "High" | "Medium" | "Low" = score >= 80 ? "High" : score >= 60 ? "Medium" : "Low";
     const opp: Opportunity = {
       id,
       platform: item.platform,
@@ -774,10 +775,10 @@ export async function storeDiscoveredOpportunities(_uid: string, items: Discover
       author: item.author || "Web Source",
       title: item.title.slice(0, 160),
       body: item.body,
-      pain: "",
-      intent: "Unrated",
-      relevance: item.relevanceScore || 0,
-      engagement: `${item.relevanceScore}% match · ${provider}`,
+      pain: item.title.slice(0, 100),
+      intent,
+      relevance: score,
+      engagement: `${score}% match · ${provider}`,
       source_url: item.url,
       source_kind: provider.toLowerCase(),
       observed_at: item.publishedAt || now(),

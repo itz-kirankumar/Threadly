@@ -58,7 +58,8 @@ export async function GET(request: Request) {
 
       const tick = async () => {
         try {
-          const events = buildLiveFeed(uid, 12);
+          const state = await getState(uid).catch(() => null);
+          const events = buildLiveFeed(uid, 14, state?.opportunities, state?.leads);
           send("snapshot", {
             generatedAt: new Date().toISOString(),
             events,

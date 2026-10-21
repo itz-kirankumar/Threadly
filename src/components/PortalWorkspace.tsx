@@ -154,7 +154,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
   const [mobileNav, setMobileNav] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [query, setQuery] = useState("");
-  const [platform, setPlatform] = useState("X");
+  const [platform, setPlatform] = useState("All platforms");
   const [intent, setIntent] = useState("All intent");
   const [selected, setSelected] = useState<Opportunity | null>(null);
   const [editingDraft, setEditingDraft] = useState<Draft | null>(null);
@@ -1141,6 +1141,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 providerStatus={data.capabilities.xProviderStatus}
                 getIdToken={getIdToken}
                 onResults={refresh}
+                onGoRadar={() => go("Radar")}
                 onSaveProspect={async post => {
                   await act("lead", { name: post.author ? (post.author.startsWith("@") ? post.author : `@${post.author}`) : `${post.platform || "X"} prospect`, platform: post.platform || "X", opportunityId: post.id.startsWith("x-") || post.id.startsWith("tavily-") ? post.id : `x-${post.id}`, pain: post.text.slice(0, 500), notes: `Added from a public ${post.platform || "X"} conversation. Verify fit and contact details before outreach.` }, "Prospect saved");
                 }}
@@ -1174,6 +1175,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                     onDraft={() => openStudio(o)}
                     onSave={() => act("opportunity", { id: o.id, status: o.status === "saved" ? "new" : "saved" }, o.status === "saved" ? "Removed from saved" : "Saved to your radar")}
                     onDismiss={() => act("opportunity", { id: o.id, status: "dismissed" }, "Dismissed")}
+                    onAddLead={() => act("lead", { name: o.author ? (o.author.startsWith("@") ? o.author : `@${o.author}`) : `${o.platform} prospect`, platform: o.platform, opportunityId: o.id, pain: (o.pain || o.title).slice(0, 500), notes: `Captured from ${o.platform} conversation on ${o.community}.` }, `Created lead from ${o.platform}`)}
                   />
                 )) : (
                   <div className="empty-state">
@@ -1389,6 +1391,16 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                         >
                           <CalendarClock size={11}/> {l.meetingUrl ? "Reschedule Meet" : "Book Meet"}
                         </button>
+                        {data.growth?.sequences?.length ? (
+                          <button
+                            type="button"
+                            className="text-link"
+                            style={{ fontSize: 11, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4, background: "#faf5ff", border: "1px solid #e9d5ff", padding: "3px 8px", borderRadius: 4, color: "#6b21a8" }}
+                            onClick={() => act("sequenceEnroll", { sequenceId: data.growth?.sequences[0]?.id, leadIds: [l.id] }, `Enrolled in ${data.growth?.sequences[0]?.name}`)}
+                          >
+                            <Mail size={11}/> Follow-up sequence
+                          </button>
+                        ) : null}
                         <select aria-label={`Move ${l.name} to stage`} value={l.stage} onChange={e => act("moveLead", { id: l.id, stage: e.target.value }, "Lead moved")}>
                           {stages.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -2285,14 +2297,28 @@ function OpportunityRow({ o, index, onOpen, onDraft }: { o: Opportunity; index: 
   </div>;
 }
 
-function OpportunityCard({ o, onOpen, onDraft, onSave, onDismiss }: { o: Opportunity; onOpen: () => void; onDraft: () => void; onSave: () => void; onDismiss: () => void }) {
+function OpportunityCard({
+  o,
+  onOpen,
+  onDraft,
+  onSave,
+  onDismiss,
+  onAddLead,
+}: {
+  o: Opportunity;
+  onOpen: () => void;
+  onDraft: () => void;
+  onSave: () => void;
+  onDismiss: () => void;
+  onAddLead?: () => void;
+}) {
   return <article className="opportunity-card">
     <div className="card-top">
       <div>
         <PlatformBadge platform={o.platform}/>
         <span>{o.platform} · {o.community}</span>
       </div>
-      <span className="demo-label">{o.source_kind === "manual" ? "SAVED BY YOU" : "LIVE SOURCE"}</span>
+      <span className="demo-label">{o.source_kind === "manual" ? "SAVED BY YOU" : o.source_kind === "tavily" ? "TAVILY LIVE" : "LIVE SOURCE"}</span>
     </div>
     <button className="card-title" onClick={onOpen}>{o.title}</button>
     <p className="card-excerpt">{o.body}</p>
@@ -2306,8 +2332,18 @@ function OpportunityCard({ o, onOpen, onDraft, onSave, onDismiss }: { o: Opportu
       <span><Target size={15}/>{o.relevance || 90}% match</span>
       <span><MessageCircle size={15}/>{o.engagement || "Active"}</span>
     </div>
-    <div className="card-footer">
-      <button className="btn btn-dark" onClick={onDraft}>Draft response <ArrowUpRight size={15}/></button>
+    <div className="card-footer" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+      <button className="btn btn-dark" onClick={onDraft} style={{ fontSize: "12px", padding: "6px 10px" }}>Draft <ArrowUpRight size={14}/></button>
+      {onAddLead && (
+        <button
+          className="btn btn-outline"
+          onClick={onAddLead}
+          title="Promote to Lead in Pipeline"
+          style={{ fontSize: "12px", padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}
+        >
+          <UserPlus size={14}/> Add Lead
+        </button>
+      )}
       <button className="icon-button save-button" onClick={onSave} aria-label={o.status === "saved" ? "Unsave opportunity" : "Save opportunity"}>
         {o.status === "saved" ? <CheckCheck size={18}/> : <Plus size={18}/>}
       </button>
