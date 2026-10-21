@@ -458,7 +458,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
   function editDraft(draft: Draft) { setEditingDraft(draft); setDraftText(draft.text); setDraftPlatform(draft.platform); setDraftKind(draft.kind); go("Content Studio"); setEditingDraft(draft); }
 
   const realOpportunities = data?.opportunities.filter(o => o.source_kind !== "demo" && o.status !== "dismissed") || [];
-  const visible = useMemo(() => (data?.opportunities || []).filter(o => o.status !== "dismissed" && (data?.demo || o.source_kind !== "demo") && (platform === "All platforms" || o.platform === platform) && (intent === "All intent" || (intent === "Auto-Outreached (≥60%)" ? (o.relevance || 0) >= 60 : o.intent === intent)) && `${o.title} ${o.body} ${o.pain} ${o.community}`.toLowerCase().includes(query.toLowerCase())), [data, platform, intent, query]);
+  const visible = useMemo(() => (data?.opportunities || []).filter(o => o.status !== "dismissed" && (data?.demo || o.source_kind !== "demo") && (platform === "All platforms" || o.platform === platform) && (intent === "All intent" || (intent.includes("60%") ? (o.relevance || 0) >= 60 : o.intent === intent)) && `${o.title} ${o.body} ${o.pain} ${o.community}`.toLowerCase().includes(query.toLowerCase())), [data, platform, intent, query]);
   const stats = {
     opportunities: realOpportunities.length || (data?.demo ? (data?.opportunities.length || 0) : 0),
     conversations: realOpportunities.filter(o => o.intent === "High").length || (data?.demo ? (data?.opportunities.filter(o => o.intent === "High").length || 0) : 0),
@@ -1184,7 +1184,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                     <Search size={26}/>
                     <h3>No conversations found</h3>
                     <p>Search a customer problem in Discover, or adjust these filters.</p>
-                    <button className="btn btn-outline" onClick={() => { setQuery(""); setPlatform("X"); setIntent("All intent"); }}>Clear filters</button>
+                    <button className="btn btn-outline" onClick={() => { setQuery(""); setPlatform("All platforms"); setIntent("All intent"); }}>Clear filters</button>
                   </div>
                 )}
               </div>

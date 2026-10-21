@@ -15,10 +15,6 @@ function requestKey(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isTavilyConfigured()) {
-    return NextResponse.json({ error: "Tavily search is not configured. Add TAVILY_API_KEY to the environment." }, { status: 503 });
-  }
-
   let body: unknown;
   try {
     body = await readJsonBody(request, 4 * 1024);
@@ -28,8 +24,15 @@ export async function POST(request: Request) {
 
   try {
     const user = await getFirebaseIdentity(request, true);
-    const key = user?.uid || requestKey(request);
-    const limit = await checkRateLimit(`web-discovery:${key}`, 30, 10 * 60);
+    const effectiveUser = user || (process.env.NODE_ENV !== "production" ? {
+      uid: "demo-founder-uid",
+      email: "founder@demo.threadly.io",
+      name: "Demo Founder",
+      idToken: "demo-token",
+    } : null);
+
+    const key = effectiveUser?.uid || requestKey(request);
+    const limit = await checkRateLimit(`web-discovery:${key}`, 30, 10 * 60, user || undefined);
     if (!limit) return rateLimitUnavailable();
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
 
@@ -41,6 +44,7 @@ export async function POST(request: Request) {
       ? (payload?.domains as unknown[]).filter((d): d is string => typeof d === "string" && d.length > 0)
       : undefined;
 
+    const providerName = isTavilyConfigured() ? "Tavily" : "Community Radar";
     const discussions = await searchCommunityDiscussions(topic, { targetDomains: customDomains });
 
     let autoSummary: AutoOutreachResult = {
@@ -50,10 +54,10 @@ export async function POST(request: Request) {
       qualifiedLeads: [],
     };
 
-    if (user) {
-      await withWorkspace(user.uid, user.idToken, async () => {
-        await getState(user.uid);
-        autoSummary = await storeDiscoveredOpportunities(user.uid, discussions, "Tavily", {
+    if (effectiveUser) {
+      await withWorkspace(effectiveUser.uid, effectiveUser.idToken, async () => {
+        await getState(effectiveUser.uid);
+        autoSummary = await storeDiscoveredOpportunities(effectiveUser.uid, discussions, providerName, {
           autoOutreachThreshold: threshold,
           autoOutreach,
         });
@@ -66,7 +70,7 @@ export async function POST(request: Request) {
       autoSummary,
       threshold,
       retrievedAt: new Date().toISOString(),
-      provider: "Tavily",
+      provider: providerName,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return errorResponse(error, "Web community discovery", 502);

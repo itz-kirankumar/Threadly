@@ -6,6 +6,7 @@ import { getDecisionModelStatus, qualifyProspect, type ProspectQualification } f
 import type { XPost } from "./x-discovery";
 import { isTavilyConfigured, researchCompanyForOutreach, type DiscoveredDiscussion } from "./tavily";
 import { enrollLeadsInSequence, readGrowth } from "./threadly-engine";
+import { humanizeCopy } from "./pumpgtm-engine";
 
 export type Workspace = {
   id: string;
@@ -691,7 +692,8 @@ export async function generateOutreachEmail(_uid: string, leadId: string) {
   catch (error) { throw new Error(error instanceof Error ? error.message : "AI email drafting failed."); }
   if (typeof content.subject !== "string" || !content.subject.trim() || typeof content.body !== "string" || !content.body.trim()) throw new Error("AI returned an incomplete email draft.");
   const id = randomUUID();
-  const email: OutreachEmail = { id, lead_id: lead.id, recipient: lead.email, subject: content.subject.trim().slice(0, 180), body: content.body.trim().slice(0, 8000), status: "draft", created_at: now() };
+  const humanizedEmailBody = humanizeCopy(content.body.trim().slice(0, 8000));
+  const email: OutreachEmail = { id, lead_id: lead.id, recipient: lead.email, subject: content.subject.trim().slice(0, 180), body: humanizedEmailBody, status: "draft", created_at: now() };
   await writeData(`outreachEmails/${id}`, email);
   return email;
 }
@@ -857,7 +859,7 @@ export async function storeDiscoveredOpportunities(
       const alreadyHasDraft = Object.values(existingDrafts).some(d => d.opportunity_id === id);
       if (!alreadyHasDraft) {
         const draftId = randomUUID();
-        const draftText = `Saw your discussion in ${item.community} regarding "${item.title.slice(0, 80)}". Seeing many teams hit this exact bottleneck. We built ${companyName} specifically to solve this${contextDesc ? ` (${contextDesc.slice(0, 80)})` : ""} without standard cold outreach spam. Happy to share how we approach it if relevant!`;
+        const draftText = humanizeCopy(`Saw your discussion in ${item.community} regarding "${item.title.slice(0, 80)}". Seeing many teams hit this exact bottleneck. We built ${companyName} specifically to solve this${contextDesc ? ` (${contextDesc.slice(0, 80)})` : ""} without standard cold outreach spam. Happy to share how we approach it if relevant!`);
         const draft: Draft = {
           id: draftId,
           opportunity_id: id,

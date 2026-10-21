@@ -299,7 +299,7 @@ export default function XDiscovery({
       </p>
 
       <p className="source-notice">
-        {source === 'web' ? 'Tavily Search API connected · Autonomous lead scoring enabled' : xConnectionLabel}
+        {source === 'web' ? `${webResult?.provider || 'Multi-platform Radar (Reddit, Hacker News, Indie Hackers)'} · Autonomous lead scoring enabled` : xConnectionLabel}
       </p>
 
       <form onSubmit={handleManualSearch} className="x-search-form">

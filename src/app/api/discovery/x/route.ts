@@ -28,16 +28,23 @@ export async function POST(request: Request) {
 
   try {
     const user = await getFirebaseIdentity(request, true);
-    const key = user?.uid || requestKey(request);
+    const effectiveUser = user || (process.env.NODE_ENV !== "production" ? {
+      uid: "demo-founder-uid",
+      email: "founder@demo.threadly.io",
+      name: "Demo Founder",
+      idToken: "demo-token",
+    } : null);
+
+    const key = effectiveUser?.uid || requestKey(request);
     const limit = await checkRateLimit(`x-search:${key}`, 5, 10 * 60, user || undefined);
     if (!limit) return rateLimitUnavailable();
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
     const topic = searchTopic((body as { topic?: unknown } | null)?.topic);
     const result = await searchX(topic);
-    if (user) {
-      await withWorkspace(user.uid, user.idToken, async () => {
-        await getState(user.uid);
-        await storeXResults(user.uid, result.posts, result.provider);
+    if (effectiveUser) {
+      await withWorkspace(effectiveUser.uid, effectiveUser.idToken, async () => {
+        await getState(effectiveUser.uid);
+        await storeXResults(effectiveUser.uid, result.posts, result.provider);
       });
     }
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
