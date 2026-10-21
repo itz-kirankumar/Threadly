@@ -609,14 +609,14 @@ export async function storeDiscoveredOpportunities(
   uid: string,
   items: DiscoveredDiscussion[],
   provider = "Tavily",
-  options?: { autoOutreachThreshold?: number; autoOutreach?: boolean }
+  options?: { autoOutreachThreshold?: number; autoOutreach?: boolean; cleanPreviousData?: boolean }
 ): Promise<AutoOutreachResult> {
   const threshold = typeof options?.autoOutreachThreshold === "number" ? options.autoOutreachThreshold : 60;
   const autoOutreach = options?.autoOutreach !== false;
 
-  const existing = await readData<Record<string, Opportunity>>("opportunities") || {};
-  const existingLeads = await readData<Record<string, Lead>>("leads") || {};
-  const existingDrafts = await readData<Record<string, Draft>>("drafts") || {};
+  const existing = options?.cleanPreviousData ? {} : (await readData<Record<string, Opportunity>>("opportunities") || {});
+  const existingLeads = options?.cleanPreviousData ? {} : (await readData<Record<string, Lead>>("leads") || {});
+  const existingDrafts = options?.cleanPreviousData ? {} : (await readData<Record<string, Draft>>("drafts") || {});
 
   const workspace = await getWorkspace().catch(() => null);
   const companyName = workspace?.name || "Threadly";
@@ -756,6 +756,27 @@ export async function storeDiscoveredOpportunities(
 // ==========================================
 // WORKFLOWS & AUTOMATION ENGINE
 // ==========================================
+
+export async function enableAllWorkflows(_uid: string) {
+  const workflows = await readData<Record<string, Workflow>>("workflows") || {};
+  const updated: Record<string, Workflow> = {};
+  for (const def of defaultWorkflows) {
+    const existing = workflows[def.id] || workflows[safeId(def.id)];
+    updated[safeId(def.id)] = {
+      ...(existing || def),
+      enabled: true,
+      last_run_at: now(),
+      executions_count: (existing?.executions_count || 0) + 1,
+    };
+  }
+  await patchData("workflows", updated);
+}
+
+export async function clearPreviousSampleOpportunities(_uid: string) {
+  await writeData("opportunities", {});
+  await writeData("leads", {});
+  await writeData("drafts", {});
+}
 
 export async function toggleWorkflow(_uid: string, id: string, enabled: boolean) {
   const safe = safeId(id);

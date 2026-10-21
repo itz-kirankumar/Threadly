@@ -225,6 +225,20 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
     category: "discovery" as Workflow["category"],
   });
 
+  // Onboarding wizard state
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<1 | 2 | 3>(1);
+  const [onboardingUrl, setOnboardingUrl] = useState("");
+  const [onboardingAnalyzing, setOnboardingAnalyzing] = useState(false);
+  const [onboardingForm, setOnboardingForm] = useState({
+    name: "",
+    description: "",
+    icp: "",
+    keywords: "",
+    targetSubreddits: "SaaS, startups, Entrepreneur, smallbusiness, webdev",
+  });
+  const [onboardingLaunching, setOnboardingLaunching] = useState(false);
+
   // Topbar User Menu state
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -453,6 +467,99 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
     }
   }
 
+  const openOnboarding = () => {
+    setOnboardingOpen(true);
+    setOnboardingStep(1);
+    setOnboardingUrl(companyWebsite || (companyDomain ? `https://${companyDomain}` : ""));
+    setOnboardingForm({
+      name: companyName && companyName !== "My company" ? companyName : "",
+      description: context?.description || "",
+      icp: context?.icp || "",
+      keywords: context?.keywords || "",
+      targetSubreddits: "SaaS, startups, Entrepreneur, smallbusiness, webdev",
+    });
+  };
+
+  const handleAutoAnalyzeWebsite = async () => {
+    if (!onboardingUrl.trim()) return;
+    setOnboardingAnalyzing(true);
+    setError("");
+    try {
+      const token = await getIdToken();
+      const res = await fetch("/api/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "analyzeWebsite", websiteUrl: onboardingUrl.trim() }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to analyze website");
+
+      const analysis = result.analysis || {};
+      const company = analysis.company || {};
+      const kw = (analysis.discoveryKeywords || analysis.searchKeywords || [company.name, "SaaS", "software"])
+        .filter(Boolean)
+        .slice(0, 6)
+        .join(", ");
+
+      setOnboardingForm({
+        name: company.name || onboardingForm.name || "My Company",
+        description: company.description || analysis.productSummary || onboardingForm.description,
+        icp: company.targetAudience || analysis.icp || onboardingForm.icp,
+        keywords: kw || onboardingForm.keywords,
+        targetSubreddits: "SaaS, startups, Entrepreneur, smallbusiness, webdev",
+      });
+      setOnboardingStep(2);
+      setToast("Website analyzed! Review and customize your target signals.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Website analysis failed");
+      setOnboardingStep(2);
+    } finally {
+      setOnboardingAnalyzing(false);
+    }
+  };
+
+  const handleLaunchOnboarding = async () => {
+    if (!onboardingForm.name.trim()) return;
+    setOnboardingLaunching(true);
+    setError("");
+    try {
+      const token = await getIdToken();
+      const kwList = onboardingForm.keywords
+        .split(/[,;\n]/)
+        .map(k => k.trim())
+        .filter(Boolean);
+
+      const res = await fetch("/api/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: "onboardCompany",
+          name: onboardingForm.name,
+          website: onboardingUrl,
+          description: onboardingForm.description,
+          icp: onboardingForm.icp,
+          keywords: kwList,
+          painPoints: [
+            `Looking for better ${onboardingForm.name || "solutions"}`,
+            "Inefficient manual workflows",
+            "High churn and low conversion",
+          ],
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Onboarding failed");
+
+      await refresh();
+      setOnboardingOpen(false);
+      setToast(`🎉 ${onboardingForm.name} onboarded! Real community signals & live workflows are now active.`);
+      go("Radar");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Onboarding failed");
+    } finally {
+      setOnboardingLaunching(false);
+    }
+  };
+
   function go(next: Page) { setPage(next); setMobileNav(false); setSelected(null); setEditingDraft(null); document.getElementById("portal-main")?.scrollTo({ top: 0, behavior: "smooth" }); }
   function openStudio(opp?: Opportunity) { setSelected(opp || null); setEditingDraft(null); setDraftText(""); setDraftPlatform(opp?.platform || "X"); setDraftKind(opp ? "Discussion response" : "Educational post"); go("Content Studio"); setSelected(opp || null); }
   function editDraft(draft: Draft) { setEditingDraft(draft); setDraftText(draft.text); setDraftPlatform(draft.platform); setDraftKind(draft.kind); go("Content Studio"); setEditingDraft(draft); }
@@ -544,6 +651,16 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
             <span>{formatMemberTime(clockNow, zone)}</span>
           </span>
           <span className="demo-pill"><span className="tiny-dot"/> LIVE WORKSPACE</span>
+          <button
+            type="button"
+            className="btn btn-outline"
+            style={{ minHeight: 32, fontSize: 12, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 6 }}
+            onClick={openOnboarding}
+            title="Onboard your company to extract ICP and launch live lead workflows"
+          >
+            <Sparkles size={14} style={{ color: "#ff4500" }} />
+            <span>Onboard Company</span>
+          </button>
           <button className="icon-button" aria-label="Help" onClick={() => setToast("Your signals, real-time leads, and workspace data are safely saved.")}><CircleHelp size={19}/></button>
           <button className="icon-button" aria-label="Notifications" onClick={() => setToast("All outreach workflows are up to date.")}><Bell size={19}/></button>
 
@@ -712,10 +829,33 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 <p>Real conversations, automated outreach, and team intelligence in one cockpit.</p>
               </div>
               <div className="page-actions">
+                <button className="btn btn-outline" onClick={openOnboarding}><Sparkles size={16}/> Onboard Company</button>
                 <button className="btn btn-outline" onClick={() => go("Workflows")}><Zap size={16}/> Workflows</button>
                 <button className="btn btn-dark" onClick={() => go("Radar")}>Explore Radar <ArrowUpRight size={17}/></button>
               </div>
             </div>
+
+            {/* Onboarding Welcome Banner for new or unconfigured workspaces */}
+            {(companyName === "My company" || !context?.description) && (
+              <div className="onboarding-welcome-banner">
+                <div className="onboarding-banner-main">
+                  <div className="onboarding-banner-icon">
+                    <Sparkles size={22} />
+                  </div>
+                  <div className="onboarding-banner-text">
+                    <h3>Onboard your company to source real customer leads</h3>
+                    <p>Enter your website to automatically extract your ICP, target keywords, and launch tailored community discovery and auto-outreach workflows.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="onboarding-banner-btn"
+                  onClick={openOnboarding}
+                >
+                  <Sparkles size={16} /> Onboard Company Now
+                </button>
+              </div>
+            )}
 
             <div className="stats-grid">
               <Stat label="PIPELINE" value={data.growth?.metrics.pipelineValue || 0} display={`$${Math.round(data.growth?.metrics.pipelineValue || 0).toLocaleString("en-US")}`} delta={`${stats.leads} leads in play`} icon={Target} onClick={() => go("Revenue")}/>
@@ -1540,25 +1680,34 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 <h1>Company Profile & Logo Branding<span className="accent-period">.</span></h1>
                 <p>Customize your company identity, logo branding, and target ICP profile.</p>
               </div>
-              <button
-                className="btn btn-dark"
-                disabled={busy}
-                onClick={() => act("context", {
-                  context,
-                  name: companyName,
-                  logoUrl: companyLogo,
-                  domain: companyDomain,
-                  legalName: companyLegalName,
-                  website: companyWebsite,
-                  industry: companyIndustry,
-                  stage: companyStage,
-                  country: companyCountry,
-                  region: companyRegion,
-                  defaultTimezone: companyTimezone,
-                }, "Company profile & branding saved")}
-              >
-                Save company settings <Check size={16}/>
-              </button>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={openOnboarding}
+                >
+                  <Sparkles size={16} style={{ color: "#ff4500" }} /> Run Onboarding Wizard
+                </button>
+                <button
+                  className="btn btn-dark"
+                  disabled={busy}
+                  onClick={() => act("context", {
+                    context,
+                    name: companyName,
+                    logoUrl: companyLogo,
+                    domain: companyDomain,
+                    legalName: companyLegalName,
+                    website: companyWebsite,
+                    industry: companyIndustry,
+                    stage: companyStage,
+                    country: companyCountry,
+                    region: companyRegion,
+                    defaultTimezone: companyTimezone,
+                  }, "Company profile & branding saved")}
+                >
+                  Save company settings <Check size={16}/>
+                </button>
+              </div>
             </div>
 
             <div className="settings-layout">
@@ -2195,6 +2344,222 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
           >
             Create workflow <Check size={15}/>
           </button>
+        </div>
+      </div>
+    )}
+
+    {/* Company Onboarding Modal */}
+    {onboardingOpen && (
+      <div className="modal-backdrop" onClick={() => setOnboardingOpen(false)}>
+        <div className="onboarding-dialog" onClick={e => e.stopPropagation()}>
+          <button className="drawer-close" onClick={() => setOnboardingOpen(false)} aria-label="Close"><X size={20}/></button>
+
+          <div className="section-kicker">COMPANY ONBOARDING & SETUP</div>
+          <h2 style={{ fontSize: "22px", margin: "4px 0 8px" }}>Launch your growth engine</h2>
+          <p style={{ fontSize: "13px", color: "var(--muted)", margin: "0 0 20px" }}>
+            Onboard your company to eliminate placeholder data, extract real ICP signals, and activate live lead generation workflows.
+          </p>
+
+          <div className="onboarding-step-tracker">
+            <div className={`onboarding-step-pill ${onboardingStep === 1 ? "active" : onboardingStep > 1 ? "completed" : ""}`}>
+              {onboardingStep > 1 ? <Check size={12}/> : <span>1</span>} Website Analysis
+            </div>
+            <div className={`onboarding-step-pill ${onboardingStep === 2 ? "active" : onboardingStep > 2 ? "completed" : ""}`}>
+              {onboardingStep > 2 ? <Check size={12}/> : <span>2</span>} Company & ICP
+            </div>
+            <div className={`onboarding-step-pill ${onboardingStep === 3 ? "active" : ""}`}>
+              <span>3</span> Activate Workflows
+            </div>
+          </div>
+
+          {onboardingStep === 1 && (
+            <div>
+              <label>
+                COMPANY WEBSITE URL
+                <input
+                  type="url"
+                  value={onboardingUrl}
+                  onChange={e => setOnboardingUrl(e.target.value)}
+                  placeholder="https://yourcompany.com"
+                  autoFocus
+                />
+              </label>
+
+              <div className="ai-extract-card">
+                <div>
+                  <strong style={{ fontSize: "13px", color: "#9a3412" }}>AI Website Scanner</strong>
+                  <p>We&apos;ll analyze your landing page, extract your value proposition, identify your ideal customer profile, and suggest high-intent discussion keywords.</p>
+                </div>
+                <Sparkles size={24} style={{ color: "#ff4500", flexShrink: 0 }} />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24, flexWrap: "wrap", gap: 12 }}>
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => setOnboardingStep(2)}
+                  style={{ fontSize: 13 }}
+                >
+                  Skip and fill manually →
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-dark"
+                  disabled={onboardingAnalyzing || !onboardingUrl.trim()}
+                  onClick={handleAutoAnalyzeWebsite}
+                >
+                  {onboardingAnalyzing ? (
+                    <>
+                      <span className="spinner" style={{ width: 14, height: 14 }} />
+                      <span>Analyzing website…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={15} /> Analyze & Extract ICP
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {onboardingStep === 2 && (
+            <div>
+              <div className="dialog-grid">
+                <label>
+                  COMPANY / PRODUCT NAME
+                  <input
+                    value={onboardingForm.name}
+                    onChange={e => setOnboardingForm({ ...onboardingForm, name: e.target.value })}
+                    placeholder="e.g. Acme AI"
+                    required
+                  />
+                </label>
+                <label>
+                  TARGET SUBREDDITS / PLATFORMS
+                  <input
+                    value={onboardingForm.targetSubreddits}
+                    onChange={e => setOnboardingForm({ ...onboardingForm, targetSubreddits: e.target.value })}
+                    placeholder="SaaS, startups, Entrepreneur"
+                  />
+                </label>
+              </div>
+
+              <label>
+                PRODUCT SUMMARY & VALUE PROPOSITION
+                <textarea
+                  rows={3}
+                  value={onboardingForm.description}
+                  onChange={e => setOnboardingForm({ ...onboardingForm, description: e.target.value })}
+                  placeholder="What does your product do? What problem does it solve for users?"
+                />
+              </label>
+
+              <label>
+                IDEAL CUSTOMER PROFILE (ICP)
+                <input
+                  value={onboardingForm.icp}
+                  onChange={e => setOnboardingForm({ ...onboardingForm, icp: e.target.value })}
+                  placeholder="e.g. B2B SaaS Founders, VP of Sales, Growth Marketers"
+                />
+              </label>
+
+              <label>
+                DISCOVERY & SEARCH KEYWORDS (COMMA-SEPARATED)
+                <input
+                  value={onboardingForm.keywords}
+                  onChange={e => setOnboardingForm({ ...onboardingForm, keywords: e.target.value })}
+                  placeholder="e.g. cold email alternative, lead generation, sales prospecting tool"
+                />
+              </label>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24 }}>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setOnboardingStep(1)}
+                >
+                  ← Back
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-dark"
+                  disabled={!onboardingForm.name.trim()}
+                  onClick={() => setOnboardingStep(3)}
+                >
+                  Next: Review Workflows →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {onboardingStep === 3 && (
+            <div>
+              <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
+                Launching will purge placeholder demo data, initialize your customized company profile, and activate these 4 automated pipelines:
+              </p>
+
+              <div className="workflow-card-preview">
+                <Target size={18} style={{ color: "#ff4500", marginTop: 2, flexShrink: 0 }} />
+                <div>
+                  <strong>Live Reddit & Community Radar</strong>
+                  <span>Continuously crawls subreddits matching <em>{onboardingForm.keywords || onboardingForm.name}</em> for real discussions.</span>
+                </div>
+              </div>
+
+              <div className="workflow-card-preview">
+                <Zap size={18} style={{ color: "#f59e0b", marginTop: 2, flexShrink: 0 }} />
+                <div>
+                  <strong>60%+ Match Auto-Outreach</strong>
+                  <span>Instantly generates tailored, high-converting outreach responses for discussions exceeding 60% relevance.</span>
+                </div>
+              </div>
+
+              <div className="workflow-card-preview">
+                <ShieldCheck size={18} style={{ color: "#10b981", marginTop: 2, flexShrink: 0 }} />
+                <div>
+                  <strong>Dual AI Qualification (AnyJev & Laya)</strong>
+                  <span>Scores customer intent and buying signals, routing qualified leads straight into your sales pipeline.</span>
+                </div>
+              </div>
+
+              <div className="workflow-card-preview">
+                <Clock3 size={18} style={{ color: "#6366f1", marginTop: 2, flexShrink: 0 }} />
+                <div>
+                  <strong>Automated Follow-Up Cadence</strong>
+                  <span>Triggers follow-up reminders and scheduled sequences for enrolled prospects.</span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24 }}>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setOnboardingStep(2)}
+                >
+                  ← Back
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-dark"
+                  disabled={onboardingLaunching}
+                  onClick={handleLaunchOnboarding}
+                  style={{ background: "#ff4500", borderColor: "#ff4500" }}
+                >
+                  {onboardingLaunching ? (
+                    <>
+                      <span className="spinner" style={{ width: 14, height: 14 }} />
+                      <span>Sourcing Real Leads…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} /> Complete Onboarding & Source Leads
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )}
