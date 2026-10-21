@@ -1,6 +1,8 @@
-# Wisentry
+# Threadly
 
-Wisentry combines the public product site with a private founder portal.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Threadly combines the public product site with a private founder portal.
 
 - `/` and the other public pages are the marketing site.
 - `/signal-radar` has public X search when a server-side provider is configured.
@@ -57,3 +59,8 @@ GEO scans use the OpenAI Responses API web search tool and Gemini Google Search 
 Configure the hosting proxy to overwrite `x-real-ip` and `x-forwarded-for` with the actual client address if public anonymous endpoints are enabled; those quotas use the forwarded client address as their rate-limit key.
 
 Portal records are stored in Firebase Realtime Database under `users/{uid}`. Beta requests are stored at `betaWaitlist/{uid}` and community signups at `communityMembers/{uid}`. Beta requests are bound to the verified Google account, reviewed at `/admin/waitlist`, and workspace access checks the approved status on both the page and API routes.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
