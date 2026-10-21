@@ -172,6 +172,34 @@
 @media(max-width:700px){#wisentry-portal .outreach-panel{padding:17px}#wisentry-portal .outreach-side{grid-template-columns:1fr}#wisentry-portal .outreach-prospect{grid-template-columns:1fr}#wisentry-portal .outreach-site-form>div{display:grid}#wisentry-portal .outreach-site-form .btn{justify-content:center}#wisentry-portal .outreach-analysis{grid-template-columns:1fr}#wisentry-portal .outreach-panel .x-search-form{grid-template-columns:1fr}#wisentry-portal .outreach-panel .x-search-form label{grid-column:auto}#wisentry-portal .outreach-steps{gap:6px}#wisentry-portal .outreach-step{font-size:9px;padding:7px 9px}}
 .outreach-qualification{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.outreach-qualification>span{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:4px 7px;border-radius:999px;background:#f0e8ff;color:#593094}.outreach-qualification .fit-strong_fit{background:#e7f6ed;color:#236c49}.outreach-qualification .fit-weak_fit{background:#fff1e8;color:#9b4e22}.outreach-qualification small{font-size:10px;color:#797286}.outreach-contact>button:first-child{margin-bottom:8px}
 
+/* CogSend Social Outreach & Thread Engine */
+.cogsend-mode-toggle { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.cogsend-mode-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); background: #fff; color: var(--muted); cursor: pointer; transition: all .15s ease; }
+.cogsend-mode-btn.active { background: #241831; color: #fff; border-color: #241831; }
+.cogsend-platform-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+.cogsend-platform-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 6px; font-size: 11px; font-weight: 600; border: 1px solid #ded5e8; background: #fff; color: #40344d; cursor: pointer; }
+.cogsend-platform-pill.selected { background: #f3e8ff; border-color: #9d54d1; color: #451b6e; font-weight: 700; }
+.cogsend-override-tabs { display: flex; gap: 4px; overflow-x: auto; margin-bottom: 12px; border-bottom: 1px solid #ebe4f3; padding-bottom: 4px; }
+.cogsend-override-tab { padding: 4px 10px; font-size: 10px; font-weight: 700; border-radius: 4px; border: none; background: transparent; color: #74677f; cursor: pointer; }
+.cogsend-override-tab.active { background: #ede2f8; color: #37145a; }
+.cogsend-thread-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.cogsend-thread-card { border: 1px solid #ded5e8; border-radius: 10px; padding: 12px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+.cogsend-thread-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 10px; font-weight: 700; color: #675573; }
+.cogsend-thread-textarea { width: 100%; border: 1px solid #e7dfef; border-radius: 7px; padding: 9px 11px; font-size: 12px; font-family: inherit; line-height: 1.5; outline: none; resize: vertical; min-height: 78px; }
+.cogsend-thread-textarea:focus { border-color: #9d54d1; }
+.cogsend-thread-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 10px; color: #85768f; }
+.cogsend-gauge { font-weight: 700; font-family: monospace; font-size: 10px; }
+.cogsend-gauge.safe { color: #15803d; }
+.cogsend-gauge.warn { color: #b45309; }
+.cogsend-gauge.danger { color: #b91c1c; font-weight: 800; }
+.cogsend-link-card { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 7px; background: #f9f7fc; border: 1px solid #e6dcef; margin-top: 8px; text-decoration: none; color: inherit; }
+.cogsend-link-card:hover { border-color: #9d54d1; }
+.cogsend-link-title { font-size: 11px; font-weight: 700; color: #241831; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cogsend-link-domain { font-size: 9px; color: #8a7b97; text-transform: uppercase; font-weight: 600; }
+.cogsend-dispatch-box { padding: 14px; border-radius: 9px; background: #fdfcff; border: 1px solid #ded5e8; margin-top: 14px; }
+.cogsend-queue-item { padding: 10px 12px; border: 1px solid #e6dcef; border-radius: 8px; background: #fff; margin-bottom: 8px; }
+
+
 /* The shell itself carries this ID and class, so its layout must use a compound selector. */
 #wisentry-portal.app-shell{display:flex;width:100%;min-height:100vh;min-height:100dvh;overflow-x:hidden}
 #wisentry-portal.app-shell>.sidebar{flex:0 0 244px;width:244px;height:100vh;height:100dvh}
