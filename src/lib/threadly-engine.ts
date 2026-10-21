@@ -658,7 +658,7 @@ export function scoreLead(lead: Lead, seed = "local"): LeadScore {
   };
 }
 
-async function readGrowth(uid: string, leads: Lead[]): Promise<GrowthState> {
+export async function readGrowth(uid: string, leads: Lead[]): Promise<GrowthState> {
   const isDemo = uid === "demo-founder-uid";
   if (isDemo) {
     const existing = demoGrowth.get(uid);

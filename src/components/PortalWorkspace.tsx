@@ -104,7 +104,7 @@ const nav: { label: Page; icon: typeof LayoutDashboard }[] = [
 
 const stages = ["identified", "engaged", "qualified", "conversation", "converted"];
 const platforms = ["All platforms", "X", "Reddit", "Hacker News", "Indie Hackers", "GitHub", "Web"];
-const intentOptions = ["All intent", "High", "Medium", "Low"];
+const intentOptions = ["All intent", "Auto-Outreached (≥60%)", "High", "Medium", "Low"];
 const contextFields: [string, string][] = [
   ["website", "Website"],
   ["description", "Product description"],
@@ -458,7 +458,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
   function editDraft(draft: Draft) { setEditingDraft(draft); setDraftText(draft.text); setDraftPlatform(draft.platform); setDraftKind(draft.kind); go("Content Studio"); setEditingDraft(draft); }
 
   const realOpportunities = data?.opportunities.filter(o => o.source_kind !== "demo" && o.status !== "dismissed") || [];
-  const visible = useMemo(() => (data?.opportunities || []).filter(o => o.status !== "dismissed" && (data?.demo || o.source_kind !== "demo") && (platform === "All platforms" || o.platform === platform) && (intent === "All intent" || o.intent === intent) && `${o.title} ${o.body} ${o.pain} ${o.community}`.toLowerCase().includes(query.toLowerCase())), [data, platform, intent, query]);
+  const visible = useMemo(() => (data?.opportunities || []).filter(o => o.status !== "dismissed" && (data?.demo || o.source_kind !== "demo") && (platform === "All platforms" || o.platform === platform) && (intent === "All intent" || (intent === "Auto-Outreached (≥60%)" ? (o.relevance || 0) >= 60 : o.intent === intent)) && `${o.title} ${o.body} ${o.pain} ${o.community}`.toLowerCase().includes(query.toLowerCase())), [data, platform, intent, query]);
   const stats = {
     opportunities: realOpportunities.length || (data?.demo ? (data?.opportunities.length || 0) : 0),
     conversations: realOpportunities.filter(o => o.intent === "High").length || (data?.demo ? (data?.opportunities.filter(o => o.intent === "High").length || 0) : 0),
@@ -1142,6 +1142,8 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 getIdToken={getIdToken}
                 onResults={refresh}
                 onGoRadar={() => go("Radar")}
+                onGoLeads={() => go("Leads")}
+                onGoStudio={() => go("Content Studio")}
                 onSaveProspect={async post => {
                   await act("lead", { name: post.author ? (post.author.startsWith("@") ? post.author : `@${post.author}`) : `${post.platform || "X"} prospect`, platform: post.platform || "X", opportunityId: post.id.startsWith("x-") || post.id.startsWith("tavily-") ? post.id : `x-${post.id}`, pain: post.text.slice(0, 500), notes: `Added from a public ${post.platform || "X"} conversation. Verify fit and contact details before outreach.` }, "Prospect saved");
                 }}
@@ -2327,6 +2329,11 @@ function OpportunityCard({
         <span/> {o.intent || "High"} intent
       </span>
       {o.pain && <span className="pain-tag">{o.pain}</span>}
+      {(o.relevance || 0) >= 60 && (
+        <span style={{ background: "#fef3c7", color: "#92400e", fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "4px", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+          ⚡ 60%+ Auto-Outreach
+        </span>
+      )}
     </div>
     <div className="card-info">
       <span><Target size={15}/>{o.relevance || 90}% match</span>

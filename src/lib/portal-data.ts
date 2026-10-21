@@ -5,6 +5,7 @@ import { generateJson, getAiProviderLabel } from "./ai-router";
 import { getDecisionModelStatus, qualifyProspect, type ProspectQualification } from "./decision-models";
 import type { XPost } from "./x-discovery";
 import { isTavilyConfigured, researchCompanyForOutreach, type DiscoveredDiscussion } from "./tavily";
+import { enrollLeadsInSequence, readGrowth } from "./threadly-engine";
 
 export type Workspace = {
   id: string;
@@ -761,9 +762,36 @@ export async function storeXResults(_uid: string, posts: XPost[], provider: stri
   if (Object.keys(updates).length) await patchData("opportunities", updates);
 }
 
-export async function storeDiscoveredOpportunities(_uid: string, items: DiscoveredDiscussion[], provider = "Tavily") {
+export type AutoOutreachResult = {
+  savedCount: number;
+  qualifiedCount: number;
+  draftsCount: number;
+  qualifiedLeads: Array<{ id: string; name: string; score: number; platform: string }>;
+};
+
+export async function storeDiscoveredOpportunities(
+  uid: string,
+  items: DiscoveredDiscussion[],
+  provider = "Tavily",
+  options?: { autoOutreachThreshold?: number; autoOutreach?: boolean }
+): Promise<AutoOutreachResult> {
+  const threshold = typeof options?.autoOutreachThreshold === "number" ? options.autoOutreachThreshold : 60;
+  const autoOutreach = options?.autoOutreach !== false;
+
   const existing = await readData<Record<string, Opportunity>>("opportunities") || {};
-  const updates = Object.fromEntries(items.map(item => {
+  const existingLeads = await readData<Record<string, Lead>>("leads") || {};
+  const existingDrafts = await readData<Record<string, Draft>>("drafts") || {};
+
+  const workspace = await getWorkspace().catch(() => null);
+  const companyName = workspace?.name || "Threadly";
+  const contextDesc = workspace?.context?.description || "";
+
+  const updates: Record<string, Opportunity> = {};
+  const newLeads: Record<string, Lead> = {};
+  const newDrafts: Record<string, Draft> = {};
+  const qualifiedLeads: Array<{ id: string; name: string; score: number; platform: string }> = [];
+
+  for (const item of items) {
     const id = safeId(item.id);
     const previous = existing[id];
     const score = item.relevanceScore || 75;
@@ -784,9 +812,109 @@ export async function storeDiscoveredOpportunities(_uid: string, items: Discover
       observed_at: item.publishedAt || now(),
       status: previous?.status || "new",
     };
-    return [id, opp];
-  }));
+    updates[id] = opp;
+
+    // Auto-Outreach for signals crossing the 60% threshold
+    if (autoOutreach && score >= threshold) {
+      const alreadyHasLead = Object.values(existingLeads).some(
+        l => l.opportunity_id === id || (item.author && item.author !== "Web Source" && l.name.toLowerCase().includes(item.author.toLowerCase()))
+      );
+
+      const leadId = randomUUID();
+      if (!alreadyHasLead) {
+        const authorDisplay = item.author && item.author !== "Web Source"
+          ? (item.author.startsWith("@") || item.author.startsWith("u/")
+              ? item.author
+              : `${item.platform === "Reddit" ? "u/" : "@"}${item.author}`)
+          : `${item.platform} Contributor`;
+
+        const lead: Lead = {
+          id: leadId,
+          opportunity_id: id,
+          name: authorDisplay,
+          company: item.community,
+          role: `${item.platform} Contributor`,
+          platform: item.platform,
+          pain: (item.title + (item.body ? ` — ${item.body.slice(0, 200)}` : "")).slice(0, 500),
+          stage: "qualified",
+          notes: `⚡ Auto-qualified by Live Surfer (${score}% match on ${item.community} >= ${threshold}% threshold). Auto outreach prepared.`,
+          owner: uid,
+          created_at: now(),
+          qualification: {
+            fit: score >= 80 ? "strong_fit" : "possible_fit",
+            fitConfidence: Math.min(0.99, score / 100),
+            buyingIntent: Math.min(0.95, score / 100),
+            model: "AnyJev",
+            route: "confidence",
+            assessedAt: now(),
+          },
+        };
+        newLeads[leadId] = lead;
+        qualifiedLeads.push({ id: leadId, name: authorDisplay, score, platform: item.platform });
+      }
+
+      // Auto-generate discussion response draft for the opportunity if not already drafted
+      const alreadyHasDraft = Object.values(existingDrafts).some(d => d.opportunity_id === id);
+      if (!alreadyHasDraft) {
+        const draftId = randomUUID();
+        const draftText = `Saw your discussion in ${item.community} regarding "${item.title.slice(0, 80)}". Seeing many teams hit this exact bottleneck. We built ${companyName} specifically to solve this${contextDesc ? ` (${contextDesc.slice(0, 80)})` : ""} without standard cold outreach spam. Happy to share how we approach it if relevant!`;
+        const draft: Draft = {
+          id: draftId,
+          opportunity_id: id,
+          platform: item.platform,
+          kind: "Discussion response",
+          text: draftText,
+          status: "draft",
+          origin: "ai",
+          approved_at: null,
+          scheduled_at: null,
+          created_at: now(),
+        };
+        newDrafts[draftId] = draft;
+      }
+    }
+  }
+
   if (Object.keys(updates).length) await patchData("opportunities", updates);
+  if (Object.keys(newLeads).length) await patchData("leads", newLeads);
+  if (Object.keys(newDrafts).length) await patchData("drafts", newDrafts);
+
+  // Auto-enroll new qualified leads in the default sequence
+  if (Object.keys(newLeads).length > 0) {
+    try {
+      const allLeads = Object.values({ ...existingLeads, ...newLeads });
+      const growth = await readGrowth(uid, allLeads);
+      if (growth.sequences.length > 0) {
+        const primarySeq = growth.sequences[0];
+        const newLeadIds = Object.keys(newLeads);
+        await enrollLeadsInSequence(uid, allLeads, primarySeq.id, newLeadIds);
+      }
+    } catch {
+      // Sequence enrollment fails gracefully if growth is uninitialized
+    }
+
+    // Bump autonomous workflow executions
+    try {
+      const workflows = await readData<Record<string, Workflow>>("workflows") || {};
+      for (const [key, wf] of Object.entries(workflows)) {
+        if (wf.category === "discovery" || wf.category === "outreach" || wf.category === "qualification") {
+          await patchData(`workflows/${key}`, {
+            last_run_at: now(),
+            executions_count: (wf.executions_count || 0) + Object.keys(newLeads).length,
+          });
+        }
+      }
+    } catch {
+      // Non-critical workflow stat tracking
+    }
+  }
+
+  return {
+    savedCount: Object.keys(updates).length,
+    qualifiedCount: Object.keys(newLeads).length,
+    draftsCount: Object.keys(newDrafts).length,
+    qualifiedLeads,
+  };
 }
 
 // ==========================================
