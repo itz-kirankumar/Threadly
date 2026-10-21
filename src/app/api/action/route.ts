@@ -108,14 +108,15 @@ export async function POST(request: Request) {
       if (!limit) return rateLimitUnavailable();
       if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
     }
-    if (["draft", "lead", "generate"].includes(action) && body.platform !== "X") {
-      return Response.json({ error: "Only X is supported." }, { status: 400 });
+    const allowedPlatforms = new Set(["X", "Reddit", "Hacker News", "Indie Hackers", "GitHub", "Quora", "Web"]);
+    if (["draft", "lead", "generate"].includes(action) && typeof body.platform === "string" && !allowedPlatforms.has(body.platform)) {
+      return Response.json({ error: "Platform not supported." }, { status: 400 });
     }
 
     return await withWorkspace(user.uid, user.idToken, async () => {
       await getState(user.uid);
       if (action === "generate") {
-        await generateDrafts(user.uid, text(body, "opportunityId", 160)!, "X", text(body, "tone", 60, true) || "Conversational");
+        await generateDrafts(user.uid, text(body, "opportunityId", 160)!, (typeof body.platform === "string" ? body.platform : "X"), text(body, "tone", 60, true) || "Conversational");
         return Response.json({ ok: true });
       }
 

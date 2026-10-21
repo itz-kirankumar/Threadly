@@ -4,6 +4,7 @@ import { getXProviderStatus } from "./apify-x";
 import { generateJson, getAiProviderLabel } from "./ai-router";
 import { getDecisionModelStatus, qualifyProspect, type ProspectQualification } from "./decision-models";
 import type { XPost } from "./x-discovery";
+import { isTavilyConfigured, researchCompanyForOutreach, type DiscoveredDiscussion } from "./tavily";
 
 export type Workspace = {
   id: string;
@@ -440,6 +441,8 @@ export async function getState(uid: string) {
       liveSources: Boolean(xConnection.provider) || isDemo,
       xProvider: isDemo ? "Connected (Live & Sim)" : xConnection.provider,
       xProviderStatus: (isDemo ? "connected" : xConnection.status) as "connected" | "configured" | "unverified" | "not_configured",
+      tavily: Boolean(process.env.TAVILY_API_KEY) || isDemo,
+      tavilyStatus: (Boolean(process.env.TAVILY_API_KEY) ? "connected" : "not_configured") as "connected" | "not_configured",
       publishing: false,
       manualCapture: true,
       emailOutreach: Boolean(process.env.USE_AWS === "true" && process.env.FROM_EMAIL) || isDemo,
@@ -755,6 +758,32 @@ export async function storeXResults(_uid: string, posts: XPost[], provider: stri
       source_kind: provider === "Apify" ? "x_apify" : "x_api", observed_at: post.createdAt || now(), status: previous?.status || "new",
     };
     return [id, item];
+  }));
+  if (Object.keys(updates).length) await patchData("opportunities", updates);
+}
+
+export async function storeDiscoveredOpportunities(_uid: string, items: DiscoveredDiscussion[], provider = "Tavily") {
+  const existing = await readData<Record<string, Opportunity>>("opportunities") || {};
+  const updates = Object.fromEntries(items.map(item => {
+    const id = safeId(item.id);
+    const previous = existing[id];
+    const opp: Opportunity = {
+      id,
+      platform: item.platform,
+      community: item.community,
+      author: item.author || "Web Source",
+      title: item.title.slice(0, 160),
+      body: item.body,
+      pain: "",
+      intent: "Unrated",
+      relevance: item.relevanceScore || 0,
+      engagement: `${item.relevanceScore}% match · ${provider}`,
+      source_url: item.url,
+      source_kind: provider.toLowerCase(),
+      observed_at: item.publishedAt || now(),
+      status: previous?.status || "new",
+    };
+    return [id, opp];
   }));
   if (Object.keys(updates).length) await patchData("opportunities", updates);
 }

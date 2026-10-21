@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { patchData, readData, writeData } from "./portal-db";
 import type { Lead } from "./portal-data";
+import { searchTavily } from "./tavily";
 
 /* ============================================================
    Threadly growth engine
@@ -141,7 +142,7 @@ export type ContentSlot = {
   created_at: string;
 };
 
-export type GeoEngine = "chatgpt" | "gemini";
+export type GeoEngine = "chatgpt" | "gemini" | "tavily";
 export type GeoSource = { title: string; url: string };
 export type GeoEngineResult = {
   engine: GeoEngine;
@@ -1420,6 +1421,13 @@ async function scanWithGemini(query: string, domain: string): Promise<{ answer: 
   return { answer, sources: uniqueGeoSources(sources) };
 }
 
+async function scanWithTavily(query: string, domain: string): Promise<{ answer: string; sources: GeoSource[] }> {
+  const result = await searchTavily(query, { includeAnswer: true, searchDepth: "advanced", maxResults: 8 });
+  const rawAnswer = result.answer || result.results[0]?.content || "No direct answer returned.";
+  const sources: GeoSource[] = uniqueGeoSources(result.results.map((r) => ({ title: r.title, url: r.url })));
+  return { answer: rawAnswer, sources };
+}
+
 function uniqueGeoSources(sources: GeoSource[]) {
   return [...new Map(sources.map((source) => [source.url, source])).values()].slice(0, 8);
 }
@@ -1432,9 +1440,10 @@ export async function scanGeo(uid: string, leads: Lead[], queryId?: string) {
   const configured: Array<{ engine: GeoEngine; key?: string }> = [
     { engine: "chatgpt", key: process.env.OPENAI_API_KEY },
     { engine: "gemini", key: process.env.GEMINI_API_KEY },
+    { engine: "tavily", key: process.env.TAVILY_API_KEY },
   ];
   if (!configured.some((provider) => provider.key)) {
-    throw new Error("GEO scans need an OPENAI_API_KEY or GEMINI_API_KEY. Add one in the Vercel project environment variables, then redeploy.");
+    throw new Error("GEO scans need an OPENAI_API_KEY, GEMINI_API_KEY, or TAVILY_API_KEY. Add one in the project environment variables.");
   }
   for (const query of targets) {
     const previous = query.shareOfAnswer;
@@ -1443,7 +1452,9 @@ export async function scanGeo(uid: string, leads: Lead[], queryId?: string) {
       try {
         const result = engine === "chatgpt"
           ? await scanWithOpenAI(query.query, process.env.GEO_BRAND_DOMAIN || "gothreadly.live")
-          : await scanWithGemini(query.query, process.env.GEO_BRAND_DOMAIN || "gothreadly.live");
+          : engine === "gemini"
+          ? await scanWithGemini(query.query, process.env.GEO_BRAND_DOMAIN || "gothreadly.live")
+          : await scanWithTavily(query.query, process.env.GEO_BRAND_DOMAIN || "gothreadly.live");
         const domain = (process.env.GEO_BRAND_DOMAIN || "gothreadly.live").replace(/^www\./, "").toLowerCase();
         const cited = result.sources.some((source) => {
           try { return new URL(source.url).hostname.replace(/^www\./, "").toLowerCase() === domain; } catch { return false; }

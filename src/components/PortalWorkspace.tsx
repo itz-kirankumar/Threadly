@@ -102,7 +102,7 @@ const nav: { label: Page; icon: typeof LayoutDashboard }[] = [
 ];
 
 const stages = ["identified", "engaged", "qualified", "conversation", "converted"];
-const platforms = ["X"];
+const platforms = ["All platforms", "X", "Reddit", "Hacker News", "Indie Hackers", "GitHub", "Web"];
 const intentOptions = ["All intent", "High", "Medium", "Low"];
 const contextFields: [string, string][] = [
   ["website", "Website"],
@@ -123,7 +123,10 @@ const logoPresets = [
   { label: "Star Emblem", url: "/Purple Four-Point Star Emblem.png" },
 ];
 
-function PlatformBadge({ platform }: { platform: string }) { return <span className="platform platform-x" aria-label={platform}>𝕏</span>; }
+function PlatformBadge({ platform }: { platform: string }) {
+  const icon = platform === "Reddit" ? "🔴" : platform === "Hacker News" ? "🟠" : platform === "Indie Hackers" ? "🔵" : platform === "GitHub" ? "🐙" : platform === "Web" ? "🌐" : "𝕏";
+  return <span className={`platform platform-${platform.toLowerCase().replace(/\s+/g, "-")}`} aria-label={platform}>{icon}</span>;
+}
 function formatDate(date: string) { return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
 function timeAgo(date?: string | null) {
   if (!date) return "Never";
@@ -1156,7 +1159,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 getIdToken={getIdToken}
                 onResults={refresh}
                 onSaveProspect={async post => {
-                  await act("lead", { name: post.author ? `@${post.author}` : "X prospect", platform: "X", opportunityId: `x-${post.id}`, pain: post.text.slice(0, 500), notes: "Added from a public X conversation. Verify fit and contact details before outreach." }, "Prospect saved");
+                  await act("lead", { name: post.author ? (post.author.startsWith("@") ? post.author : `@${post.author}`) : `${post.platform || "X"} prospect`, platform: post.platform || "X", opportunityId: post.id.startsWith("x-") || post.id.startsWith("tavily-") ? post.id : `x-${post.id}`, pain: post.text.slice(0, 500), notes: `Added from a public ${post.platform || "X"} conversation. Verify fit and contact details before outreach.` }, "Prospect saved");
                 }}
               />
             )}
@@ -1718,6 +1721,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
 
                 <div className="section-kicker">INTEGRATION STATUS</div>
                 <h3>Connected Services</h3>
+                <div className="connection-row"><span>Tavily Web Intelligence</span><strong>Connected</strong></div>
                 <div className="connection-row"><span>X Conversation Radar</span><strong>{data.capabilities.xProvider ? `${data.capabilities.xProvider}` : "Connected"}</strong></div>
                 <div className="connection-row"><span>AI Generation Engines</span><strong>Connected</strong></div>
                 <div className="connection-row"><span>Email Outreach (SES)</span><strong>{data.capabilities.emailOutreach ? "Active" : "Mailto active"}</strong></div>

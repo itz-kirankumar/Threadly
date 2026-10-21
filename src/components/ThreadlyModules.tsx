@@ -1624,8 +1624,9 @@ const engineLabel: Record<string, string> = {
   gemini: "Gemini",
   google_ai: "Google AI",
   claude: "Claude",
+  tavily: "Tavily AI",
 };
-const geoEngineCount = 2;
+const geoEngineCount = 3;
 
 export function GeoPage({
   growth,

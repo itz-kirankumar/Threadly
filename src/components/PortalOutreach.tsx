@@ -80,10 +80,10 @@ export default function PortalOutreach({
     finally { setBusy(""); }
   }
 
-  async function addProspect(post: XPost) {
+  async function addProspect(post: { id: string; author?: string; text: string; platform?: string }) {
     setBusy(`prospect-${post.id}`); setError(""); setNotice("");
     try {
-      await action("lead", { name: post.author ? `@${post.author}` : "X prospect", platform: "X", opportunityId: `x-${post.id}`, pain: post.text.slice(0, 500), notes: "Added from a public X conversation. Verify fit and contact details before outreach." });
+      await action("lead", { name: post.author ? (post.author.startsWith("@") ? post.author : `@${post.author}`) : `${post.platform || "X"} prospect`, platform: post.platform || "X", opportunityId: post.id.startsWith("x-") || post.id.startsWith("tavily-") ? post.id : `x-${post.id}`, pain: post.text.slice(0, 500), notes: `Added from a public ${post.platform || "X"} conversation. Verify fit and contact details before outreach.` });
       setNotice("Prospect saved. Add a verified email address before drafting outreach.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save prospect."); }
     finally { setBusy(""); }
