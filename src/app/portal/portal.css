@@ -199,6 +199,22 @@
 .cogsend-dispatch-box { padding: 14px; border-radius: 9px; background: #fdfcff; border: 1px solid #ded5e8; margin-top: 14px; }
 .cogsend-queue-item { padding: 10px 12px; border: 1px solid #e6dcef; border-radius: 8px; background: #fff; margin-bottom: 8px; }
 
+/* OpenReply Comment-to-DM Engine */
+.openreply-header-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font-size: 9px; font-weight: 800; background: linear-gradient(135deg, #e1306c, #f77737); color: #fff; letter-spacing: .04em; }
+.openreply-campaign-card { border: 1px solid #ded5e8; border-radius: 10px; padding: 14px; background: #ffffff; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+.openreply-keyword-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: #fdf2f8; border: 1px solid #fbcfe8; color: #db2777; font-size: 10px; font-weight: 700; font-family: monospace; }
+.openreply-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; padding: 10px; background: #faf8fc; border-radius: 8px; border: 1px solid #eee8f5; }
+.openreply-stat-item { text-align: center; }
+.openreply-stat-val { font-size: 14px; font-weight: 800; color: #241831; }
+.openreply-stat-lbl { font-size: 9px; color: #8a7b97; text-transform: uppercase; font-weight: 700; }
+.openreply-simulator-box { border: 1px dashed #d8cce4; border-radius: 9px; padding: 14px; background: #fdfbff; margin-top: 14px; }
+.openreply-dm-mockup { background: #faf9fb; border: 1px solid #e2d8ec; border-radius: 12px; padding: 12px; max-width: 380px; margin: 12px auto 0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+.openreply-dm-bubble { background: #ffffff; border: 1px solid #e6dcef; border-radius: 12px; padding: 10px 12px; font-size: 11px; line-height: 1.5; color: #262626; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.openreply-dm-btn { display: block; width: 100%; text-align: center; padding: 8px 10px; margin-top: 6px; border-radius: 8px; background: #7c3aed; color: #ffffff; font-size: 11px; font-weight: 700; text-decoration: none; border: none; cursor: pointer; }
+.openreply-dm-btn-secondary { background: #f3f0f7; color: #4b3861; border: 1px solid #ded5e8; }
+.openreply-public-reply-box { border-left: 2px solid #e1306c; padding-left: 8px; margin-top: 8px; font-size: 11px; color: #4a3e56; font-style: italic; }
+
+
 
 /* The shell itself carries this ID and class, so its layout must use a compound selector. */
 #wisentry-portal.app-shell{display:flex;width:100%;min-height:100vh;min-height:100dvh;overflow-x:hidden}

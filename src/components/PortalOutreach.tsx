@@ -3,13 +3,19 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowUpRight,
+  Bot,
   CalendarDays,
   Check,
+  CheckCircle2,
   CircleHelp,
   Clock,
   ExternalLink,
   Layers,
+  Link as LinkIcon,
   Mail,
+  MessageCircle,
+  Play,
+  Plus,
   RefreshCw,
   Search,
   Send,
@@ -17,7 +23,11 @@ import {
   Sparkles,
   Split,
   Target,
+  ToggleLeft,
+  ToggleRight,
   Trash2,
+  UserCheck,
+  Zap,
 } from "lucide-react";
 import XDiscovery from "@/components/PortalXDiscovery";
 import {
@@ -32,6 +42,13 @@ import {
   INITIAL_SAMPLE_DISPATCHES,
   countGraphemes,
 } from "@/lib/cogsend-engine";
+import {
+  type OpenReplyCampaign,
+  type OpenReplyDmLog,
+  INITIAL_OPENREPLY_CAMPAIGNS,
+  INITIAL_OPENREPLY_LOGS,
+  executeOpenReplyTrigger,
+} from "@/lib/openreply-engine";
 
 type OutreachEmail = { id: string; lead_id: string; recipient: string; subject: string; body: string; status: "draft" | "sending" | "sent"; created_at: string; sent_at?: string };
 type Context = Record<string, string>;
@@ -56,8 +73,10 @@ export default function PortalOutreach({
   const [error, setError] = useState("");
   const [analysis, setAnalysis] = useState<{ companyName: string; description: string; customer: string; icp: string; painPoints: string; searchPhrases: string; provider: string | null } | null>(null);
 
+  // Workbench Mode: CogSend Social, OpenReply Comment-to-DM, or Email
+  const [workbenchMode, setWorkbenchMode] = useState<"cogsend" | "openreply" | "email">("openreply");
+
   // CogSend Multi-Platform Social & Thread State
-  const [workbenchMode, setWorkbenchMode] = useState<"cogsend" | "email">("cogsend");
   const [selectedPlatforms, setSelectedPlatforms] = useState<SocialPlatform[]>(["x", "linkedin", "bluesky", "threads"]);
   const [overrideTab, setOverrideTab] = useState<"base" | SocialPlatform>("base");
   const [segments, setSegments] = useState<string[]>([
@@ -68,11 +87,37 @@ export default function PortalOutreach({
   const [scheduleDatetime, setScheduleDatetime] = useState<string>("");
   const [prospectTargetLead, setProspectTargetLead] = useState<Lead | null>(null);
 
+  // OpenReply Comment-to-DM State
+  const [openreplyCampaigns, setOpenreplyCampaigns] = useState<OpenReplyCampaign[]>(INITIAL_OPENREPLY_CAMPAIGNS);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(INITIAL_OPENREPLY_CAMPAIGNS[0]?.id || "");
+  const [openreplyLogs, setOpenreplyLogs] = useState<OpenReplyDmLog[]>(INITIAL_OPENREPLY_LOGS);
+  const [isCreatingCampaign, setIsCreatingCampaign] = useState<boolean>(false);
+  
+  // OpenReply Simulation Tester
+  const [simCommenter, setSimCommenter] = useState<string>("alex_founder");
+  const [simCommentText, setSimCommentText] = useState<string>("Can you send me the LINK? We need this for our team.");
+  const [simIsFollower, setSimIsFollower] = useState<boolean>(false);
+  const [simResult, setSimResult] = useState<ReturnType<typeof executeOpenReplyTrigger> | null>(null);
+
+  // New OpenReply Campaign Form
+  const [newCampName, setNewCampName] = useState<string>("");
+  const [newCampKeywords, setNewCampKeywords] = useState<string>("LINK, ACCESS");
+  const [newCampDm, setNewCampDm] = useState<string>("Hey @{username}! Here is your direct access link 👇");
+  const [newCampButton, setNewCampButton] = useState<string>("Get Instant Access 🚀");
+  const [newCampUrl, setNewCampUrl] = useState<string>("https://threadly.app/playbook");
+  const [newCampRequireFollow, setNewCampRequireFollow] = useState<boolean>(true);
+  const [newCampPublicReply, setNewCampPublicReply] = useState<string>("Sent you a DM! Check your inbox 📬");
+
   const selectedEmail = useMemo(() => emails.find(email => email.id === selectedId) || null, [emails, selectedId]);
   const profile = analysis || (context.website ? {
     companyName, description: context.description || "", customer: context.customer || "", icp: context.icp || "",
     painPoints: context.painPoints || "", searchPhrases: context.outreachSearchPhrases || "", provider: null,
   } : null);
+
+  const activeOpenReplyCampaign = useMemo(() => 
+    openreplyCampaigns.find(c => c.id === selectedCampaignId) || openreplyCampaigns[0], 
+    [openreplyCampaigns, selectedCampaignId]
+  );
 
   useEffect(() => { if (!selectedId && emails[0]) setSelectedId(emails[0].id); }, [emails, selectedId]);
   useEffect(() => {
@@ -166,7 +211,6 @@ export default function PortalOutreach({
     const cleanPain = (lead.pain || "high-intent inquiry").replace(/\n+/g, " ").slice(0, 90);
     const initialPost = `Hey ${cleanHandle}, caught your note on ${cleanPain}.\n---\nAt ${companyName || "Threadly"}, we built a real-time signal monitor that spots high-intent buyers without cold spam. Live demo: https://threadly.app`;
     
-    // Auto-split into thread segments using Cogsend logic
     const segs = splitLongText(initialPost, PLATFORM_LIMITS.x);
     setSegments(segs);
     setPlatformOverrides({
@@ -174,6 +218,14 @@ export default function PortalOutreach({
     });
     setWorkbenchMode("cogsend");
     setNotice(`CogSend multi-platform outreach prepared for ${cleanHandle}.`);
+  }
+
+  // OpenReply 1-Click: Attach Prospect to Comment Automation
+  function attachProspectToOpenReply(lead: Lead) {
+    setWorkbenchMode("openreply");
+    setSimCommenter(lead.name.replace(/^@/, ""));
+    setSimCommentText(`Hey, can you send the LINK for this? (${lead.pain.slice(0, 50)})`);
+    setNotice(`Loaded ${lead.name} into OpenReply Comment-to-DM simulator.`);
   }
 
   // CogSend Segment Controls
@@ -197,7 +249,6 @@ export default function PortalOutreach({
 
   function autoSplitSegments() {
     const combined = joinThreadSegments(segments);
-    // Find strictest limit among selected platforms
     const minLimit = Math.min(...selectedPlatforms.map(p => PLATFORM_LIMITS[p]));
     const nextSegments = splitLongText(combined, minLimit);
     setSegments(nextSegments);
@@ -286,7 +337,6 @@ export default function PortalOutreach({
     }
   }
 
-  // Isolated Destination Retry
   function retryDestination(dispatchId: string, plat: SocialPlatform) {
     setDispatches(dispatches.map(item => {
       if (item.id === dispatchId) {
@@ -301,6 +351,108 @@ export default function PortalOutreach({
       return item;
     }));
     setNotice(`Retried and delivered to ${plat.toUpperCase()}.`);
+  }
+
+  // OpenReply: Toggle Campaign Active
+  function toggleOpenReplyCampaign(id: string) {
+    setOpenreplyCampaigns(openreplyCampaigns.map(c => {
+      if (c.id === id) {
+        const nextActive = !c.isActive;
+        setNotice(`OpenReply: "${c.name}" is now ${nextActive ? "Active" : "Paused"}.`);
+        return { ...c, isActive: nextActive };
+      }
+      return c;
+    }));
+  }
+
+  // OpenReply: Create Campaign
+  function handleCreateOpenReplyCampaign(e: FormEvent) {
+    e.preventDefault();
+    if (!newCampName.trim()) return;
+    const kw = newCampKeywords.split(",").map(k => k.trim()).filter(Boolean);
+    const newCamp: OpenReplyCampaign = {
+      id: `or-camp-${Date.now()}`,
+      name: newCampName,
+      platform: "Instagram",
+      accountHandle: "@threadly_hq",
+      matchAnyPost: true,
+      keywords: kw.length ? kw : ["LINK"],
+      wholeWordMatch: true,
+      dmTriggerEnabled: true,
+      dmMessage: newCampDm || "Here is your link @{username}!",
+      linkButtonLabel: newCampButton || "Get Link",
+      trackedDestinationUrl: newCampUrl || "https://threadly.app",
+      requireFollow: newCampRequireFollow,
+      publicReplyEnabled: Boolean(newCampPublicReply),
+      publicReplyMessages: newCampPublicReply ? [newCampPublicReply] : [],
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      stats: { comments: 0, dmsSent: 0, clicks: 0, ctr: 0, followersGained: 0 },
+    };
+
+    setOpenreplyCampaigns([newCamp, ...openreplyCampaigns]);
+    setSelectedCampaignId(newCamp.id);
+    setIsCreatingCampaign(false);
+    setNewCampName("");
+    setNotice(`OpenReply campaign "${newCamp.name}" activated!`);
+  }
+
+  // OpenReply: Run Simulation Trigger
+  async function testOpenReplyTrigger() {
+    if (!activeOpenReplyCampaign) return;
+    setBusy("openreply-sim"); setError(""); setNotice("");
+    try {
+      const result = executeOpenReplyTrigger({
+        campaign: activeOpenReplyCampaign,
+        commenterUsername: simCommenter,
+        commentText: simCommentText,
+        isFollower: simIsFollower,
+      });
+
+      setSimResult(result);
+      if (result.matched) {
+        setOpenreplyLogs([result.logItem, ...openreplyLogs]);
+
+        // Increment stats
+        setOpenreplyCampaigns(openreplyCampaigns.map(c => {
+          if (c.id === activeOpenReplyCampaign.id) {
+            const comments = c.stats.comments + 1;
+            const dmsSent = c.stats.dmsSent + 1;
+            const clicks = c.stats.clicks + 1;
+            const followersGained = simIsFollower ? c.stats.followersGained : c.stats.followersGained + 1;
+            return {
+              ...c,
+              stats: {
+                comments,
+                dmsSent,
+                clicks,
+                ctr: Math.round((clicks / dmsSent) * 1000) / 10,
+                followersGained,
+              }
+            };
+          }
+          return c;
+        }));
+
+        // Automatically convert engaged commenter into a qualified lead in Threadly
+        await action("lead", {
+          name: simCommenter.startsWith("@") ? simCommenter : `@${simCommenter}`,
+          platform: "Instagram",
+          opportunityId: `or-${Date.now()}`,
+          pain: `Commented: "${simCommentText}" on ${activeOpenReplyCampaign.name}. Matched keyword: [${result.matchedKeyword}]. Direct Message sent with CTA button.`,
+          stage: "engaged",
+          notes: `Captured by OpenReply ManyChat automation. Follow-gate: ${activeOpenReplyCampaign.requireFollow ? "Yes" : "No"}. Public reply posted.`,
+        });
+
+        setNotice(`OpenReply: Triggered! DM delivered to @${simCommenter.replace(/^@/, "")} & lead auto-qualified in Threadly.`);
+      } else {
+        setNotice(`OpenReply: No match. The comment did not contain [${activeOpenReplyCampaign.keywords.join(", ")}].`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Simulation failed.");
+    } finally {
+      setBusy("");
+    }
   }
 
   async function saveDraft() {
@@ -333,15 +485,15 @@ export default function PortalOutreach({
       <div>
         <div className="eyebrow"><span className="pulse-dot"/> FROM PRODUCT TO PIPELINE</div>
         <h1>Outreach<span className="accent-period">.</span></h1>
-        <p>Start with your website. Find real conversations, review each prospect, and draft multi-channel outreach across X, LinkedIn, Bluesky, Threads, and Email.</p>
+        <p>Inbound and outbound customer acquisition. ManyChat-style OpenReply comment-to-DM automation, CogSend multi-platform publishing, and 1-to-1 verified emails.</p>
       </div>
-      <span className="source-notice"><span className="tiny-dot"/> CogSend & SES Multi-Channel</span>
+      <span className="source-notice"><span className="tiny-dot"/> OpenReply & CogSend & SES Active</span>
     </div>
     
     <div className="outreach-steps">
       <span className="outreach-step active"><i>01</i> Understand your product</span>
       <span className="outreach-step active"><i>02</i> Find relevant conversations</span>
-      <span className="outreach-step active"><i>03</i> Review and multi-platform reach out</span>
+      <span className="outreach-step active"><i>03</i> Automated Inbound & Multi-Channel Outreach</span>
     </div>
 
     <section className="mini-card outreach-panel">
@@ -383,7 +535,7 @@ export default function PortalOutreach({
             <div><div className="section-kicker">03 · REVIEWED PROSPECTS</div><h2>Your prospect list</h2></div>
             <span className="count-badge">{leads.length}</span>
           </div>
-          <p>Use Laya for multilingual conversations and AnyJev for confidence-aware English qualification. Choose CogSend for social thread outreach or direct verified email.</p>
+          <p>Autonomous lead scoring. Trigger OpenReply comment-to-DM workflows, schedule CogSend social threads, or send 1-to-1 verified emails.</p>
           {!capabilities.decisionModels.laya && !capabilities.decisionModels.anyjev && <p className="outreach-help">Add LAYA_URL and/or ANYJEV_URL on the server to enable model qualification.</p>}
           
           {leads.length ? (
@@ -406,7 +558,16 @@ export default function PortalOutreach({
                       {busy === `qualify-${lead.id}` ? "Assessing…" : lead.qualification ? "Reassess fit" : "Assess fit"}<Target size={14}/>
                     </button>
                     
-                    {/* CogSend Multi-Platform Social Draft Button */}
+                    {/* Action: OpenReply ManyChat trigger */}
+                    <button
+                      className="btn btn-outline"
+                      style={{ color: "#db2777", borderColor: "#fbcfe8", background: "#fdf2f8", marginBottom: "6px", fontSize: "10px" }}
+                      onClick={() => attachProspectToOpenReply(lead)}
+                    >
+                      <MessageCircle size={13}/> OpenReply Comment-to-DM
+                    </button>
+
+                    {/* Action: CogSend Multi-Platform Social Draft */}
                     <button
                       className="btn btn-dark"
                       style={{ background: "#4c1d95", borderColor: "#4c1d95", color: "#fff", marginBottom: "8px", fontSize: "10px" }}
@@ -439,25 +600,350 @@ export default function PortalOutreach({
       </div>
 
       <aside className="outreach-column outreach-side">
-        {/* WORKBENCH SELECTOR: COGSEND vs EMAIL */}
+        {/* WORKBENCH SELECTOR: OPENREPLY vs COGSEND vs EMAIL */}
         <section className="mini-card outreach-panel">
-          <div className="cogsend-mode-toggle">
+          <div className="cogsend-mode-toggle" style={{ flexWrap: "wrap", gap: "6px" }}>
+            <button
+              className={`cogsend-mode-btn ${workbenchMode === "openreply" ? "active" : ""}`}
+              onClick={() => setWorkbenchMode("openreply")}
+              style={workbenchMode === "openreply" ? { background: "linear-gradient(135deg, #e1306c, #833ab4)", borderColor: "#e1306c" } : {}}
+            >
+              <MessageCircle size={13}/> OpenReply (Comment-to-DM)
+            </button>
             <button
               className={`cogsend-mode-btn ${workbenchMode === "cogsend" ? "active" : ""}`}
               onClick={() => setWorkbenchMode("cogsend")}
             >
-              <Share2 size={13}/> CogSend Social & Threads
+              <Share2 size={13}/> CogSend (Social Scheduler)
             </button>
             <button
               className={`cogsend-mode-btn ${workbenchMode === "email" ? "active" : ""}`}
               onClick={() => setWorkbenchMode("email")}
             >
-              <Mail size={13}/> Email Workbench (SES)
+              <Mail size={13}/> Email (SES)
             </button>
           </div>
 
-          {workbenchMode === "cogsend" ? (
-            /* COGSEND MULTI-PLATFORM SCHEDULER & COMPOSER */
+          {/* TAB 1: OPENREPLY (MANYCHAT ALTERNATIVE) */}
+          {workbenchMode === "openreply" && (
+            <div>
+              <div className="outreach-panel-heading">
+                <span className="outreach-icon" style={{ background: "#fdf2f8", color: "#db2777" }}><MessageCircle size={19}/></span>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span className="openreply-header-badge">OPENREPLY ENGINE</span>
+                    <span style={{ fontSize: "9px", color: "#8a7b97", fontWeight: 700 }}>MANYCHAT ALTERNATIVE</span>
+                  </div>
+                  <h2>Comment-to-DM Automation</h2>
+                </div>
+              </div>
+              <p>Someone comments a keyword on your Reel, Post or Story, and OpenReply instantly queues a personalized DM with tracked links and optional follow gate.</p>
+
+              {/* Active Campaigns List */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 8px" }}>
+                <span style={{ fontSize: "10px", fontWeight: 800, color: "#65566f", textTransform: "uppercase" }}>Active Automations</span>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ fontSize: "10px", padding: "4px 8px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                  onClick={() => setIsCreatingCampaign(!isCreatingCampaign)}
+                >
+                  <Plus size={11}/> {isCreatingCampaign ? "Close" : "New Campaign"}
+                </button>
+              </div>
+
+              {/* Create Campaign Form Modal / Expander */}
+              {isCreatingCampaign && (
+                <form onSubmit={handleCreateOpenReplyCampaign} style={{ border: "1px solid #e2d8ec", background: "#fdfcff", borderRadius: "8px", padding: "12px", marginBottom: "14px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#241831", marginBottom: "8px" }}>Create Comment-to-DM Campaign</div>
+                  <label className="outreach-field">Campaign Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Reel: 10x Pipeline Blueprint"
+                    value={newCampName}
+                    onChange={e => setNewCampName(e.target.value)}
+                    style={{ fontSize: "11px", padding: "7px 10px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8" }}
+                  />
+
+                  <label className="outreach-field">Trigger Keywords (comma separated)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="LINK, BLUEPRINT, DEMO"
+                    value={newCampKeywords}
+                    onChange={e => setNewCampKeywords(e.target.value)}
+                    style={{ fontSize: "11px", padding: "7px 10px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8" }}
+                  />
+
+                  <label className="outreach-field">DM Message (use &#123;username&#125;)</label>
+                  <textarea
+                    rows={3}
+                    value={newCampDm}
+                    onChange={e => setNewCampDm(e.target.value)}
+                    style={{ fontSize: "11px", padding: "7px 10px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8" }}
+                  />
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "8px" }}>
+                    <div>
+                      <label className="outreach-field">Button Label</label>
+                      <input
+                        type="text"
+                        value={newCampButton}
+                        onChange={e => setNewCampButton(e.target.value)}
+                        style={{ fontSize: "11px", padding: "7px 10px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8" }}
+                      />
+                    </div>
+                    <div>
+                      <label className="outreach-field">Tracked URL</label>
+                      <input
+                        type="url"
+                        value={newCampUrl}
+                        onChange={e => setNewCampUrl(e.target.value)}
+                        style={{ fontSize: "11px", padding: "7px 10px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "10px" }}>
+                    <input
+                      type="checkbox"
+                      id="camp-follow-gate"
+                      checked={newCampRequireFollow}
+                      onChange={e => setNewCampRequireFollow(e.target.checked)}
+                    />
+                    <label htmlFor="camp-follow-gate" style={{ fontSize: "10px", fontWeight: 600, color: "#37145a", cursor: "pointer" }}>
+                      Follow Gate (require user to follow @threadly_hq before delivering link)
+                    </label>
+                  </div>
+
+                  <label className="outreach-field">Public Comment Reply</label>
+                  <input
+                    type="text"
+                    value={newCampPublicReply}
+                    onChange={e => setNewCampPublicReply(e.target.value)}
+                    placeholder="Sent you a DM! Check your inbox 📬"
+                    style={{ fontSize: "11px", padding: "7px 10px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8" }}
+                  />
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px", marginTop: "12px" }}>
+                    <button type="button" className="btn btn-outline" style={{ fontSize: "10px" }} onClick={() => setIsCreatingCampaign(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-dark" style={{ fontSize: "10px", background: "#e1306c", borderColor: "#e1306c" }}>Create Automation</button>
+                  </div>
+                </form>
+              )}
+
+              {/* Campaign Cards */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {openreplyCampaigns.map(camp => {
+                  const isSelected = camp.id === selectedCampaignId;
+                  return (
+                    <div
+                      key={camp.id}
+                      className="openreply-campaign-card"
+                      style={{ border: isSelected ? "2px solid #e1306c" : "1px solid #ded5e8", cursor: "pointer" }}
+                      onClick={() => setSelectedCampaignId(camp.id)}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: 800, color: "#241831" }}>{camp.name}</div>
+                          <span style={{ fontSize: "9px", color: "#8a7b97" }}>{camp.platform} · {camp.accountHandle}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); toggleOpenReplyCampaign(camp.id); }}
+                          style={{ border: "none", background: "none", cursor: "pointer", color: camp.isActive ? "#16a34a" : "#9ca3af" }}
+                        >
+                          {camp.isActive ? <ToggleRight size={22}/> : <ToggleLeft size={22}/>}
+                        </button>
+                      </div>
+
+                      {/* Keywords */}
+                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", margin: "6px 0" }}>
+                        {camp.keywords.map(kw => (
+                          <span key={kw} className="openreply-keyword-pill">{kw}</span>
+                        ))}
+                        {camp.requireFollow && (
+                          <span style={{ fontSize: "9px", padding: "2px 6px", borderRadius: "999px", background: "#fef3c7", color: "#92400e", fontWeight: 700 }}>
+                            Follow-gated
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Stats Grid */}
+                      <div className="openreply-stats-grid">
+                        <div className="openreply-stat-item">
+                          <div className="openreply-stat-val">{camp.stats.comments}</div>
+                          <div className="openreply-stat-lbl">Comments</div>
+                        </div>
+                        <div className="openreply-stat-item">
+                          <div className="openreply-stat-val">{camp.stats.dmsSent}</div>
+                          <div className="openreply-stat-lbl">DMs Sent</div>
+                        </div>
+                        <div className="openreply-stat-item">
+                          <div className="openreply-stat-val">{camp.stats.clicks}</div>
+                          <div className="openreply-stat-lbl">Clicks</div>
+                        </div>
+                        <div className="openreply-stat-item">
+                          <div className="openreply-stat-val" style={{ color: "#e1306c" }}>{camp.stats.ctr}%</div>
+                          <div className="openreply-stat-lbl">CTR</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Interactive Comment-to-DM Simulator */}
+              {activeOpenReplyCampaign && (
+                <div className="openreply-simulator-box">
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                    <Play size={14} style={{ color: "#e1306c" }} />
+                    <span style={{ fontSize: "11px", fontWeight: 800, color: "#241831" }}>
+                      Live Comment-to-DM Test Simulator
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "10px", color: "#6b5976", margin: "0 0 10px" }}>
+                    Simulate an inbound comment on <strong>{activeOpenReplyCampaign.name}</strong> to test keyword triggers, follow gates, and public comment replies.
+                  </p>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                    <div>
+                      <label className="outreach-field">Commenter @handle</label>
+                      <input
+                        type="text"
+                        value={simCommenter}
+                        onChange={e => setSimCommenter(e.target.value)}
+                        style={{ fontSize: "11px", padding: "6px 8px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8" }}
+                      />
+                    </div>
+                    <div>
+                      <label className="outreach-field">Follower status</label>
+                      <label style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px", fontSize: "10px", color: "#40344d", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={simIsFollower}
+                          onChange={e => setSimIsFollower(e.target.checked)}
+                        />
+                        Already follows @threadly_hq
+                      </label>
+                    </div>
+                  </div>
+
+                  <label className="outreach-field">Inbound Comment Text</label>
+                  <input
+                    type="text"
+                    value={simCommentText}
+                    onChange={e => setSimCommentText(e.target.value)}
+                    style={{ fontSize: "11px", padding: "6px 8px", width: "100%", borderRadius: "6px", border: "1px solid #ded5e8", marginBottom: "10px" }}
+                  />
+
+                  <button
+                    type="button"
+                    className="btn btn-dark"
+                    style={{ width: "100%", background: "linear-gradient(135deg, #e1306c, #833ab4)", borderColor: "#e1306c", fontSize: "11px", display: "flex", justifyContent: "center", alignItems: "center", gap: "6px" }}
+                    onClick={testOpenReplyTrigger}
+                    disabled={busy === "openreply-sim"}
+                  >
+                    <Zap size={13}/> {busy === "openreply-sim" ? "Processing Trigger…" : "Simulate Inbound Comment"}
+                  </button>
+
+                  {/* Simulation Live Result */}
+                  {simResult && (
+                    <div style={{ marginTop: "12px", borderTop: "1px solid #ded5e8", paddingTop: "12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                        {simResult.matched ? (
+                          <span style={{ fontSize: "10px", fontWeight: 800, color: "#16a34a", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                            <CheckCircle2 size={13}/> MATCHED: Keyword [{simResult.matchedKeyword}]
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "10px", fontWeight: 800, color: "#dc2626" }}>
+                            ✕ NO KEYWORD MATCH
+                          </span>
+                        )}
+                      </div>
+
+                      {simResult.matched && (
+                        <>
+                          {/* Public comment reply */}
+                          {simResult.publicReplyText && (
+                            <div className="openreply-public-reply-box">
+                              <strong>Public comment reply:</strong> "{simResult.publicReplyText}"
+                            </div>
+                          )}
+
+                          {/* DM Mockup */}
+                          <div className="openreply-dm-mockup">
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", borderBottom: "1px solid #ede8f2", paddingBottom: "6px" }}>
+                              <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#e1306c", color: "#fff", display: "grid", placeItems: "center", fontSize: "10px", fontWeight: 700 }}>T</div>
+                              <span style={{ fontSize: "11px", fontWeight: 800, color: "#111827" }}>threadly_hq</span>
+                              <span style={{ fontSize: "9px", color: "#9ca3af", marginLeft: "auto" }}>Just now</span>
+                            </div>
+
+                            <div className="openreply-dm-bubble">
+                              {simResult.dmDeliveredText}
+                              {simResult.buttons.map((btn, i) => (
+                                <a
+                                  key={i}
+                                  href={btn.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={`openreply-dm-btn ${i > 0 ? "openreply-dm-btn-secondary" : ""}`}
+                                >
+                                  {btn.label}
+                                </a>
+                              ))}
+                            </div>
+                            {simResult.followGated && (
+                              <div style={{ fontSize: "9px", color: "#b45309", marginTop: "6px", textAlign: "center", fontWeight: 600 }}>
+                                🔒 Follow-Gate Active: Link unlocks once user follows.
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Real-time DM Delivery Log */}
+              <div style={{ marginTop: "18px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "10px", fontWeight: 800, color: "#65566f", textTransform: "uppercase" }}>
+                    Recent Inbound Triggers
+                  </span>
+                  <span style={{ fontSize: "9px", color: "#8b789b" }}>{openreplyLogs.length} events logged</span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {openreplyLogs.map(log => (
+                    <div key={log.id} style={{ padding: "8px 10px", border: "1px solid #e6dcef", borderRadius: "6px", background: "#fff", fontSize: "10px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                        <span style={{ fontWeight: 800, color: "#37145a" }}>@{log.commenterUsername}</span>
+                        <span style={{ fontWeight: 700, color: log.status === "delivered" ? "#16a34a" : "#dc2626" }}>
+                          {log.status.toUpperCase()}
+                        </span>
+                      </div>
+                      <div style={{ color: "#4b5563", marginBottom: "4px" }}>"{log.commentText}"</div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        {log.matchedKeyword && (
+                          <span style={{ background: "#fdf2f8", color: "#db2777", padding: "1px 5px", borderRadius: "3px", fontWeight: 700, fontSize: "9px" }}>
+                            {log.matchedKeyword}
+                          </span>
+                        )}
+                        {log.publicReplyText && <span style={{ color: "#7c3aed", fontSize: "9px" }}>Reply sent</span>}
+                        {log.clickedLink && <span style={{ color: "#2563eb", fontSize: "9px", fontWeight: 700 }}>• Link Clicked</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: COGSEND SOCIAL & THREAD SCHEDULER */}
+          {workbenchMode === "cogsend" && (
             <div>
               <div className="outreach-panel-heading">
                 <span className="outreach-icon" style={{ background: "#f3e8ff", color: "#7c3aed" }}><Share2 size={19}/></span>
@@ -694,8 +1180,10 @@ export default function PortalOutreach({
                 </div>
               </div>
             </div>
-          ) : (
-            /* EMAIL WORKBENCH (SES) */
+          )}
+
+          {/* TAB 3: EMAIL WORKBENCH (SES) */}
+          {workbenchMode === "email" && (
             <div className="outreach-email-panel">
               <div className="outreach-panel-heading">
                 <span className="outreach-icon"><Mail size={19}/></span>
