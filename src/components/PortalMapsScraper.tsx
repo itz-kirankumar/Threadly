@@ -7,6 +7,7 @@ import {
   Compass,
   Copy,
   Download,
+  Edit3,
   ExternalLink,
   Filter,
   Globe,
@@ -14,28 +15,49 @@ import {
   MapPin,
   MessageSquare,
   Phone,
+  Plus,
   RefreshCw,
+  Save,
   Search,
   Share2,
+  Sliders,
   Sparkles,
   Star,
   Trash2,
   UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import type { GoogleMapsPlace } from "@/lib/maps-scraper";
 import { exportPlacesToCSV } from "@/lib/maps-scraper";
 
 const PRESET_CATEGORIES = [
-  { label: "Dentists & Dental", category: "Dentists", icon: "🩺" },
-  { label: "Plumbers & HVAC", category: "Plumbers and HVAC", icon: "🔧" },
-  { label: "Law Firms & Attorneys", category: "Lawyers", icon: "⚖️" },
-  { label: "Real Estate Agents", category: "Real Estate Agency", icon: "🏠" },
-  { label: "B2B SaaS & Tech", category: "Software Company", icon: "💻" },
-  { label: "Marketing Agencies", category: "Digital Marketing Agency", icon: "📈" },
-  { label: "Gyms & Fitness", category: "Gym", icon: "🏋️" },
+  { label: "Software & SaaS", category: "Software Company", icon: "💻" },
+  { label: "Digital Marketing", category: "Digital Marketing Agency", icon: "📈" },
+  { label: "Dentists & Clinics", category: "Dentists", icon: "🩺" },
+  { label: "Real Estate Builders", category: "Real Estate Agency", icon: "🏢" },
+  { label: "Manufacturers & Exporters", category: "Manufacturing", icon: "🏭" },
   { label: "Accounting & CPAs", category: "Accounting Firm", icon: "💼" },
-  { label: "Roofing & Contractors", category: "Roofing Contractor", icon: "🔨" },
+  { label: "Law Firms & Attorneys", category: "Lawyers", icon: "⚖️" },
+  { label: "Plumbers & HVAC", category: "Plumbers and HVAC", icon: "🔧" },
+  { label: "Gyms & Fitness", category: "Gym", icon: "🏋️" },
+  { label: "Cafes & Restaurants", category: "Restaurant", icon: "☕" },
+];
+
+const PRESET_LOCATIONS = [
+  { label: "🇮🇳 All India", value: "India" },
+  { label: "Bengaluru", value: "Bangalore, India" },
+  { label: "Mumbai", value: "Mumbai, India" },
+  { label: "Delhi NCR", value: "Delhi, India" },
+  { label: "Hyderabad", value: "Hyderabad, India" },
+  { label: "Pune", value: "Pune, India" },
+  { label: "Chennai", value: "Chennai, India" },
+  { label: "Kolkata", value: "Kolkata, India" },
+  { label: "Ahmedabad", value: "Ahmedabad, India" },
+  { label: "🇺🇸 Austin, TX", value: "Austin, TX" },
+  { label: "🇺🇸 San Francisco", value: "San Francisco, CA" },
+  { label: "🇬🇧 London", value: "London, UK" },
+  { label: "🇦🇪 Dubai", value: "Dubai, UAE" },
 ];
 
 export default function PortalMapsScraper({
@@ -53,11 +75,15 @@ export default function PortalMapsScraper({
   onDraftOutreach?: (place: GoogleMapsPlace) => void;
   setToast: (msg: string) => void;
 }) {
-  const [category, setCategory] = useState("Dentists");
+  // Default location set to "India" as requested, or company context if specifically set
   const [location, setLocation] = useState(
-    companyContext.country || companyContext.region || "Austin, TX"
+    companyContext.country && companyContext.country !== "Austin, TX"
+      ? companyContext.country
+      : "India"
   );
+  const [category, setCategory] = useState("Software Company");
   const [customQuery, setCustomQuery] = useState("");
+  const [useFreeformQuery, setUseFreeformQuery] = useState(false);
   const [depth, setDepth] = useState(15);
   const [extractEmails, setExtractEmails] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -71,13 +97,91 @@ export default function PortalMapsScraper({
   const [filterHasWebsite, setFilterHasWebsite] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
 
+  // Lead Editing State ("everything modifyable")
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
+  const [editEmails, setEditEmails] = useState("");
+
   // Track imported IDs
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [importingAll, setImportingAll] = useState(false);
 
-  const handleScrape = async (overrideCategory?: string) => {
-    const selectedCat = overrideCategory || category;
-    const q = customQuery.trim() || `${selectedCat} in ${location}`.trim();
+  const startEditing = (place: GoogleMapsPlace) => {
+    setEditingId(place.id);
+    setEditTitle(place.title);
+    setEditCategory(place.category);
+    setEditAddress(place.address);
+    setEditPhone(place.phone || "");
+    setEditWebsite(place.website || "");
+    setEditEmails((place.emails || []).join(", "));
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+  };
+
+  const saveEditing = (id: string) => {
+    const cleanedEmails = editEmails
+      .split(",")
+      .map(e => e.trim().toLowerCase())
+      .filter(e => e.includes("@"));
+
+    setPlaces(prev =>
+      prev.map(p => {
+        if (p.id !== id) return p;
+        return {
+          ...p,
+          title: editTitle.trim() || p.title,
+          category: editCategory.trim() || p.category,
+          address: editAddress.trim() || p.address,
+          phone: editPhone.trim(),
+          website: editWebsite.trim(),
+          emails: cleanedEmails,
+        };
+      })
+    );
+    setEditingId(null);
+    setToast("Updated business lead details!");
+  };
+
+  const handleDeletePlace = (id: string) => {
+    setPlaces(prev => prev.filter(p => p.id !== id));
+    setToast("Removed lead from results list.");
+  };
+
+  const handleAddCustomLead = () => {
+    const newPlace: GoogleMapsPlace = {
+      id: `manual-${Date.now()}`,
+      title: "New Local Business Lead",
+      category: category || "Business",
+      categories: [category || "Business"],
+      address: location || "India",
+      city: location.split(",")[0]?.trim() || "India",
+      country: location.toLowerCase().includes("india") ? "India" : "United States",
+      phone: location.toLowerCase().includes("india") ? "+91 98450 12345" : "+1 (555) 123-4567",
+      website: "https://example.com",
+      emails: ["contact@example.com"],
+      rating: 4.8,
+      reviewCount: 25,
+      scrapedAt: new Date().toISOString(),
+      mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("Local Business in " + location)}`,
+    };
+    setPlaces(prev => [newPlace, ...prev]);
+    startEditing(newPlace);
+    setToast("Added new lead! Edit its details below and click Save.");
+  };
+
+  const handleScrape = async (overrideCategory?: string, overrideLocation?: string) => {
+    const activeCat = overrideCategory || category;
+    const activeLoc = overrideLocation || location;
+    const q = useFreeformQuery && customQuery.trim()
+      ? customQuery.trim()
+      : `${activeCat} in ${activeLoc}`.trim();
+
     if (!q) {
       setError("Please enter a category and location or custom query.");
       return;
@@ -100,9 +204,9 @@ export default function PortalMapsScraper({
         method: "POST",
         headers,
         body: JSON.stringify({
-          query: customQuery.trim(),
-          category: selectedCat,
-          location,
+          query: useFreeformQuery ? customQuery.trim() : "",
+          category: activeCat,
+          location: activeLoc,
           depth,
           extractEmails,
         }),
@@ -203,6 +307,10 @@ export default function PortalMapsScraper({
     ? (places.reduce((acc, p) => acc + p.rating, 0) / places.length).toFixed(1)
     : "0.0";
 
+  const activeQueryDisplay = useFreeformQuery && customQuery
+    ? customQuery
+    : `${category} in ${location}`;
+
   return (
     <div className="maps-scraper-container">
       {/* Page Header */}
@@ -216,108 +324,333 @@ export default function PortalMapsScraper({
           </h1>
           <p>
             Extract verified local business leads, addresses, phones, websites, and emails
-            directly from Google Maps for high-converting B2B outreach.
+            directly from Google Maps for high-converting B2B outreach across India and worldwide.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <span className="status-tag" style={{ background: "#eef2ff", color: "#4f46e5" }}>
             Powered by itz-kirankumar/google-maps-scraper
+          </span>
+          <span className="status-tag" style={{ background: "#ecfdf5", color: "#059669" }}>
+            Live Directory Sync Active
           </span>
         </div>
       </div>
 
-      {/* Preset Category Pills */}
-      <div style={{ marginBottom: 18 }}>
-        <span
-          style={{
-            display: "block",
-            fontSize: 11,
-            fontWeight: 700,
-            color: "var(--muted)",
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-            marginBottom: 8,
-          }}
-        >
-          TARGET NICHE PRESETS
-        </span>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {PRESET_CATEGORIES.map(preset => {
-            const active = category === preset.category && !customQuery;
-            return (
-              <button
-                key={preset.label}
-                type="button"
-                className={`btn ${active ? "btn-dark" : "btn-outline"} small-btn`}
-                onClick={() => {
-                  setCategory(preset.category);
-                  setCustomQuery("");
-                  void handleScrape(preset.category);
-                }}
-                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
-                <span>{preset.icon}</span>
-                <span>{preset.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Main Search Configuration Card */}
-      <div className="mini-card" style={{ padding: 24, marginBottom: 24 }}>
-        <div className="dialog-grid" style={{ gridTemplateColumns: "1.2fr 1fr 140px" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
-            <span>BUSINESS CATEGORY / NICHE</span>
-            <input
-              type="text"
-              value={category}
-              onChange={e => {
-                setCategory(e.target.value);
-                setCustomQuery("");
-              }}
-              placeholder="e.g. Dentists, HVAC, Real Estate"
-            />
-          </label>
+      <div
+        className="mini-card"
+        style={{
+          padding: 24,
+          marginBottom: 24,
+          background: "#ffffff",
+          border: "1.5px solid var(--line)",
+          borderRadius: 14,
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.03)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>
+              Search Parameters
+            </span>
+            <span style={{ fontSize: 11, color: "var(--muted)" }}>
+              (Defaulted to <strong>India</strong>, fully customizable)
+            </span>
+          </div>
 
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
-            <span>LOCATION / CITY / REGION</span>
-            <input
-              type="text"
-              value={location}
-              onChange={e => {
-                setLocation(e.target.value);
-                setCustomQuery("");
-              }}
-              placeholder="e.g. Austin TX, Berlin Germany, London"
-            />
-          </label>
-
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
-            <span>LEADS DEPTH</span>
-            <select
-              value={depth}
-              onChange={e => setDepth(parseInt(e.target.value, 10))}
-            >
-              <option value={10}>10 Leads</option>
-              <option value={15}>15 Leads</option>
-              <option value={25}>25 Leads</option>
-              <option value={40}>40 Leads</option>
-            </select>
-          </label>
+          {/* Toggle between structured category+location and custom freeform */}
+          <button
+            type="button"
+            className="text-link"
+            onClick={() => setUseFreeformQuery(prev => !prev)}
+            style={{ fontSize: 12, color: "#ff4500", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}
+          >
+            <Sliders size={13} />
+            {useFreeformQuery ? "Switch to Category + Location Mode" : "Switch to Freeform Query Mode"}
+          </button>
         </div>
 
+        {useFreeformQuery ? (
+          /* Freeform Custom Query Input */
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
+              <span>EXACT FREEFORM SEARCH QUERY</span>
+              <div style={{ position: "relative" }}>
+                <Search
+                  size={15}
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "var(--muted)",
+                  }}
+                />
+                <input
+                  type="text"
+                  value={customQuery}
+                  onChange={e => setCustomQuery(e.target.value)}
+                  placeholder="e.g. Fintech startups in Koramangala Bangalore, Dentists in Mumbai, Export houses in Surat"
+                  style={{
+                    width: "100%",
+                    minHeight: 44,
+                    padding: "10px 14px 10px 38px",
+                    border: "1.5px solid #d1d5db",
+                    borderRadius: "8px",
+                    background: "#ffffff",
+                    color: "#111827",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    outline: "none",
+                  }}
+                />
+                {customQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomQuery("")}
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--muted)",
+                      display: "grid",
+                      placeItems: "center",
+                    }}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            </label>
+          </div>
+        ) : (
+          /* Structured Grid: Category, Location, Leads Depth */
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.2fr 1.2fr 140px",
+              gap: 16,
+              marginBottom: 16,
+            }}
+          >
+            {/* Business Category Input */}
+            <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <Building2 size={13} style={{ color: "#ff4500" }} /> BUSINESS CATEGORY / NICHE
+              </span>
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  value={category}
+                  onChange={e => {
+                    setCategory(e.target.value);
+                  }}
+                  placeholder="e.g. Software Company, Dentists, Real Estate"
+                  style={{
+                    width: "100%",
+                    minHeight: 44,
+                    padding: "10px 14px",
+                    border: "1.5px solid #d1d5db",
+                    borderRadius: "8px",
+                    background: "#ffffff",
+                    color: "#111827",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    outline: "none",
+                  }}
+                />
+                {category && (
+                  <button
+                    type="button"
+                    onClick={() => setCategory("")}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--muted)",
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </label>
+
+            {/* Location Input with Default = "India" */}
+            <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <MapPin size={13} style={{ color: "#ff4500" }} /> LOCATION / CITY / REGION
+              </span>
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={e => {
+                    setLocation(e.target.value);
+                  }}
+                  placeholder="e.g. India, Bangalore, Mumbai, Delhi, Austin TX"
+                  style={{
+                    width: "100%",
+                    minHeight: 44,
+                    padding: "10px 14px",
+                    border: "1.5px solid #d1d5db",
+                    borderRadius: "8px",
+                    background: "#ffffff",
+                    color: "#111827",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    outline: "none",
+                  }}
+                />
+                {location && (
+                  <button
+                    type="button"
+                    onClick={() => setLocation("")}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--muted)",
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </label>
+
+            {/* Leads Depth Dropdown */}
+            <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
+              <span>LEADS DEPTH</span>
+              <select
+                value={depth}
+                onChange={e => setDepth(parseInt(e.target.value, 10))}
+                style={{
+                  width: "100%",
+                  minHeight: 44,
+                  padding: "10px 12px",
+                  border: "1.5px solid #d1d5db",
+                  borderRadius: "8px",
+                  background: "#ffffff",
+                  color: "#111827",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value={10}>10 Leads</option>
+                <option value={15}>15 Leads</option>
+                <option value={25}>25 Leads</option>
+                <option value={40}>40 Leads</option>
+                <option value={50}>50 Leads</option>
+              </select>
+            </label>
+          </div>
+        )}
+
+        {/* Quick Location Pills (India & Global Hubs) */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <MapPin size={12} style={{ color: "var(--muted)" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Quick Locations:
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {PRESET_LOCATIONS.map(preset => {
+              const active = location.toLowerCase() === preset.value.toLowerCase();
+              return (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className={`btn ${active ? "btn-dark" : "btn-outline"} small-btn`}
+                  onClick={() => {
+                    setLocation(preset.value);
+                  }}
+                  style={{
+                    fontSize: 11,
+                    padding: "4px 10px",
+                    minHeight: 28,
+                    borderRadius: 6,
+                    background: active ? "#ff4500" : "#ffffff",
+                    borderColor: active ? "#ff4500" : "#e2e8f0",
+                    color: active ? "#ffffff" : "var(--foreground)",
+                  }}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Target Niche Presets */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <Building2 size={12} style={{ color: "var(--muted)" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Popular Business Niches:
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {PRESET_CATEGORIES.map(preset => {
+              const active = category.toLowerCase() === preset.category.toLowerCase();
+              return (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className={`btn ${active ? "btn-dark" : "btn-outline"} small-btn`}
+                  onClick={() => {
+                    setCategory(preset.category);
+                  }}
+                  style={{
+                    fontSize: 11,
+                    padding: "4px 10px",
+                    minHeight: 28,
+                    borderRadius: 6,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    background: active ? "#1e293b" : "#ffffff",
+                    borderColor: active ? "#1e293b" : "#e2e8f0",
+                    color: active ? "#ffffff" : "var(--foreground)",
+                  }}
+                >
+                  <span>{preset.icon}</span>
+                  <span>{preset.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Search Bar Footer: Crawl Checkbox + Active Query String + Scrape Action Button */}
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            marginTop: 14,
+            paddingTop: 16,
+            borderTop: "1px solid var(--line)",
             flexWrap: "wrap",
-            gap: 12,
+            gap: 14,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             <label
               style={{
                 display: "inline-flex",
@@ -326,19 +659,20 @@ export default function PortalMapsScraper({
                 fontSize: 12,
                 cursor: "pointer",
                 margin: 0,
+                userSelect: "none",
               }}
             >
               <input
                 type="checkbox"
                 checked={extractEmails}
                 onChange={e => setExtractEmails(e.target.checked)}
-                style={{ width: 16, height: 16, accentColor: "#ff4500" }}
+                style={{ width: 16, height: 16, accentColor: "#ff4500", cursor: "pointer" }}
               />
-              <span style={{ fontWeight: 600 }}>Crawl websites for emails & socials</span>
+              <span style={{ fontWeight: 600 }}>Crawl websites for verified emails & socials</span>
             </label>
 
-            <span style={{ fontSize: 11, color: "var(--muted)" }}>
-              Search query: <strong>{customQuery || `${category} in ${location}`}</strong>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>
+              Active search: <strong style={{ color: "var(--foreground)" }}>{activeQueryDisplay}</strong>
             </span>
           </div>
 
@@ -350,14 +684,16 @@ export default function PortalMapsScraper({
             style={{
               background: "#ff4500",
               borderColor: "#ff4500",
-              padding: "10px 22px",
+              padding: "11px 24px",
               fontSize: 13,
+              fontWeight: 700,
+              boxShadow: "0 2px 6px rgba(255, 69, 0, 0.25)",
             }}
           >
             {busy ? (
               <>
                 <span className="spinner" style={{ width: 14, height: 14 }} />
-                <span>Scraping Google Maps…</span>
+                <span>Scraping Google Maps Leads…</span>
               </>
             ) : (
               <>
@@ -377,9 +713,27 @@ export default function PortalMapsScraper({
               borderRadius: 8,
               color: "#b91c1c",
               fontSize: 12,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
-            {error}
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => void handleScrape()}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#b91c1c",
+                fontWeight: 700,
+                cursor: "pointer",
+                textDecoration: "underline",
+                fontSize: 11,
+              }}
+            >
+              Retry
+            </button>
           </div>
         )}
       </div>
@@ -431,7 +785,7 @@ export default function PortalMapsScraper({
         </div>
       )}
 
-      {/* Results Header, Filters, and Bulk Actions */}
+      {/* Results Header, Filters, Manual Add, and Bulk Actions */}
       {places.length > 0 && (
         <div
           style={{
@@ -469,6 +823,8 @@ export default function PortalMapsScraper({
                   fontSize: 12,
                   minHeight: 34,
                   borderRadius: 8,
+                  border: "1px solid #d1d5db",
+                  outline: "none",
                 }}
               />
             </div>
@@ -476,7 +832,7 @@ export default function PortalMapsScraper({
             <select
               value={filterRating}
               onChange={e => setFilterRating(parseFloat(e.target.value))}
-              style={{ minHeight: 34, fontSize: 12, borderRadius: 8 }}
+              style={{ minHeight: 34, fontSize: 12, borderRadius: 8, border: "1px solid #d1d5db" }}
             >
               <option value={0}>All Ratings</option>
               <option value={4.0}>Rating ≥ 4.0★</option>
@@ -500,6 +856,16 @@ export default function PortalMapsScraper({
             >
               Has Website
             </button>
+
+            {/* Everything Modifiable: Add Custom Lead Manually */}
+            <button
+              type="button"
+              className="btn btn-outline small-btn"
+              onClick={handleAddCustomLead}
+              style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 5, color: "#ff4500", borderColor: "#fed7aa" }}
+            >
+              <Plus size={13} /> Add Custom Lead
+            </button>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -508,7 +874,7 @@ export default function PortalMapsScraper({
               className="btn btn-dark small-btn"
               disabled={importingAll || !filteredPlaces.length}
               onClick={handleBulkImport}
-              style={{ fontSize: 12 }}
+              style={{ fontSize: 12, background: "#16a34a", borderColor: "#16a34a" }}
             >
               {importingAll ? (
                 <>
@@ -543,10 +909,127 @@ export default function PortalMapsScraper({
         </div>
       )}
 
-      {/* Place Results Grid */}
+      {/* Place Results Grid ("everything modifyable") */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {filteredPlaces.map(place => {
           const isImported = importedIds.has(place.id);
+          const isEditing = editingId === place.id;
+
+          if (isEditing) {
+            /* Inline Edit Form for this place */
+            return (
+              <div
+                key={place.id}
+                style={{
+                  background: "#fff",
+                  border: "2px solid #ff4500",
+                  borderRadius: 12,
+                  padding: "20px 22px",
+                  boxShadow: "0 4px 14px rgba(255, 69, 0, 0.12)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Edit3 size={15} style={{ color: "#ff4500" }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>
+                      Edit Business Lead Details
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>ID: {place.id}</span>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 14, marginBottom: 12 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700 }}>
+                    <span>BUSINESS NAME / TITLE</span>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, fontWeight: 600 }}
+                    />
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700 }}>
+                    <span>CATEGORY / NICHE</span>
+                    <input
+                      type="text"
+                      value={editCategory}
+                      onChange={e => setEditCategory(e.target.value)}
+                      style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13 }}
+                    />
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14, marginBottom: 12 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700 }}>
+                    <span>FULL ADDRESS</span>
+                    <input
+                      type="text"
+                      value={editAddress}
+                      onChange={e => setEditAddress(e.target.value)}
+                      style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }}
+                    />
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700 }}>
+                    <span>PHONE NUMBER</span>
+                    <input
+                      type="text"
+                      value={editPhone}
+                      onChange={e => setEditPhone(e.target.value)}
+                      placeholder="+91 ... / +1 ..."
+                      style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }}
+                    />
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700 }}>
+                    <span>WEBSITE URL</span>
+                    <input
+                      type="text"
+                      value={editWebsite}
+                      onChange={e => setEditWebsite(e.target.value)}
+                      placeholder="https://..."
+                      style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }}
+                    />
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700 }}>
+                    <span>EMAILS (COMMA SEPARATED)</span>
+                    <input
+                      type="text"
+                      value={editEmails}
+                      onChange={e => setEditEmails(e.target.value)}
+                      placeholder="contact@company.in, sales@company.com"
+                      style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }}
+                    />
+                  </label>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline small-btn"
+                    onClick={cancelEditing}
+                    style={{ fontSize: 12 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-dark small-btn"
+                    onClick={() => saveEditing(place.id)}
+                    style={{ background: "#16a34a", borderColor: "#16a34a", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}
+                  >
+                    <Save size={13} /> Save Lead Changes
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          /* Normal View Card for this place */
           return (
             <div
               key={place.id}
@@ -655,6 +1138,7 @@ export default function PortalMapsScraper({
                         gap: 5,
                         color: "var(--foreground)",
                         textDecoration: "none",
+                        fontWeight: 500,
                       }}
                     >
                       <Phone size={13} style={{ color: "var(--muted)" }} />
@@ -788,6 +1272,30 @@ export default function PortalMapsScraper({
                   )}
                 </button>
 
+                <div style={{ display: "flex", gap: 6 }}>
+                  {/* Inline Edit button */}
+                  <button
+                    type="button"
+                    className="btn btn-outline small-btn"
+                    onClick={() => startEditing(place)}
+                    style={{ flex: 1, fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                    title="Edit lead details before importing"
+                  >
+                    <Edit3 size={11} /> Edit
+                  </button>
+
+                  {/* Delete button */}
+                  <button
+                    type="button"
+                    className="btn btn-outline small-btn"
+                    onClick={() => handleDeletePlace(place.id)}
+                    style={{ fontSize: 11, color: "#dc2626", borderColor: "#fecaca", padding: "0 8px" }}
+                    title="Remove lead"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+
                 {onDraftOutreach && (
                   <button
                     type="button"
@@ -850,60 +1358,38 @@ export default function PortalMapsScraper({
                 margin: "0 auto 14px",
               }}
             >
-              <MapPin size={26} />
+              <MapPin size={24} />
             </div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 6px" }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 6px" }}>
               Ready to scrape local business leads
             </h3>
-            <p style={{ fontSize: 13, color: "var(--muted)", maxWidth: 440, margin: "0 auto 16px" }}>
-              Select a preset niche above or enter any city and business category (e.g. Dentists in Berlin, Roofing in Austin TX) to extract contact details.
+            <p
+              style={{
+                color: "var(--muted)",
+                fontSize: 13,
+                maxWidth: 480,
+                margin: "0 auto 18px",
+              }}
+            >
+              Defaulted to India. Enter any city, state, or country (e.g. Bangalore, Mumbai, Delhi, Austin TX, London)
+              and business niche to extract verified leads, websites, and direct emails.
             </p>
             <button
               type="button"
               className="btn btn-dark"
               onClick={() => void handleScrape()}
+              style={{
+                background: "#ff4500",
+                borderColor: "#ff4500",
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "10px 22px",
+              }}
             >
-              <Search size={15} /> Scrape {category} in {location}
+              <Sparkles size={14} /> Start Scraping ({category} in {location})
             </button>
           </div>
         )}
-      </div>
-
-      {/* Docker / Agent Skill Info Callout */}
-      <div
-        style={{
-          marginTop: 28,
-          padding: "16px 20px",
-          background: "#faf9f7",
-          border: "1px solid var(--line)",
-          borderRadius: 12,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Sparkles size={20} style={{ color: "#ff4500", flexShrink: 0 }} />
-          <div>
-            <strong style={{ fontSize: 13, display: "block" }}>
-              Agent Skill & CLI Integration Active
-            </strong>
-            <span style={{ fontSize: 12, color: "var(--muted)" }}>
-              The <code>google-maps-scraper</code> skill is installed. You can also run high-volume distributed crawls via Docker with <code>npx skills add gosom/google-maps-scraper</code>.
-            </span>
-          </div>
-        </div>
-        <a
-          href="https://github.com/itz-kirankumar/google-maps-scraper"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn btn-outline small-btn"
-          style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
-        >
-          View GitHub Repository <ExternalLink size={13} />
-        </a>
       </div>
     </div>
   );
