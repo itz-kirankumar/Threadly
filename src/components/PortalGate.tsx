@@ -7,6 +7,16 @@ import PortalWorkspace from "@/components/PortalWorkspace";
 import PortalPreloader from "@/components/PortalPreloader";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
 
+const ADMIN_EMAILS = [
+  "kiran160703kumar@gmail.com",
+  "founder@demo.threadly.io"
+];
+
+function checkIsAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}
+
 export default function PortalGate() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -24,8 +34,9 @@ export default function PortalGate() {
       const unsubscribe = onAuthStateChanged(
         auth,
         currentUser => {
+          const userIsAdmin = checkIsAdmin(currentUser?.email);
           setUser(currentUser);
-          setIsAdmin(false);
+          setIsAdmin(userIsAdmin);
           setReady(true);
           if (!currentUser) {
             setAccessStatus(null);
@@ -33,7 +44,15 @@ export default function PortalGate() {
             setAccessChecked(true);
             return;
           }
-          setAccessChecked(false);
+
+          if (userIsAdmin) {
+            setIsAdmin(true);
+            setAccessStatus("approved");
+            setAccessChecked(true);
+          } else {
+            setAccessChecked(false);
+          }
+
           void (async () => {
             try {
               const response = await fetch("/api/waitlist", {
@@ -42,10 +61,14 @@ export default function PortalGate() {
               });
               const data = await response.json().catch(() => ({}));
               if (!response.ok) throw new Error(data.error || "Could not check your beta access.");
-              setIsAdmin(data.role === "admin");
-              setAccessStatus(data.application?.status || null);
+              const verifiedAdmin = data.role === "admin" || userIsAdmin;
+              const hasAccess = Boolean(data.accessGranted || verifiedAdmin || data.application?.status === "approved");
+              setIsAdmin(verifiedAdmin);
+              setAccessStatus(hasAccess ? "approved" : (data.application?.status || null));
             } catch (error) {
-              setAuthError(error instanceof Error ? error.message : "Could not verify your beta access.");
+              if (!userIsAdmin) {
+                setAuthError(error instanceof Error ? error.message : "Could not verify your beta access.");
+              }
             } finally {
               setAccessChecked(true);
             }
@@ -100,7 +123,8 @@ export default function PortalGate() {
     return <PortalPreloader message="Checking your Threadly 2.0 beta access…" />;
   }
 
-  if (accessStatus !== "approved") {
+  // Admin bypass: if user is admin, never block with beta access request screen
+  if (accessStatus !== "approved" && !isAdmin && !checkIsAdmin(user.email)) {
     return (
       <main id="wisentry-portal" className="portal-auth">
         <header className="portal-auth-header">
@@ -146,7 +170,7 @@ export default function PortalGate() {
     <PortalWorkspace
       email={user.email || ""}
       name={user.displayName || "Founder"}
-      isAdmin={isAdmin}
+      isAdmin={isAdmin || checkIsAdmin(user.email)}
       getIdToken={userGetIdToken}
       signOutAction={userSignOut}
     />

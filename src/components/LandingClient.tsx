@@ -135,7 +135,12 @@ export default function LandingClient() {
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(data.error || "Could not check your beta request.");
-          setApplicationStatus(data.application?.status || null);
+          const isUserAdmin = data.role === "admin" || (user.email ? ["kiran160703kumar@gmail.com", "founder@demo.threadly.io"].includes(user.email.toLowerCase().trim()) : false);
+          if (isUserAdmin || data.accessGranted || data.application?.status === "approved") {
+            setApplicationStatus("approved");
+          } else {
+            setApplicationStatus(data.application?.status || null);
+          }
         } catch (error) {
           setFormError(error instanceof Error ? error.message : "Could not check your beta request.");
         } finally {

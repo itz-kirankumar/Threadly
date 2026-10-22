@@ -14,7 +14,15 @@ export async function GET(request: Request) {
     const user = await getFirebaseIdentity(request);
     if (!user) return NextResponse.json({ error: "Sign in with Google to continue." }, { status: 401 });
     if (user.idToken === "demo-token" || isAdminEmail(user.email)) {
-      return NextResponse.json({ application: null, accessGranted: true, role: "admin" }, { headers: { "Cache-Control": "no-store" } });
+      return NextResponse.json({
+        application: {
+          status: "approved",
+          createdAt: new Date().toISOString(),
+          reviewedAt: new Date().toISOString(),
+        },
+        accessGranted: true,
+        role: "admin",
+      }, { headers: { "Cache-Control": "no-store" } });
     }
     const application = await getWaitlistRequest(user.uid, user.idToken);
     return NextResponse.json({ accessGranted: application?.status === "approved", application: application ? {
