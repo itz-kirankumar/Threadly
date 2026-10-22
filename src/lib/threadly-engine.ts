@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { patchData, readData, writeData } from "./portal-db";
-import type { Lead, Opportunity } from "./portal-data";
+import type { Lead, Opportunity, Draft, OutreachEmail, Workspace } from "./portal-data";
+import { computeCrossFeatureInsights, type CrossFeatureInsights } from "./insights-sync-engine";
 import { searchTavily } from "./tavily";
 
 /* ============================================================
@@ -237,6 +238,7 @@ export type GrowthSnapshot = {
     qualifiedLeads: number;
     conversionRate: number;
   };
+  insights?: CrossFeatureInsights;
 };
 
 export type GrowthState = {
@@ -878,7 +880,14 @@ function liveEvents(events: LiveEvent[], loop: number): LiveEvent[] {
    Public API
    ------------------------------------------------------------ */
 
-export async function getGrowthSnapshot(uid: string, leads: Lead[]): Promise<GrowthSnapshot> {
+export async function getGrowthSnapshot(
+  uid: string,
+  leads: Lead[],
+  realOpportunities?: Opportunity[],
+  realDrafts?: Draft[],
+  realEmails?: OutreachEmail[],
+  workspace?: Workspace,
+): Promise<GrowthSnapshot> {
   const state = await readGrowth(uid, leads);
   const loop = Math.floor(Date.now() / 6000) % 120;
 
@@ -886,7 +895,7 @@ export async function getGrowthSnapshot(uid: string, leads: Lead[]): Promise<Gro
     liveCampaign(campaign, loop, uid),
   );
   const sequences = (state.sequences || []).map((sequence) => liveSequence(sequence, loop));
-  const events = buildLiveFeed(uid, 14, undefined, leads);
+  const events = buildLiveFeed(uid, 14, realOpportunities, leads);
   const scores = (leads || []).map((lead) =>
     (state.scores || []).find((score) => score.leadId === lead.id) ?? scoreLead(lead, uid),
   );
@@ -948,6 +957,21 @@ export async function getGrowthSnapshot(uid: string, leads: Lead[]): Promise<Gro
       qualifiedLeads: qualified,
       conversionRate: qualified ? Math.round((converted / qualified) * 100) : 0,
     },
+    insights: computeCrossFeatureInsights(
+      workspace || { id: uid, name: "Workspace", context: {}, created_at: now() },
+      realOpportunities || [],
+      realDrafts || [],
+      leads,
+      realEmails || [],
+      {
+        campaigns,
+        sequences,
+        slots: state.slots,
+        geo: state.geo,
+        scores,
+        events,
+      }
+    ),
   };
 }
 

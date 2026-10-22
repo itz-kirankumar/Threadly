@@ -1,8 +1,9 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
-import https from "node:https";
+import { lookup } from "dns/promises";
+import { isIP } from "net";
+import https from "https";
 import { generateJson, getAiProviderLabel } from "./ai-router";
 import { isTavilyConfigured, extractTavily } from "./tavily";
+import { crawlUrlWithAgentReach } from "./agent-reach";
 
 const MAX_HTML_BYTES = 512_000;
 const MAX_REDIRECTS = 3;
@@ -80,7 +81,7 @@ function requestPage(url: URL, address: Address) {
   });
 }
 
-async function fetchPublicPage(input: string, redirects = 0): Promise<{ url: string; html: string }> {
+export async function fetchPublicPage(input: string, redirects = 0): Promise<{ url: string; html: string }> {
   let url: URL;
   try { url = new URL(input); }
   catch { throw new Error("Enter a complete website URL, such as https://example.com."); }
@@ -96,6 +97,25 @@ async function fetchPublicPage(input: string, redirects = 0): Promise<{ url: str
   if (result.status < 200 || result.status >= 300) throw new Error(`The website returned HTTP ${result.status}.`);
   if (!result.contentType.toLowerCase().includes("text/html")) throw new Error("That URL did not return an HTML website page.");
   return { url: url.toString(), html: result.html };
+}
+
+export async function fetchPublicText(input: string, redirects = 0): Promise<{ url: string; text: string }> {
+  let url: URL;
+  try { url = new URL(input); }
+  catch { throw new Error("Enter a complete public HTTPS URL."); }
+  if (url.protocol !== "https:" || url.username || url.password) throw new Error("Use a public HTTPS website URL without sign-in details.");
+  url.hash = "";
+  const addresses = await resolvePublic(url.hostname);
+  const result = await requestPage(url, addresses[0]);
+  if ([301, 302, 303, 307, 308].includes(result.status) && result.location) {
+    if (redirects >= MAX_REDIRECTS) throw new Error("This website redirects too many times to analyze safely.");
+    return fetchPublicText(new URL(result.location, url).toString(), redirects + 1);
+  }
+  if (result.status < 200 || result.status >= 300) throw new Error(`The website returned HTTP ${result.status}.`);
+  if (!/(?:text\/|application\/(?:xml|rss\+xml|atom\+xml))/i.test(result.contentType)) {
+    throw new Error("That URL did not return a readable text document.");
+  }
+  return { url: url.toString(), text: result.html };
 }
 
 function decodeHtml(value: string) {
@@ -139,10 +159,12 @@ export async function analyzeOutreachWebsite(input: unknown) {
   let pageDescription = "";
   let pageContent = "";
   let extractionProvider = "Direct HTTP";
+  const page = await fetchPublicPage(targetUrl);
+  resolvedUrl = page.url;
 
   if (isTavilyConfigured()) {
     try {
-      const extracted = await extractTavily([targetUrl]);
+      const extracted = await extractTavily([resolvedUrl]);
       if (extracted.length && extracted[0].rawContent && extracted[0].rawContent.trim().length > 60) {
         resolvedUrl = extracted[0].url || targetUrl;
         pageContent = extracted[0].rawContent.trim().slice(0, 15000);
@@ -154,8 +176,20 @@ export async function analyzeOutreachWebsite(input: unknown) {
   }
 
   if (!pageContent) {
-    const page = await fetchPublicPage(targetUrl);
-    resolvedUrl = page.url;
+    try {
+      const crawl = await crawlUrlWithAgentReach(resolvedUrl, { timeoutMs: 12000 });
+      if (crawl.markdown && crawl.markdown.trim().length > 80) {
+        pageTitle = crawl.title || pageTitle;
+        pageDescription = crawl.description || pageDescription;
+        pageContent = crawl.markdown.slice(0, 15000);
+        extractionProvider = crawl.provider;
+      }
+    } catch {
+      // Continue to local HTML parser
+    }
+  }
+
+  if (!pageContent) {
     const extracted = pageText(page.html);
     pageTitle = extracted.title;
     pageDescription = extracted.description;
@@ -174,12 +208,12 @@ export async function analyzeOutreachWebsite(input: unknown) {
     result = {
       companyName: cleanTitle.slice(0, 80),
       description: cleanDesc,
-      targetCustomer: "Founders, growth engineers, and business operators",
-      idealCustomerProfile: `Teams looking for modern ${cleanTitle} solutions and alternatives`,
-      customerPainPoints: cleanDesc || "Manual repetitive workflows, lack of real-time insights, fragmented tools",
-      industry: "B2B SaaS / Growth Tech",
-      targetTitles: "Founder, CEO, Head of Growth, CTO, VP Engineering",
-      searchPhrases: `${cleanTitle.toLowerCase()} alternative, looking for tools like ${cleanTitle.toLowerCase()}, best software for ${cleanTitle.toLowerCase()}`,
+      targetCustomer: "",
+      idealCustomerProfile: "",
+      customerPainPoints: "",
+      industry: "",
+      targetTitles: "",
+      searchPhrases: "",
     };
   }
 
@@ -194,7 +228,7 @@ export async function analyzeOutreachWebsite(input: unknown) {
     industry: stringField("industry"),
     titles: stringField("titles") || stringField("targetTitles"),
     searchPhrases: stringField("searchPhrases"),
-    provider: getAiProviderLabel("website-analysis") || "Smart Heuristic",
+    provider: getAiProviderLabel("website-analysis") || "Metadata fallback",
     extractor: extractionProvider,
   };
 }

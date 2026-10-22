@@ -1,45 +1,20 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import PortalWorkspace from "@/components/PortalWorkspace";
 import PortalPreloader from "@/components/PortalPreloader";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
 
 export default function PortalGate() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [authError, setAuthError] = useState("");
-  const [signingIn, setSigningIn] = useState(false);
   const [accessChecked, setAccessChecked] = useState(false);
   const [accessStatus, setAccessStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-
-  const handleGoogleSignIn = async () => {
-    setSigningIn(true);
-    setAuthError("");
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-      const credential = await signInWithPopup(getFirebaseAuth(), provider);
-      setUser(credential.user);
-      setReady(true);
-      setAccessChecked(false);
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code;
-      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
-        return;
-      }
-      if (code === "auth/unauthorized-domain") {
-        const currentHost = typeof window !== "undefined" ? window.location.hostname : "this domain";
-        setAuthError(`Domain "${currentHost}" is not authorized for Firebase sign-in. Open via http://localhost:3000 (not 127.0.0.1) or add "${currentHost}" in Firebase Console > Authentication > Settings > Authorized domains.`);
-        return;
-      }
-      setAuthError(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
-    } finally {
-      setSigningIn(false);
-    }
-  };
 
   const initAuth = useCallback(() => {
     setAuthError("");
@@ -68,9 +43,9 @@ export default function PortalGate() {
               const data = await response.json().catch(() => ({}));
               if (!response.ok) throw new Error(data.error || "Could not check your beta access.");
               setIsAdmin(data.role === "admin");
-              setAccessStatus(data.accessGranted ? "approved" : data.application?.status || null);
+              setAccessStatus(data.application?.status || null);
             } catch (error) {
-              setAuthError(error instanceof Error ? error.message : "Could not check your beta access.");
+              setAuthError(error instanceof Error ? error.message : "Could not verify your beta access.");
             } finally {
               setAccessChecked(true);
             }
@@ -96,6 +71,12 @@ export default function PortalGate() {
     };
   }, [initAuth]);
 
+  useEffect(() => {
+    if (ready && !user && !authError) {
+      router.replace("/portal/login");
+    }
+  }, [ready, user, authError, router]);
+
   const userGetIdToken = useCallback(() => user?.getIdToken() ?? Promise.reject(new Error("Sign in required.")), [user]);
   const userSignOut = useCallback(() => signOut(getFirebaseAuth()), []);
 
@@ -107,21 +88,12 @@ export default function PortalGate() {
           setReady(false);
           initAuth();
         }}
-        onGoogleSignIn={!user ? handleGoogleSignIn : undefined}
-        signingIn={signingIn}
-        showSignInLink={!user}
       />
     );
   }
 
   if (!ready || !user) {
-    return (
-      <PortalPreloader
-        message="Sign in with Google to check your Threadly 2.0 beta access…"
-        onGoogleSignIn={handleGoogleSignIn}
-        signingIn={signingIn}
-      />
-    );
+    return <PortalPreloader message="Opening your private workspace…" />;
   }
 
   if (!accessChecked) {
@@ -129,15 +101,45 @@ export default function PortalGate() {
   }
 
   if (accessStatus !== "approved") {
-    return <main id="wisentry-portal" className="portal-auth">
-      <header className="portal-auth-header"><a href="/" className="portal-login-brand">threadly<span className="brand-dot">.</span></a><button className="btn btn-outline" onClick={userSignOut}>Sign out</button></header>
-      <section className="portal-auth-copy" style={{ maxWidth: 700, margin: "14vh auto", padding: 28 }}>
-        <div className="eyebrow"><span className="pulse-dot"/> THREADLY 2.0 · BETA ACCESS</div>
-        <h1>{accessStatus === "pending" ? "Your request is under review." : accessStatus === "rejected" ? "Your request was not approved." : "Request beta access to continue."}</h1>
-        <p>{accessStatus === "pending" ? "The team is reviewing your application. Return to the homepage with this Google account to check your access." : accessStatus === "rejected" ? "You can update and resubmit your beta request from the homepage." : "The Threadly workspace is available to approved beta members. Join the waitlist from the homepage to request access."}</p>
-        <div className="welcome-actions"><a className="btn btn-dark" href="/">{accessStatus === "pending" ? "Back to homepage" : "Join the beta waitlist"}</a><button className="btn btn-outline" onClick={userSignOut}>Sign out</button></div>
-      </section>
-    </main>;
+    return (
+      <main id="wisentry-portal" className="portal-auth">
+        <header className="portal-auth-header">
+          <a href="/" className="portal-login-brand">
+            threadly<span className="brand-dot">.</span>
+          </a>
+          <button className="btn btn-outline" onClick={userSignOut}>
+            Sign out
+          </button>
+        </header>
+        <section className="portal-auth-copy" style={{ maxWidth: 700, margin: "14vh auto", padding: 28 }}>
+          <div className="eyebrow">
+            <span className="pulse-dot" /> THREADLY 2.0 · BETA ACCESS
+          </div>
+          <h1>
+            {accessStatus === "pending"
+              ? "Your request is under review."
+              : accessStatus === "rejected"
+                ? "Your request was not approved."
+                : "Request beta access to continue."}
+          </h1>
+          <p>
+            {accessStatus === "pending"
+              ? "The team is reviewing your application. Return to the homepage with this Google account to check your access."
+              : accessStatus === "rejected"
+                ? "You can update and resubmit your beta request from the homepage."
+                : "The Threadly workspace is available to approved beta members. Join the waitlist from the homepage to request access."}
+          </p>
+          <div className="welcome-actions">
+            <a className="btn btn-dark" href="/">
+              {accessStatus === "pending" ? "Back to homepage" : "Join the beta waitlist"}
+            </a>
+            <button className="btn btn-outline" onClick={userSignOut}>
+              Sign out
+            </button>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return (

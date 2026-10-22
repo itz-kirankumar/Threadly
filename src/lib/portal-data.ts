@@ -486,6 +486,7 @@ export async function saveLead(uid: string, input: { opportunityId?: string; nam
   const id = randomUUID();
   const lead: Lead = { id, opportunity_id: input.opportunityId || null, name: input.name.trim(), email: contactEmail || undefined, company: input.company || "", role: input.role || "", platform: input.platform, pain: input.pain || "", stage: "identified", notes: input.notes || "", owner: email || uid, created_at: now() };
   await writeData(`leads/${id}`, lead);
+  return lead;
 }
 
 export async function updateLeadEmail(_uid: string, id: string, email: string) {
@@ -509,7 +510,8 @@ export async function qualifyLead(_uid: string, id: string) {
     .filter(Boolean).join("\n");
   if (!lead.pain.trim()) throw new Error("This prospect has no conversation text to assess.");
   const assessment = await qualifyProspect({ post: `${lead.name}${lead.company ? ` · ${lead.company}` : ""}\n${lead.pain}`, companyContext });
-  await patchData(`leads/${safeId(id)}`, { qualification: assessment });
+  const newStage = (assessment.fit === "strong_fit" && lead.stage === "identified") ? "qualified" : lead.stage;
+  await patchData(`leads/${safeId(id)}`, { qualification: assessment, stage: newStage });
   return assessment;
 }
 
@@ -558,6 +560,12 @@ export async function recordOutreachSent(_uid: string, id: string, providerMessa
   const email = await getOutreachEmail(id);
   if (!email || email.status !== "sending") throw new Error("This email is no longer in a sendable state.");
   await patchData(`outreachEmails/${safeId(id)}`, { status: "sent", sent_at: now(), provider_message_id: providerMessageId });
+  if (email.lead_id) {
+    const lead = await readData<Lead>(`leads/${safeId(email.lead_id)}`);
+    if (lead && (lead.stage === "identified" || lead.stage === "qualified")) {
+      await patchData(`leads/${safeId(email.lead_id)}`, { stage: "engaged" });
+    }
+  }
 }
 
 export async function moveLead(_uid: string, id: string, stage: string) {
@@ -1018,6 +1026,6 @@ export async function scheduleLeadMeeting(
     meetingUrl: input.meetingUrl || null,
     calendarEventUrl: input.calendarEventUrl || null,
     googleCalendarEventId: input.googleCalendarEventId || null,
-    stage: lead.stage === "identified" ? "conversation" : lead.stage,
+    stage: lead.stage === "converted" ? "converted" : "conversation",
   });
 }

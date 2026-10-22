@@ -5,8 +5,9 @@ import {
   Activity, ArrowRight, ArrowUpRight, BarChart3, CalendarClock, Check, ChevronDown,
   CircleDollarSign, Clock3, Flame, Globe2, Layers, Link2, Mail, Pause, Play, Plus,
   RefreshCw, Rocket, Send, Sparkles, Target, Trash2, TrendingDown, TrendingUp,
-  Users, Workflow, X, Zap,
+  Users, Workflow, X, Zap, Search,
 } from "lucide-react";
+import type { SeoAuditCheck, SeoAuditReport } from "@/lib/seo-audit";
 import type {
   Campaign,
   CampaignChannel,
@@ -401,239 +402,249 @@ export function CampaignsPage({
         </div>
       )}
 
-      <div className="thread-split-layout thread-split-campaign grid gap-4">
-        <div className="space-y-2.5">
-          {growth.campaigns.map((campaign) => {
-            const active = campaign.id === selected?.id;
-            const targetHit = campaign.roas >= campaign.targetRoas;
-            return (
-              <button
-                key={campaign.id}
-                type="button"
-                onClick={() => setSelectedId(campaign.id)}
-                className={`w-full rounded-2xl border-2 p-4 text-left transition-all ${
-                  active
-                    ? "border-brand-black bg-brand-black text-white shadow-[5px_5px_0_#ff4500]"
-                    : "border-brand-line bg-white hover:border-brand-black"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className={`font-mono text-[8.5px] font-bold uppercase tracking-[0.11em] ${active ? "text-white/50" : "text-brand-quiet"}`}>
-                      {campaign.status}
+      {!growth.campaigns.length ? (
+        <EmptyState
+          icon={Rocket}
+          title="No campaigns yet"
+          copy="Create your first campaign to start tracking spend, revenue and ROAS by channel across Google, LinkedIn, Reddit, and X."
+          action={
+            <button
+              className="btn btn-primary"
+              onClick={() => setCreating(true)}
+            >
+              <Plus size={15} /> Create your first campaign
+            </button>
+          }
+        />
+      ) : (
+        <div className="thread-split-layout thread-split-campaign grid gap-4">
+          <div className="space-y-2.5">
+            {growth.campaigns.map((campaign) => {
+              const active = campaign.id === selected?.id;
+              const targetHit = campaign.roas >= campaign.targetRoas;
+              return (
+                <button
+                  key={campaign.id}
+                  type="button"
+                  onClick={() => setSelectedId(campaign.id)}
+                  className={`w-full rounded-2xl border-2 p-4 text-left transition-all ${
+                    active
+                      ? "border-brand-black bg-brand-black text-white shadow-[5px_5px_0_#ff4500]"
+                      : "border-brand-line bg-white hover:border-brand-black"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className={`font-mono text-[8.5px] font-bold uppercase tracking-[0.11em] ${active ? "text-white/50" : "text-brand-quiet"}`}>
+                        {campaign.status}
+                      </div>
+                      <div className="mt-1 truncate text-[14px] font-black tracking-[-0.03em]">{campaign.name}</div>
                     </div>
-                    <div className="mt-1 truncate text-[14px] font-black tracking-[-0.03em]">{campaign.name}</div>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.06em] ${
-                      active
-                        ? "bg-white/10 text-white"
-                        : targetHit
-                          ? "bg-brand-orangeLight text-brand-orangeDark"
-                          : "bg-brand-line text-brand-muted"
-                    }`}
-                  >
-                    {campaign.roas.toFixed(2)}× ROAS
-                  </span>
-                </div>
-                <div className="mt-3 flex items-center gap-3 text-[10px]">
-                  <span className={active ? "text-white/60" : "text-brand-muted"}>
-                    {money(campaign.spend)} spend
-                  </span>
-                  <span className={active ? "text-white/60" : "text-brand-muted"}>
-                    {money(campaign.revenue)} rev
-                  </span>
-                  <span className={`ml-auto flex items-center gap-1 font-bold ${targetHit ? "text-brand-orange" : "text-brand-muted"}`}>
-                    {campaign.roas >= campaign.targetRoas ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                    {campaign.channels.length} channels
-                  </span>
-                </div>
-                <div className={`mt-2.5 h-1.5 rounded-full ${active ? "bg-white/15" : "bg-brand-line"}`}>
-                  <div
-                    className="h-1.5 rounded-full bg-gradient-to-r from-brand-orange to-brand-violet"
-                    style={{ width: `${Math.min(100, (campaign.revenue / Math.max(1, campaign.budget * 3)) * 100)}%` }}
-                  />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {selected ? (
-          <div className="space-y-4">
-            <div className="thread-panel">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <Kicker>{selected.objective}</Kicker>
-                  <h3 className="mt-1 text-[22px] font-black tracking-[-0.045em]">{selected.name}</h3>
-                  <p className="mt-1 text-[11px] text-brand-muted">
-                    {new Date(selected.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} →{" "}
-                    {new Date(selected.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · target{" "}
-                    {selected.targetRoas.toFixed(1)}× ROAS
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className="btn btn-outline"
-                    disabled={busy}
-                    onClick={() =>
-                      act(
-                        "campaignToggle",
-                        {
-                          campaignId: selected.id,
-                          status: selected.status === "active" ? "paused" : "active",
-                        },
-                        selected.status === "active" ? "Campaign paused" : "Campaign activated",
-                      )
-                    }
-                  >
-                    {selected.status === "active" ? <Pause size={14} /> : <Play size={14} />}
-                    {selected.status === "active" ? "Pause" : "Activate"}
-                  </button>
-                  <button className="btn btn-dark" disabled={busy} onClick={optimize}>
-                    <Zap size={14} /> Reallocate
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {[
-                  ["Spend", money(selected.spend)],
-                  ["Revenue", money(selected.revenue)],
-                  ["Conversions", String(selected.conversions)],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl border border-brand-line bg-brand-paper px-3 py-2">
-                    <Kicker>{label}</Kicker>
-                    <div className="mt-1 text-[16px] font-black tracking-[-0.04em]">{value}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5">
-                <div className="mb-2 flex items-center justify-between">
-                  <Kicker>Channel allocation</Kicker>
-                  {selected.autoOptimize && (
-                    <span className="thread-chip violet">
-                      <Sparkles className="h-3 w-3" /> auto-optimize on
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.06em] ${
+                        active
+                          ? "bg-white/10 text-white"
+                          : targetHit
+                            ? "bg-brand-orangeLight text-brand-orangeDark"
+                            : "bg-brand-line text-brand-muted"
+                      }`}
+                    >
+                      {campaign.roas.toFixed(2)}× ROAS
                     </span>
-                  )}
-                </div>
-                <div className="space-y-2.5">
-                  {[...selected.channels]
-                    .sort((a, b) => b.roas - a.roas)
-                    .map((channel) => (
-                      <div key={channel.channel}>
-                        <div className="flex items-center justify-between text-[10.5px]">
-                          <span className="flex items-center gap-2 font-bold">
-                            <span
-                              className={`h-2.5 w-2.5 rounded-sm ${channelTone[channel.channel] ?? "bg-brand-line"}`}
-                            />
-                            {channel.label}
-                          </span>
-                          <span className="font-mono text-[9.5px] text-brand-muted">
-                            {money(channel.spend)} · {channel.roas.toFixed(2)}×
-                            <span className={channel.trend >= 0 ? "text-brand-orange" : "text-brand-quiet"}>
-                              {" "}
-                              {channel.trend >= 0 ? "↑" : "↓"}
-                              {Math.abs(channel.trend * 100).toFixed(0)}%
-                            </span>
-                          </span>
-                        </div>
-                        <div className="mt-1 h-2 rounded-full bg-brand-line">
-                          <div
-                            className={`h-2 rounded-full ${
-                              channel.channel === "google_search"
-                                ? "bg-brand-orange"
-                                : channel.channel === "linkedin"
-                                  ? "bg-brand-violet"
-                                  : channel.channel === "reddit"
-                                    ? "bg-brand-orangeDark"
-                                    : "bg-brand-black"
-                            }`}
-                            style={{ width: `${Math.min(100, (channel.spend / Math.max(1, selected.spend)) * 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3 text-[10px]">
+                    <span className={active ? "text-white/60" : "text-brand-muted"}>
+                      {money(campaign.spend)} spend
+                    </span>
+                    <span className={active ? "text-white/60" : "text-brand-muted"}>
+                      {money(campaign.revenue)} rev
+                    </span>
+                    <span className={`ml-auto flex items-center gap-1 font-bold ${targetHit ? "text-brand-orange" : "text-brand-muted"}`}>
+                      {campaign.roas >= campaign.targetRoas ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                      {campaign.channels.length} channels
+                    </span>
+                  </div>
+                  <div className={`mt-2.5 h-1.5 rounded-full ${active ? "bg-white/15" : "bg-brand-line"}`}>
+                    <div
+                      className="h-1.5 rounded-full bg-gradient-to-r from-brand-orange to-brand-violet"
+                      style={{ width: `${Math.min(100, (campaign.revenue / Math.max(1, campaign.budget * 3)) * 100)}%` }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+          {selected && (
+            <div className="space-y-4">
               <div className="thread-panel">
-                <Kicker>Creative variants</Kicker>
-                <div className="mt-3 space-y-2">
-                  {selected.creatives.length ? (
-                    selected.creatives.map((creative) => (
-                      <div
-                        key={creative.id}
-                        className="rounded-xl border border-brand-line bg-brand-paper p-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-black">{creative.label}</span>
-                          <span
-                            className={`thread-chip ${
-                              creative.status === "active" ? "ok" : "orange"
-                            }`}
-                          >
-                            {creative.status}
-                          </span>
-                        </div>
-                        <p className="mt-1.5 text-[10px] leading-snug text-brand-muted">
-                          “{creative.headline}”
-                        </p>
-                        <div className="mt-2 flex gap-3 font-mono text-[9px] text-brand-quiet">
-                          <span>CTR {creative.ctr.toFixed(2)}%</span>
-                          <span>CPA ${creative.cpa}</span>
-                          <span>{creative.format}</span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[11px] text-brand-muted">
-                      No creatives yet. Launch the campaign to generate variants.
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <Kicker>{selected.objective}</Kicker>
+                    <h3 className="mt-1 text-[22px] font-black tracking-[-0.045em]">{selected.name}</h3>
+                    <p className="mt-1 text-[11px] text-brand-muted">
+                      {new Date(selected.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} →{" "}
+                      {new Date(selected.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · target{" "}
+                      {selected.targetRoas.toFixed(1)}× ROAS
                     </p>
-                  )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className="btn btn-outline"
+                      disabled={busy}
+                      onClick={() =>
+                        act(
+                          "campaignToggle",
+                          {
+                            campaignId: selected.id,
+                            status: selected.status === "active" ? "paused" : "active",
+                          },
+                          selected.status === "active" ? "Campaign paused" : "Campaign activated",
+                        )
+                      }
+                    >
+                      {selected.status === "active" ? <Pause size={14} /> : <Play size={14} />}
+                      {selected.status === "active" ? "Pause" : "Activate"}
+                    </button>
+                    <button className="btn btn-dark" disabled={busy} onClick={optimize}>
+                      <Zap size={14} /> Reallocate
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="thread-panel ink">
-                <Kicker>Optimizer</Kicker>
-                <h3 className="relative z-10 mt-2 text-[19px] font-black leading-tight tracking-[-0.04em] text-white">
-                  Let the winners compound.
-                </h3>
-                <p className="relative z-10 mt-2 text-[11px] leading-relaxed text-white/60">
-                  Threadly ranks every channel by return and shifts budget from the laggards each
-                  cycle — with guardrails so no channel is cut to zero.
-                </p>
-                <div className="relative z-10 mt-4 space-y-2">
+                <div className="mt-4 grid grid-cols-3 gap-2">
                   {[
-                    ["Guardrail", "Min 10% per channel"],
-                    ["Cadence", "Every 6 hours"],
-                    ["Last action", "Reallocated this quarter"],
+                    ["Spend", money(selected.spend)],
+                    ["Revenue", money(selected.revenue)],
+                    ["Conversions", String(selected.conversions)],
                   ].map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between border-b border-white/10 pb-1.5 text-[10px] last:border-0">
-                      <span className="text-white/45">{label}</span>
-                      <span className="font-bold text-white">{value}</span>
+                    <div key={label} className="rounded-xl border border-brand-line bg-brand-paper px-3 py-2">
+                      <Kicker>{label}</Kicker>
+                      <div className="mt-1 text-[16px] font-black tracking-[-0.04em]">{value}</div>
                     </div>
                   ))}
                 </div>
-                <div className="relative z-10 mt-4 rounded-xl bg-brand-orange px-3 py-2 text-[10px] font-bold text-white">
-                  {selected.roas >= selected.targetRoas
-                    ? `On target — ${selected.roas.toFixed(2)}× against ${selected.targetRoas.toFixed(1)}×.`
-                    : `Below target — ${selected.roas.toFixed(2)}× against ${selected.targetRoas.toFixed(1)}×. Reallocate to recover.`}
+
+                <div className="mt-5">
+                  <div className="mb-2 flex items-center justify-between">
+                    <Kicker>Channel allocation</Kicker>
+                    {selected.autoOptimize && (
+                      <span className="thread-chip violet">
+                        <Sparkles className="h-3 w-3" /> auto-optimize on
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-2.5">
+                    {[...selected.channels]
+                      .sort((a, b) => b.roas - a.roas)
+                      .map((channel) => (
+                        <div key={channel.channel}>
+                          <div className="flex items-center justify-between text-[10.5px]">
+                            <span className="flex items-center gap-2 font-bold">
+                              <span
+                                className={`h-2.5 w-2.5 rounded-sm ${channelTone[channel.channel] ?? "bg-brand-line"}`}
+                              />
+                              {channel.label}
+                            </span>
+                            <span className="font-mono text-[9.5px] text-brand-muted">
+                              {money(channel.spend)} · {channel.roas.toFixed(2)}×
+                              <span className={channel.trend >= 0 ? "text-brand-orange" : "text-brand-quiet"}>
+                                {" "}
+                                {channel.trend >= 0 ? "↑" : "↓"}
+                                {Math.abs(channel.trend * 100).toFixed(0)}%
+                              </span>
+                            </span>
+                          </div>
+                          <div className="mt-1 h-2 rounded-full bg-brand-line">
+                            <div
+                              className={`h-2 rounded-full ${
+                                channel.channel === "google_search"
+                                  ? "bg-brand-orange"
+                                  : channel.channel === "linkedin"
+                                    ? "bg-brand-violet"
+                                    : channel.channel === "reddit"
+                                      ? "bg-brand-orangeDark"
+                                      : "bg-brand-black"
+                              }`}
+                              style={{ width: `${Math.min(100, (channel.spend / Math.max(1, selected.spend)) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="thread-panel">
+                  <Kicker>Creative variants</Kicker>
+                  <div className="mt-3 space-y-2">
+                    {selected.creatives.length ? (
+                      selected.creatives.map((creative) => (
+                        <div
+                          key={creative.id}
+                          className="rounded-xl border border-brand-line bg-brand-paper p-3"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-black">{creative.label}</span>
+                            <span
+                              className={`thread-chip ${
+                                creative.status === "active" ? "ok" : "orange"
+                              }`}
+                            >
+                              {creative.status}
+                            </span>
+                          </div>
+                          <p className="mt-1.5 text-[10px] leading-snug text-brand-muted">
+                            “{creative.headline}”
+                          </p>
+                          <div className="mt-2 flex gap-3 font-mono text-[9px] text-brand-quiet">
+                            <span>CTR {creative.ctr.toFixed(2)}%</span>
+                            <span>CPA ${creative.cpa}</span>
+                            <span>{creative.format}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-[11px] text-brand-muted">
+                        No creatives yet. Launch the campaign to generate variants.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="thread-panel ink">
+                  <Kicker>Optimizer</Kicker>
+                  <h3 className="relative z-10 mt-2 text-[19px] font-black leading-tight tracking-[-0.04em] text-white">
+                    Let the winners compound.
+                  </h3>
+                  <p className="relative z-10 mt-2 text-[11px] leading-relaxed text-white/60">
+                    Threadly ranks every channel by return and shifts budget from the laggards each
+                    cycle — with guardrails so no channel is cut to zero.
+                  </p>
+                  <div className="relative z-10 mt-4 space-y-2">
+                    {[
+                      ["Guardrail", "Min 10% per channel"],
+                      ["Cadence", "Every 6 hours"],
+                      ["Last action", "Reallocated this quarter"],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex items-center justify-between border-b border-white/10 pb-1.5 text-[10px] last:border-0">
+                        <span className="text-white/45">{label}</span>
+                        <span className="font-bold text-white">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="relative z-10 mt-4 rounded-xl bg-brand-orange px-3 py-2 text-[10px] font-bold text-white">
+                    {selected.roas >= selected.targetRoas
+                      ? `On target — ${selected.roas.toFixed(2)}× against ${selected.targetRoas.toFixed(1)}×.`
+                      : `Below target — ${selected.roas.toFixed(2)}× against ${selected.targetRoas.toFixed(1)}×. Reallocate to recover.`}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <EmptyState
-            icon={Rocket}
-            title="No campaigns yet"
-            copy="Create your first campaign to start tracking spend, revenue and ROAS by channel."
-          />
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -1628,15 +1639,155 @@ const engineLabel: Record<string, string> = {
 };
 const geoEngineCount = 3;
 
+function SeoAuditPanel({
+  initialUrl,
+  act,
+  busy,
+}: {
+  initialUrl: string;
+  act: Act;
+  busy: boolean;
+}) {
+  const [url, setUrl] = useState(initialUrl);
+  const [report, setReport] = useState<SeoAuditReport | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("threadly-latest-seo-audit");
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as Partial<SeoAuditReport>;
+      if (typeof parsed.url === "string" && typeof parsed.checkedAt === "string" && Array.isArray(parsed.checks)) {
+        setReport(parsed as SeoAuditReport);
+        setUrl((current) => current || parsed.url || "");
+      }
+    } catch {
+      sessionStorage.removeItem("threadly-latest-seo-audit");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!url.trim() && initialUrl) setUrl(initialUrl);
+  }, [initialUrl, url]);
+
+  async function audit() {
+    if (!url.trim()) return;
+    setError("");
+    const result = await act("seoAudit", { url: url.trim() }, "Site audit complete");
+    if (result?.audit && typeof result.audit === "object") {
+      const nextReport = result.audit as SeoAuditReport;
+      setReport(nextReport);
+      setUrl(nextReport.url);
+      try { sessionStorage.setItem("threadly-latest-seo-audit", JSON.stringify(nextReport)); } catch { /* Keep the report in memory if storage is unavailable. */ }
+    } else if (!result) {
+      setError("The page could not be audited. Check the URL and try again.");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <section className="thread-panel">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-orangeLight text-brand-orange"><Search size={18}/></span>
+          <div className="min-w-0 flex-1">
+            <Kicker>On-page SEO + AI discoverability</Kicker>
+            <h2 className="mt-1 text-[18px] font-black tracking-[-0.04em]">Audit a public page</h2>
+            <p className="mt-1 max-w-3xl text-[11px] leading-relaxed text-brand-muted">Check what search engines and answer engines can actually read: page metadata, structure, crawl files, and useful content. Every finding is based on the page fetched now.</p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <input
+            type="url"
+            value={url}
+            onChange={(event) => { setUrl(event.target.value); setReport(null); }}
+            onKeyDown={(event) => { if (event.key === "Enter" && !busy) void audit(); }}
+            placeholder="https://example.com/page"
+            aria-label="Public page URL to audit"
+            className="min-w-0 flex-1 rounded-xl border-2 border-brand-line bg-white px-3 py-2.5 text-[12px] font-semibold outline-none focus:border-brand-orange"
+          />
+          <button className="btn btn-dark justify-center" disabled={busy || !url.trim()} onClick={() => void audit()}>
+            <RefreshCw size={15} className={busy ? "animate-spin" : ""}/>{busy ? "Auditing…" : "Run site audit"}
+          </button>
+        </div>
+        {error && <p className="mt-2 text-[11px] font-semibold text-red-700" role="alert">{error}</p>}
+        <p className="mt-2 text-[9.5px] leading-relaxed text-brand-quiet">Public HTTPS pages only. Audits are rate-limited and never follow instructions found in page content.</p>
+      </section>
+
+      {report ? (
+        <>
+          <section className="thread-panel">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <Kicker>Page audit · {new Date(report.checkedAt).toLocaleString()}</Kicker>
+                <h3 className="mt-1 truncate text-[15px] font-black">{report.page.title || report.url}</h3>
+                <p className="mt-1 truncate text-[10px] text-brand-muted">{report.url}</p>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl bg-brand-paper px-4 py-3">
+                <div className="text-[30px] font-black leading-none tracking-[-0.06em]">{report.score}</div>
+                <div><div className="font-mono text-[9px] font-bold uppercase tracking-wider text-brand-orangeDark">Technical readiness</div><div className="mt-1 text-[9px] text-brand-muted">Based on {report.checks.filter((item) => item.status !== "info").length} page checks</div></div>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+              <AuditStat label="Readable words" value={report.page.wordCount.toLocaleString()}/>
+              <AuditStat label="Headings" value={String(report.page.headings)}/>
+              <AuditStat label="Schema types" value={String(report.page.schemaTypes.length)}/>
+              <AuditStat label="Findings" value={String(report.checks.filter((item) => item.status === "warning" || item.status === "issue").length)}/>
+            </div>
+          </section>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {report.checks.map((item) => <AuditFinding key={item.id} item={item}/>)}
+          </div>
+          <section className="thread-panel gradient">
+            <Kicker>Turn findings into a GEO content brief</Kicker>
+            <h3 className="mt-2 text-[17px] font-black text-white">Make the answer easy to find, understand, and cite.</h3>
+            <p className="mt-1 max-w-3xl text-[11px] leading-relaxed text-white/70">Use the tracked buyer questions in AI visibility with these crawl and content findings. A strong page combines clear answers, verifiable facts, helpful structure, and working discovery signals.</p>
+            <button className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[11px] font-black text-brand-black" disabled={busy} onClick={() => act("slotSuggest", { channel: "blog", title: `SEO + GEO improvements · ${report.page.title || new URL(report.url).hostname}`, group: "Search visibility" }, "Content brief reserved")}>
+              Reserve a content brief <ArrowUpRight size={14}/>
+            </button>
+          </section>
+        </>
+      ) : (
+        <section className="thread-panel">
+          <Kicker>What this checks</Kicker>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {["Search snippets and canonical URLs", "Headings, readable page text, and image descriptions", "Open Graph and Schema.org structured data", "robots.txt, XML sitemap, and optional llms.txt"].map((item) => <div key={item} className="rounded-xl border border-brand-line bg-brand-paper p-3 text-[10.5px] font-semibold leading-relaxed">{item}</div>)}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function AuditStat({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl border border-brand-line bg-brand-paper p-3"><Kicker>{label}</Kicker><div className="mt-1 text-[20px] font-black tracking-[-0.04em]">{value}</div></div>;
+}
+
+function AuditFinding({ item }: { item: SeoAuditCheck }) {
+  const statusClass = item.status === "good" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : item.status === "issue" ? "border-red-200 bg-red-50 text-red-800" : item.status === "warning" ? "border-amber-200 bg-amber-50 text-amber-900" : "border-brand-line bg-brand-paper text-brand-muted";
+  return (
+    <article className="thread-panel !p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0"><h3 className="text-[12px] font-black">{item.label}</h3><p className="mt-1 text-[10.5px] leading-relaxed text-brand-muted">{item.detail}</p></div>
+        <span className={`shrink-0 rounded-full border px-2 py-1 font-mono text-[8px] font-bold uppercase ${statusClass}`}>{item.status}</span>
+      </div>
+      <p className="mt-3 text-[10px] leading-relaxed"><span className="font-bold">Next step: </span>{item.recommendation}</p>
+      {item.evidence && <p className="mt-2 break-words rounded-lg bg-brand-paper px-2.5 py-2 font-mono text-[9px] leading-relaxed text-brand-quiet">{item.evidence}</p>}
+    </article>
+  );
+}
+
 export function GeoPage({
   growth,
   act,
   busy,
+  initialUrl = "",
 }: {
   growth: Growth;
   act: Act;
   busy: boolean;
+  initialUrl?: string;
 }) {
+  const [panel, setPanel] = useState<"visibility" | "audit">("visibility");
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [intent, setIntent] = useState<GeoQuery["intent"]>("commercial");
@@ -1664,10 +1815,10 @@ export function GeoPage({
       <div className="page-head">
         <div>
           <div className="eyebrow">
-            <span className="pulse-dot" /> GENERATIVE ENGINE OPTIMIZATION
+            <span className="pulse-dot" /> SEARCH + GENERATIVE ENGINE OPTIMIZATION
           </div>
           <h1>
-            GEO Visibility<span className="accent-period">.</span>
+            Search &amp; AI Visibility<span className="accent-period">.</span>
           </h1>
           <p>Check live, web-grounded answers and their sources for your tracked buyer questions.</p>
         </div>
@@ -1684,6 +1835,14 @@ export function GeoPage({
           </button>
         </div>
       </div>
+
+      <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-brand-line bg-white p-1" role="tablist" aria-label="Search visibility tools">
+        <button type="button" role="tab" aria-selected={panel === "visibility"} onClick={() => setPanel("visibility")} className={`shrink-0 rounded-lg px-3 py-2 text-[10px] font-bold ${panel === "visibility" ? "bg-brand-black text-white" : "text-brand-muted hover:bg-brand-paper"}`}>AI answer visibility</button>
+        <button type="button" role="tab" aria-selected={panel === "audit"} onClick={() => setPanel("audit")} className={`shrink-0 rounded-lg px-3 py-2 text-[10px] font-bold ${panel === "audit" ? "bg-brand-black text-white" : "text-brand-muted hover:bg-brand-paper"}`}>SEO + GEO site audit</button>
+      </div>
+
+      {panel === "audit" ? <SeoAuditPanel initialUrl={initialUrl} act={act} busy={busy}/> : (
+      <>
 
       <div className="thread-grid cols-4" style={{ marginBottom: 18 }}>
         <MetricTile label="Domain citation share" value={pct(growth.metrics.geoShare)} delta="Across completed provider scans" tone="ink" icon={Globe2} />
@@ -1891,6 +2050,8 @@ export function GeoPage({
           </div>
         )}
       </div>
+      </>
+      )}
     </>
   );
 }
@@ -1902,7 +2063,6 @@ export function GeoPage({
 export function useLiveStream(enabled: boolean, initial: LiveEvent[], getIdToken?: () => Promise<string>) {
   const [events, setEvents] = useState<LiveEvent[]>(initial);
   const [connected, setConnected] = useState(false);
-  const sourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     // An empty seed is common while workspace data is loading. Returning the
@@ -1913,52 +2073,66 @@ export function useLiveStream(enabled: boolean, initial: LiveEvent[], getIdToken
   }, [initial]);
 
   useEffect(() => {
-    if (!enabled || typeof window === "undefined" || typeof EventSource === "undefined") {
-      return;
-    }
+    if (!enabled || typeof window === "undefined") return;
     let cancelled = false;
-    let source: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
 
     const connect = async () => {
-      let url = "/api/stream";
-      if (getIdToken) {
+      while (!cancelled) {
         try {
-          const token = await getIdToken();
-          url += `?token=${encodeURIComponent(token)}`;
-        } catch {
-          /* connect unauthenticated; the server will answer 401 */
-        }
-      }
-      if (cancelled) return;
+          const token = getIdToken ? await getIdToken() : "";
+          if (cancelled) return;
+          const response = await fetch("/api/stream", {
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (!response.ok || !response.body) throw new Error("Live feed unavailable.");
 
-      source = new EventSource(url);
-      sourceRef.current = source;
-
-      source.addEventListener("hello", () => {
-        if (!cancelled) setConnected(true);
-      });
-      source.addEventListener("snapshot", (event) => {
-        try {
-          const payload = JSON.parse((event as MessageEvent).data) as { events?: LiveEvent[] };
-          if (!cancelled && Array.isArray(payload.events) && payload.events.length) {
-            setEvents(payload.events);
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          while (!cancelled) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const frames = buffer.split(/\r?\n\r?\n/);
+            buffer = frames.pop() || "";
+            for (const frame of frames) {
+              const lines = frame.split(/\r?\n/);
+              const eventName = lines.find(line => line.startsWith("event:"))?.slice(6).trim();
+              const data = lines.filter(line => line.startsWith("data:")).map(line => line.slice(5).trim()).join("\n");
+              if (eventName === "hello") setConnected(true);
+              if (eventName === "snapshot") {
+                try {
+                  const payload = JSON.parse(data) as { events?: LiveEvent[] };
+                  if (!cancelled && Array.isArray(payload.events) && payload.events.length) setEvents(payload.events);
+                  if (!cancelled) setConnected(true);
+                } catch {
+                  /* Ignore malformed frames and keep the connection alive. */
+                }
+              }
+              if (eventName === "error") setConnected(false);
+            }
           }
-          if (!cancelled) setConnected(true);
+          await reader.cancel().catch(() => undefined);
         } catch {
-          /* ignore malformed frames */
+          if (cancelled) return;
         }
-      });
-      source.onerror = () => {
         if (!cancelled) setConnected(false);
-      };
+        await new Promise<void>(resolve => {
+          retryTimer = setTimeout(resolve, 3000);
+        });
+      }
     };
 
     void connect();
 
     return () => {
       cancelled = true;
-      source?.close();
-      sourceRef.current = null;
+      controller.abort();
+      if (retryTimer) clearTimeout(retryTimer);
     };
     // getIdToken is intentionally excluded: callers pass a memoised function.
     // eslint-disable-next-line react-hooks/exhaustive-deps

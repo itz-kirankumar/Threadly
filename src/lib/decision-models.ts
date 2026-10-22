@@ -1,3 +1,5 @@
+import { RequestError } from "./api-request";
+
 export type ProspectQualification = {
   fit: "strong_fit" | "possible_fit" | "weak_fit";
   fitConfidence: number;
@@ -12,7 +14,10 @@ const anyjevBase = () => process.env.ANYJEV_URL?.trim().replace(/\/$/, "") || ""
 const layaBase = () => process.env.LAYA_URL?.trim().replace(/\/$/, "") || "";
 
 export function getDecisionModelStatus() {
-  return { laya: Boolean(layaBase()), anyjev: Boolean(anyjevBase()) };
+  return {
+    laya: Boolean(layaBase() && process.env.LAYA_API_KEY?.trim()),
+    anyjev: Boolean(anyjevBase()),
+  };
 }
 
 function headers(kind: "laya" | "anyjev") {
@@ -99,25 +104,23 @@ function qualification(fit: Decision, intent: Decision, model: ProspectQualifica
 export async function qualifyProspect(input: { post: string; companyContext: string }): Promise<ProspectQualification> {
   const state = `PRODUCT CONTEXT (founder supplied):\n${input.companyContext.slice(0, 8000)}\n\nPUBLIC PROSPECT CONVERSATION:\n${input.post.slice(0, 5000)}`;
   const { laya, anyjev } = getDecisionModelStatus();
-  if (!laya && !anyjev) throw new Error("Connect Laya and/or AnyJev in the server environment to qualify prospects.");
+  if (!laya && !anyjev) throw new RequestError("Prospect qualification is not configured. Ask your workspace administrator to connect Laya.", 503);
 
-  // Laya's language router is the better fit for non-English conversations.
+  // Laya is the primary decision model and routes each request to its
+  // language-appropriate checkpoint. AnyJev is an optional secondary fallback.
   // This range intentionally detects non-ASCII text for language routing.
   // eslint-disable-next-line no-control-regex
   const multilingual = /[^\u0000-\u007f]/.test(input.post);
-  const preferred: "Laya" | "AnyJev" = multilingual ? "Laya" : "AnyJev";
-  const preferredAvailable = preferred === "Laya" ? laya : anyjev;
-  const fallbackAvailable = preferred === "Laya" ? anyjev : laya;
-  const primary = preferredAvailable ? preferred : (laya ? "Laya" : "AnyJev");
-  const fallback = primary === "Laya" ? "AnyJev" : "Laya";
+  const primary: ProspectQualification["model"] = laya ? "Laya" : "AnyJev";
+  const fallbackAvailable = primary === "Laya" && anyjev;
   let first: { fit: Decision; intent: Decision } | null = null;
   try { first = primary === "Laya" ? await runLaya(state) : await runAnyJev(state); }
   catch (error) { if (!fallbackAvailable) throw error; }
   if (first && first.fit.confidence >= 0.68) return qualification(first.fit, first.intent, primary, multilingual ? "language" : "confidence");
   if (fallbackAvailable) {
-    const second = fallback === "Laya" ? await runLaya(state) : await runAnyJev(state);
+    const second = await runAnyJev(state);
     // Prefer the fallback's decision when the primary was uncertain; attach confidence from its own distribution.
-    return qualification(second.fit, second.intent, fallback, first ? "confidence" : "fallback");
+    return qualification(second.fit, second.intent, "AnyJev", first ? "confidence" : "fallback");
   }
   if (first) return qualification(first.fit, first.intent, primary, multilingual ? "language" : "confidence");
   throw new Error("No configured decision model could assess this prospect.");

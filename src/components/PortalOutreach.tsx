@@ -595,7 +595,7 @@ export default function PortalOutreach({
             <span className="count-badge">{leads.length}</span>
           </div>
           <p>Autonomous lead scoring with PumpGTM Intent Tiers (Hot $\ge$ 65, Warm $\ge$ 35). Enrich buyer profiles, trigger OpenReply ManyChat DMs, or schedule CogSend social threads.</p>
-          {!capabilities.decisionModels.laya && !capabilities.decisionModels.anyjev && <p className="outreach-help">Add LAYA_URL and/or ANYJEV_URL on the server to enable model qualification.</p>}
+          {!capabilities.decisionModels.laya && !capabilities.decisionModels.anyjev && <p className="outreach-help">Prospect qualification is not connected. Ask your workspace administrator to deploy Laya and configure LAYA_URL and LAYA_API_KEY on the app server.</p>}
           
           {leads.length ? (
             <div className="outreach-prospect-list">

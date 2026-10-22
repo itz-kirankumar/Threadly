@@ -582,10 +582,59 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
   return <div id="wisentry-portal" className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
     {mobileNav && <button className="sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileNav(false)}/>}
     <aside id="portal-sidebar" className={`sidebar ${mobileNav ? "sidebar-open" : ""}`} aria-label="Portal navigation">
-      <button className="sidebar-brand" type="button" onClick={() => go("Dashboard")} aria-label="Threadly dashboard">
-        <Image className="sidebar-brand-full" src="/threadly-logo.svg" alt="Threadly" width={155} height={47} priority/>
-        <Image className="sidebar-brand-mark" src="/favicon.svg" alt="" width={34} height={34}/>
-      </button>
+      <div className="sidebar-brand-wrapper">
+        <div className="sidebar-brand-row">
+          <button
+            className="sidebar-brand-btn"
+            type="button"
+            onClick={() => {
+              if (sidebarCollapsed) {
+                setSidebarCollapsed(false);
+              } else {
+                go("Dashboard");
+              }
+            }}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Threadly dashboard"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Threadly dashboard"}
+          >
+            <Image
+              className="sidebar-brand-full"
+              src="/threadly-logo.svg"
+              alt="Threadly"
+              width={136}
+              height={42}
+              priority
+            />
+            <div className="sidebar-brand-mark-wrap">
+              <Image
+                className="sidebar-brand-mark"
+                src="/favicon.svg"
+                alt="Threadly"
+                width={32}
+                height={32}
+              />
+              <span className="sidebar-expand-hover-icon" aria-hidden="true">
+                <PanelLeftOpen size={17} />
+              </span>
+            </div>
+          </button>
+
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              className="sidebar-collapse-inline-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSidebarCollapsed(true);
+              }}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose size={18} />
+            </button>
+          )}
+        </div>
+      </div>
 
       <button type="button" className="workspace-switch" onClick={() => go("Workspace")} aria-label="Open workspace settings">
         <span className="workspace-avatar">
@@ -637,16 +686,15 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
 
     <div id="portal-main" className="main-area">
       <header className="topbar">
-        <button className="sidebar-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} aria-controls="portal-sidebar" aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}>
-          {sidebarCollapsed ? <PanelLeftOpen size={19}/> : <PanelLeftClose size={19}/>}
-        </button>
         <button className="mobile-menu" aria-label={mobileNav ? "Close navigation" : "Open navigation"} aria-controls="portal-sidebar" aria-expanded={mobileNav} onClick={() => setMobileNav(value => !value)}>
           {mobileNav ? <X size={20}/> : <Menu size={20}/>}
         </button>
         <div className="breadcrumbs">
-          <span>{companyName || "Workspace"}</span>
-          <ChevronRight size={15}/>
-          <strong>{page}</strong>
+          <span className="breadcrumb-workspace" onClick={() => go("Workspace")} role="button" tabIndex={0} title="Workspace settings">
+            {companyName || "Workspace"}
+          </span>
+          <ChevronRight size={14} className="breadcrumb-separator" />
+          <strong className="breadcrumb-current">{page}</strong>
         </div>
         <div className="topbar-right">
           <span className="timezone-topbar-pill" title={`Active workspace timezone: ${zone}`}>
@@ -656,16 +704,15 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
           <span className="demo-pill"><span className="tiny-dot"/> LIVE WORKSPACE</span>
           <button
             type="button"
-            className="btn btn-outline"
-            style={{ minHeight: 32, fontSize: 12, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 6 }}
+            className="topbar-onboard-btn"
             onClick={openOnboarding}
             title="Onboard your company to extract ICP and launch live lead workflows"
           >
-            <Sparkles size={14} style={{ color: "#ff4500" }} />
+            <Sparkles size={14} className="text-brand-orange" />
             <span>Onboard Company</span>
           </button>
-          <button className="icon-button" aria-label="Help" onClick={() => setToast("Your signals, real-time leads, and workspace data are safely saved.")}><CircleHelp size={19}/></button>
-          <button className="icon-button" aria-label="Notifications" onClick={() => setToast("All outreach workflows are up to date.")}><Bell size={19}/></button>
+          <button className="icon-button" aria-label="Help" onClick={() => setToast("Your signals, real-time leads, and workspace data are safely saved.")}><CircleHelp size={18}/></button>
+          <button className="icon-button" aria-label="Notifications" onClick={() => setToast("All outreach workflows are up to date.")}><Bell size={18}/></button>
 
           {/* User Account Menu with Logout */}
           <div className="topbar-user-menu" ref={userMenuRef}>

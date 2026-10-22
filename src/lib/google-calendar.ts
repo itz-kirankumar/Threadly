@@ -8,8 +8,8 @@ export async function requestGoogleCalendarAccess(): Promise<string> {
   try {
     auth = getFirebaseAuth();
   } catch {
-    // If running in demo mode or without full firebase configuration
-    return "demo-google-calendar-token";
+    if (process.env.NODE_ENV !== "production") return "demo-google-calendar-token";
+    throw new Error("Google Calendar is unavailable because Firebase is not configured.");
   }
 
   if (!auth.currentUser) {
@@ -55,17 +55,9 @@ export async function scheduleGoogleMeeting(
   input: GoogleMeetingInput,
   accessToken?: string,
 ): Promise<GoogleMeetingResult> {
-  let calendarToken = accessToken;
-  if (!calendarToken) {
-    try {
-      calendarToken = await requestGoogleCalendarAccess();
-    } catch {
-      calendarToken = "mock-token";
-    }
-  }
+  const calendarToken = accessToken || await requestGoogleCalendarAccess();
 
-  // If in demo or mock mode
-  if (calendarToken === "demo-google-calendar-token" || calendarToken === "mock-token") {
+  if (process.env.NODE_ENV !== "production" && calendarToken === "demo-google-calendar-token") {
     const randomSuffix = Math.random().toString(36).substring(2, 6) + "-" + Math.random().toString(36).substring(2, 6);
     return {
       eventId: `meet-event-${Date.now()}`,
@@ -210,7 +202,7 @@ export async function getGoogleMeeting(
   eventId: string,
   accessToken: string,
 ): Promise<GoogleMeetingResult> {
-  if (accessToken === "demo-google-calendar-token" || accessToken === "mock-token") {
+  if (process.env.NODE_ENV !== "production" && accessToken === "demo-google-calendar-token") {
     return {
       eventId,
       meetUrl: `https://meet.google.com/demo-meet-link`,
@@ -252,7 +244,7 @@ export async function findGoogleMeeting(
   },
   accessToken: string,
 ): Promise<GoogleMeetingResult | null> {
-  if (accessToken === "demo-google-calendar-token" || accessToken === "mock-token") {
+  if (process.env.NODE_ENV !== "production" && accessToken === "demo-google-calendar-token") {
     return null;
   }
   const params = new URLSearchParams({
@@ -296,7 +288,7 @@ export async function deleteGoogleMeeting(
   eventId: string,
   accessToken: string,
 ): Promise<void> {
-  if (accessToken === "demo-google-calendar-token" || accessToken === "mock-token") {
+  if (process.env.NODE_ENV !== "production" && accessToken === "demo-google-calendar-token") {
     return;
   }
   const response = await fetch(

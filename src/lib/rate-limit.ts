@@ -46,7 +46,7 @@ export async function checkRateLimit(key: string, limit: number, windowSeconds: 
         }
       }
     } catch {
-      // Gracefully fall through to in-memory bucket
+      // Try Upstash if the Firebase counter is temporarily unavailable.
     }
   }
 
@@ -69,9 +69,14 @@ export async function checkRateLimit(key: string, limit: number, windowSeconds: 
         }
       }
     } catch {
-      // Gracefully fall through to in-memory bucket
+      // Production requests fail closed below if no shared store is available.
     }
   }
+
+  // Serverless instances do not share memory. Falling back to a local bucket
+  // in production would make quotas easy to bypass and could expose paid
+  // providers to unbounded requests when a shared store is unavailable.
+  if (process.env.NODE_ENV === "production") return null;
 
   const now = Date.now();
   const id = hashedKey(key);

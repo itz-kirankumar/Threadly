@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
-import { isTavilyConfigured, searchCommunityDiscussions } from "@/lib/tavily";
+import { isTavilyConfigured, searchCommunityDiscussions, type DiscoveredDiscussion } from "@/lib/tavily";
+import { searchWithAgentReach } from "@/lib/agent-reach";
 import { searchTopic } from "@/lib/x-discovery";
 import { getState, storeDiscoveredOpportunities, type AutoOutreachResult } from "@/lib/portal-data";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { withWorkspace } from "@/lib/portal-db";
+import { requireApprovedIdentity } from "@/lib/admin-auth";
 import { checkRateLimit, rateLimitUnavailable, tooManyRequests } from "@/lib/rate-limit";
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 
 export const maxDuration = 45;
 export const runtime = "nodejs";
-
-function requestKey(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwardedFor || request.headers.get("x-real-ip") || "unknown";
-}
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -23,16 +20,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const user = await getFirebaseIdentity(request, true);
-    const effectiveUser = user || (process.env.NODE_ENV !== "production" ? {
-      uid: "demo-founder-uid",
-      email: "founder@demo.threadly.io",
-      name: "Demo Founder",
-      idToken: "demo-token",
-    } : null);
-
-    const key = effectiveUser?.uid || requestKey(request);
-    const limit = await checkRateLimit(`web-discovery:${key}`, 30, 10 * 60, user || undefined);
+    const user = await requireApprovedIdentity(request);
+    const limit = await checkRateLimit(`web-discovery:${user.uid}`, 30, 10 * 60, user);
     if (!limit) return rateLimitUnavailable();
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
 
@@ -44,8 +33,21 @@ export async function POST(request: Request) {
       ? (payload?.domains as unknown[]).filter((d): d is string => typeof d === "string" && d.length > 0)
       : undefined;
 
-    const providerName = isTavilyConfigured() ? "Tavily" : "Community Radar";
-    const discussions = await searchCommunityDiscussions(topic, { targetDomains: customDomains });
+    let providerName = isTavilyConfigured() ? "Tavily" : "Agent-Reach Real-Time Crawler";
+    let discussions: DiscoveredDiscussion[] = [];
+
+    if (isTavilyConfigured()) {
+      try {
+        discussions = await searchCommunityDiscussions(topic, { targetDomains: customDomains });
+      } catch {
+        // Fallback to Agent-Reach
+      }
+    }
+
+    if (!discussions.length) {
+      providerName = "Agent-Reach Real-Time Crawler";
+      discussions = await searchWithAgentReach(topic, { targetDomains: customDomains });
+    }
 
     let autoSummary: AutoOutreachResult = {
       savedCount: discussions.length,
@@ -54,15 +56,13 @@ export async function POST(request: Request) {
       qualifiedLeads: [],
     };
 
-    if (effectiveUser) {
-      await withWorkspace(effectiveUser.uid, effectiveUser.idToken, async () => {
-        await getState(effectiveUser.uid);
-        autoSummary = await storeDiscoveredOpportunities(effectiveUser.uid, discussions, providerName, {
-          autoOutreachThreshold: threshold,
-          autoOutreach,
-        });
+    await withWorkspace(user.uid, user.idToken, async () => {
+      await getState(user.uid);
+      autoSummary = await storeDiscoveredOpportunities(user.uid, discussions, providerName, {
+        autoOutreachThreshold: threshold,
+        autoOutreach,
       });
-    }
+    });
 
     return NextResponse.json({
       query: topic,

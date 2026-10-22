@@ -9,46 +9,9 @@
  * - 100% compatible export to CSV and JSON
  */
 
-export interface GoogleMapsPlace {
-  id: string;
-  title: string;
-  category: string;
-  categories: string[];
-  address: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  postalCode?: string;
-  phone?: string;
-  website?: string;
-  emails: string[];
-  rating: number;
-  reviewCount: number;
-  priceRange?: string;
-  latitude?: number;
-  longitude?: number;
-  mapsUrl?: string;
-  placeId?: string;
-  cid?: string;
-  description?: string;
-  socialLinks?: {
-    linkedin?: string;
-    twitter?: string;
-    facebook?: string;
-    instagram?: string;
-  };
-  scrapedAt: string;
-}
-
-export interface MapsScrapeOptions {
-  query: string;
-  location?: string;
-  category?: string;
-  depth?: number; // 5 to 50
-  extractEmails?: boolean;
-  minRating?: number;
-  minReviews?: number;
-}
+import { fetchPublicPage } from "./outreach-website";
+import type { GoogleMapsPlace, MapsScrapeOptions } from "./maps-types";
+export type { GoogleMapsPlace, MapsScrapeOptions } from "./maps-types";
 
 /**
  * Extracts emails, phones, and social media profiles from a business website.
@@ -83,16 +46,7 @@ export async function enrichWebsiteContact(websiteUrl: string): Promise<{
 
   for (const pageUrl of pagesToScrape.slice(0, 2)) {
     try {
-      const res = await fetch(pageUrl, {
-        signal: AbortSignal.timeout(2500),
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml",
-        },
-      });
-
-      if (!res.ok) continue;
-      const html = await res.text();
+      const { html } = await fetchPublicPage(pageUrl);
 
       // Extract emails
       const rawEmails = html.match(emailRegex) || [];
@@ -273,114 +227,6 @@ async function searchGoogleLocalWeb(query: string, limit = 15): Promise<GoogleMa
 }
 
 /**
- * High-fidelity fallback place generation for specific business queries.
- */
-function generateContextualPlaces(query: string, location: string, count = 8): GoogleMapsPlace[] {
-  const loc = location || "India";
-  const cat = query.replace(/in\s+.*$/i, "").trim() || "Software Company";
-  const isIndia = /india|bangalore|bengaluru|mumbai|delhi|gurgaon|gurugram|hyderabad|pune|chennai|noida|kolkata|ahmedabad|jaipur/i.test(
-    loc + " " + query
-  );
-
-  const results: GoogleMapsPlace[] = [];
-
-  if (isIndia) {
-    const indianHubs = [
-      { city: "Bengaluru", state: "Karnataka", address: "Manyata Embassy Business Park, Outer Ring Road, Nagavara", postalCode: "560045", phoneCode: "+91 80 4123" },
-      { city: "Mumbai", state: "Maharashtra", address: "Bandra Kurla Complex (BKC), G Block, Bandra East", postalCode: "400051", phoneCode: "+91 22 2654" },
-      { city: "Gurugram", state: "Haryana", address: "DLF Cyber City, Building 10, DLF Phase 2", postalCode: "122002", phoneCode: "+91 124 456" },
-      { city: "Hyderabad", state: "Telangana", address: "HITEC City, Madhapur, Near Cyber Towers", postalCode: "500081", phoneCode: "+91 40 6789" },
-      { city: "Pune", state: "Maharashtra", address: "Rajiv Gandhi Infotech Park, Hinjawadi Phase 1", postalCode: "411057", phoneCode: "+91 20 6677" },
-      { city: "Chennai", state: "Tamil Nadu", address: "Tidel Park, Rajiv Gandhi Salai, Taramani", postalCode: "600113", phoneCode: "+91 44 2254" },
-      { city: "Bengaluru", state: "Karnataka", address: "Bagmane Tech Park, CV Raman Nagar, Byrasandra", postalCode: "560093", phoneCode: "+91 80 6755" },
-      { city: "Noida", state: "Uttar Pradesh", address: "Sector 62, Electronic City, Institutional Area", postalCode: "201309", phoneCode: "+91 120 488" },
-    ];
-
-    const techPrefixes = ["Nexus", "Zeta", "Vanguard", "Apex", "InfoPulse", "Crestview", "Quantica", "MindTree", "BluePeak", "CloudNine"];
-    const suffix = cat.toLowerCase().includes("software") || cat.toLowerCase().includes("tech") ? "Technologies India Pvt Ltd" : `${cat} India`;
-
-    for (let i = 0; i < count; i++) {
-      const hub = indianHubs[i % indianHubs.length];
-      const brand = `${techPrefixes[i % techPrefixes.length]} ${suffix}`;
-      const fullAddr = `${hub.address}, ${hub.city}, ${hub.state} ${hub.postalCode}, India`;
-      const cleanSlug = techPrefixes[i % techPrefixes.length].toLowerCase();
-      const domain = `${cleanSlug}tech.in`;
-      const rating = Math.round((4.3 + (i % 7) * 0.1) * 10) / 10;
-      const reviewCount = 42 + i * 28;
-      const phone = `${hub.phoneCode} ${1000 + i * 111}`;
-
-      results.push({
-        id: `gmaps-in-${hashString(brand + hub.city + i)}`,
-        title: brand,
-        category: cat,
-        categories: [cat, "Commercial Entity", "Registered Business"],
-        address: fullAddr,
-        city: hub.city,
-        state: hub.state,
-        country: "India",
-        postalCode: hub.postalCode,
-        phone,
-        website: `https://${domain}`,
-        emails: [`contact@${domain}`, `info@${domain}`, `sales@${domain}`],
-        rating,
-        reviewCount,
-        priceRange: "₹₹",
-        mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${brand} ${fullAddr}`)}`,
-        placeId: `ChIJ${Math.abs(hashString(brand)).toString(16)}`,
-        scrapedAt: new Date().toISOString(),
-        socialLinks: {
-          linkedin: `https://linkedin.com/company/${cleanSlug}-india`,
-          twitter: `https://twitter.com/${cleanSlug}_in`,
-        },
-      });
-    }
-
-    return results;
-  }
-
-  // Global / US fallback
-  const prefixes = ["Apex", "Elevate", "Prime", "Summit", "Beacon", "Vanguard", "Horizon", "Crestview", "Nexus", "Quantum"];
-  const streets = ["Main Street", "Congress Avenue", "Market Street", "Broad Street", "Commerce Blvd", "Innovation Way"];
-
-  for (let i = 0; i < count; i++) {
-    const brand = `${prefixes[i % prefixes.length]} ${cat.split(" ")[0] || "Growth"}`;
-    const streetNum = 100 + i * 42;
-    const street = streets[i % streets.length];
-    const fullAddr = `${streetNum} ${street}, ${loc}`;
-    const domain = `${brand.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`;
-    const rating = Math.round((4.2 + (i % 8) * 0.1) * 10) / 10;
-    const reviewCount = 24 + i * 19;
-    const phone = `+1 (512) 555-01${(10 + i).toString().slice(-2)}`;
-
-    results.push({
-      id: `gmaps-gen-${hashString(brand + loc)}`,
-      title: brand,
-      category: cat,
-      categories: [cat, "Professional Services"],
-      address: fullAddr,
-      city: loc.split(",")[0]?.trim(),
-      state: loc.split(",")[1]?.trim() || "",
-      country: "United States",
-      phone,
-      website: `https://${domain}`,
-      emails: [`contact@${domain}`, `info@${domain}`],
-      rating,
-      reviewCount,
-      priceRange: "$$",
-      mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${brand} ${fullAddr}`)}`,
-      placeId: `ChIJ${hashString(brand).toString(16)}`,
-      scrapedAt: new Date().toISOString(),
-      socialLinks: {
-        linkedin: `https://linkedin.com/company/${brand.toLowerCase().replace(/[^a-z0-9]/g, "")}`,
-        twitter: `https://twitter.com/${brand.toLowerCase().replace(/[^a-z0-9]/g, "")}`,
-      },
-    });
-  }
-
-  return results;
-}
-
-/**
  * Main scraper orchestration function.
  */
 export async function scrapeGoogleMaps(options: MapsScrapeOptions): Promise<{
@@ -455,17 +301,6 @@ export async function scrapeGoogleMaps(options: MapsScrapeOptions): Promise<{
 
   let finalPlaces = Array.from(placeMap.values());
 
-  // Fallback if network was restricted or yielded very few places
-  if (finalPlaces.length < 3) {
-    const fallbackCount = Math.max(maxDepth - finalPlaces.length, 5);
-    const mockPlaces = generateContextualPlaces(category || fullQuery, location || "India", fallbackCount);
-    for (const p of mockPlaces) {
-      if (!placeMap.has(p.title.toLowerCase().trim())) {
-        finalPlaces.push(p);
-      }
-    }
-  }
-
   // 2. Deep contact enrichment if requested
   if (options.extractEmails !== false) {
     const targets = finalPlaces.filter(p => p.website && p.emails.length === 0).slice(0, 10);
@@ -501,46 +336,6 @@ export async function scrapeGoogleMaps(options: MapsScrapeOptions): Promise<{
     total: finalPlaces.length,
     durationMs: Date.now() - startTime,
   };
-}
-
-/**
- * Converts an array of GoogleMapsPlace items into standard CSV format.
- * Matches itz-kirankumar/google-maps-scraper CSV schema.
- */
-export function exportPlacesToCSV(places: GoogleMapsPlace[]): string {
-  const headers = [
-    "title",
-    "category",
-    "address",
-    "city",
-    "country",
-    "phone",
-    "web_site",
-    "emails",
-    "review_rating",
-    "review_count",
-    "latitude",
-    "longitude",
-    "link",
-  ];
-
-  const rows = places.map(p => [
-    `"${(p.title || "").replace(/"/g, '""')}"`,
-    `"${(p.category || "").replace(/"/g, '""')}"`,
-    `"${(p.address || "").replace(/"/g, '""')}"`,
-    `"${(p.city || "").replace(/"/g, '""')}"`,
-    `"${(p.country || "").replace(/"/g, '""')}"`,
-    `"${(p.phone || "").replace(/"/g, '""')}"`,
-    `"${(p.website || "").replace(/"/g, '""')}"`,
-    `"${(p.emails || []).join(", ")}"`,
-    p.rating.toString(),
-    p.reviewCount.toString(),
-    p.latitude?.toString() || "",
-    p.longitude?.toString() || "",
-    `"${(p.mapsUrl || "").replace(/"/g, '""')}"`,
-  ]);
-
-  return [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
 }
 
 function hashString(str: string): number {

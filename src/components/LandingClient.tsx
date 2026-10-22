@@ -3,6 +3,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import Footer from "./Footer";
+import LenisParallax from "./LenisParallax";
+import LenisMarquee from "./LenisMarquee";
+import InteractiveLiveWorkspace from "./InteractiveLiveWorkspace";
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 import {
@@ -264,10 +267,10 @@ export default function LandingClient() {
             <button
               type="button"
               onClick={openWaitlist}
-              aria-label="Join the beta waitlist"
+              aria-label="Request beta access"
               className="btn-tactile-orange inline-flex items-center gap-2 rounded-full border-2 border-brand-orange bg-brand-orange px-3 py-2.5 text-[11px] font-extrabold text-white sm:px-5 sm:text-[12px] max-[380px]:gap-1.5 max-[380px]:px-2"
             >
-              <span className="max-[640px]:hidden">Join the beta</span>
+              <span className="max-[640px]:hidden">Request beta access</span>
               <span className="hidden max-[380px]:inline">Beta</span>
               <span className="hidden max-[640px]:inline max-[380px]:hidden">Join beta</span>
               <ArrowRight className="h-4 w-4 max-[380px]:h-3.5 max-[380px]:w-3.5" />
@@ -281,12 +284,14 @@ export default function LandingClient() {
       {/* ============================================================ */}
       <section className="relative overflow-hidden pt-[132px] pb-20 lg:pt-[164px] lg:pb-28">
         <div className="paper-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-        <div
+        <LenisParallax
+          speed={-0.15}
           className="pointer-events-none absolute -right-32 top-10 h-[520px] w-[520px] rounded-full opacity-40 blur-[120px]"
           style={{ background: "radial-gradient(circle, #ff4500 0%, transparent 68%)" }}
           aria-hidden
         />
-        <div
+        <LenisParallax
+          speed={0.18}
           className="pointer-events-none absolute -left-40 top-64 h-[460px] w-[460px] rounded-full opacity-30 blur-[120px]"
           style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 68%)" }}
           aria-hidden
@@ -343,13 +348,12 @@ export default function LandingClient() {
               >
                 Request beta access <ArrowRight className="h-4 w-4" />
               </button>
-              <button
-                type="button"
-                onClick={() => setModalOpen(true)}
+              <a
+                href="#workspace"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-black bg-white px-7 py-4 text-[15px] font-black transition-colors hover:bg-brand-orangeLight"
               >
-                Join the beta waitlist <ArrowUpRight className="h-4 w-4" />
-              </button>
+                Explore live workspace <ArrowRight className="h-4 w-4" />
+              </a>
             </div>
 
             <div className="mt-10 grid w-full min-w-0 max-w-lg grid-cols-2 gap-3 sm:grid-cols-3">
@@ -368,13 +372,16 @@ export default function LandingClient() {
             </div>
           </div>
 
-          {/* Live product mock ------------------------------------ */}
-          <div className="relative min-w-0">
-            <div className="absolute -right-3 -top-4 z-20 hidden rotate-3 items-center gap-2 rounded-full border-2 border-brand-black bg-brand-orange px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white shadow-[3px_3px_0_#0a0a0a] sm:flex">
-              <span className="live-dot !bg-white !shadow-none" /> Live
-            </div>
+          {/* Live product mock with Lenis 3D velocity tilt ------------------------------------ */}
+          <div className="relative min-w-0 [perspective:1200px]">
+            <LenisParallax speed={-0.12} className="absolute -right-3 -top-4 z-20 hidden rotate-3 sm:block">
+              <div className="flex items-center gap-2 rounded-full border-2 border-brand-black bg-brand-orange px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white shadow-[3px_3px_0_#0a0a0a]">
+                <span className="live-dot !bg-white !shadow-none" /> Live
+              </div>
+            </LenisParallax>
 
-            <div className="overflow-hidden rounded-[22px] border-2 border-brand-black bg-white shadow-[10px_10px_0_#0a0a0a]">
+            <LenisParallax speed={0.05} velocityTilt>
+              <div className="overflow-hidden rounded-[22px] border-2 border-brand-black bg-white shadow-[10px_10px_0_#0a0a0a] transition-shadow duration-300 hover:shadow-[14px_14px_0_#0a0a0a]">
               <div className="flex items-center justify-between border-b-2 border-brand-black bg-brand-black px-4 py-3">
                 <div className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-full bg-brand-orange" />
@@ -469,37 +476,27 @@ export default function LandingClient() {
                 </div>
               </div>
             </div>
+            </LenisParallax>
 
-            <div className="absolute -bottom-5 -left-4 hidden rotate-[-3deg] items-center gap-2 rounded-xl border-2 border-brand-black bg-white px-3 py-2 shadow-[4px_4px_0_#7c3aed] sm:flex">
-              <TrendingUp className="h-4 w-4 text-brand-violet" />
-              <div>
-                <div className="text-[10px] font-black leading-none">Sequence step 2</div>
-                <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.08em] text-brand-quiet">
-                  41% open · variant B
+            <LenisParallax speed={0.16} className="absolute -bottom-5 -left-4 hidden rotate-[-3deg] sm:block z-20">
+              <div className="flex items-center gap-2 rounded-xl border-2 border-brand-black bg-white px-3 py-2 shadow-[4px_4px_0_#7c3aed]">
+                <TrendingUp className="h-4 w-4 text-brand-violet" />
+                <div>
+                  <div className="text-[10px] font-black leading-none">Sequence step 2</div>
+                  <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.08em] text-brand-quiet">
+                    41% open · variant B
+                  </div>
                 </div>
               </div>
-            </div>
+            </LenisParallax>
           </div>
         </div>
       </section>
 
       {/* ============================================================ */}
-      {/* Integration marquee                                          */}
+      {/* Integration marquee driven by Lenis scroll velocity           */}
       {/* ============================================================ */}
-      <section className="overflow-hidden border-y-2 border-brand-black bg-white py-5">
-        <div className="mx-auto max-w-[1240px] px-5 lg:px-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-brand-quiet">
-              Plays well with
-            </span>
-            {stack.map((name) => (
-              <span key={name} className="text-[12px] font-extrabold text-brand-muted/80">
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
+      <LenisMarquee items={stack} label="Plays well with" baseSpeed={1.2} />
 
       {/* ============================================================ */}
       {/* Platform strip                                               */}
@@ -531,15 +528,16 @@ export default function LandingClient() {
             { icon: Workflow, title: "Automate", copy: "Workflows that qualify, draft and follow up." },
             { icon: BarChart3, title: "Optimize", copy: "Spend and content steered by live results." },
             { icon: Layers, title: "Compound", copy: "SEO and AI answers built on the same insight." },
-          ].map((item) => (
-            <div
-              key={item.title}
-              className="group rounded-2xl border-2 border-brand-black bg-white p-5 transition-transform hover:-translate-y-1"
-            >
-              <item.icon className="h-5 w-5 text-brand-orange" />
-              <h3 className="mt-4 text-[15px] font-black tracking-[-0.03em]">{item.title}</h3>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-brand-muted">{item.copy}</p>
-            </div>
+          ].map((item, index) => (
+            <LenisParallax key={item.title} speed={index % 2 === 0 ? 0.04 : -0.04} className="h-full">
+              <div
+                className="group h-full rounded-2xl border-2 border-brand-black bg-white p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-[6px_6px_0_#ff4500]"
+              >
+                <item.icon className="h-5 w-5 text-brand-orange" />
+                <h3 className="mt-4 text-[15px] font-black tracking-[-0.03em]">{item.title}</h3>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-brand-muted">{item.copy}</p>
+              </div>
+            </LenisParallax>
           ))}
         </div>
       </section>
@@ -570,10 +568,14 @@ export default function LandingClient() {
           </div>
 
           <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {modules.map((module) => (
+            {modules.map((module, index) => (
               <article
                 key={module.title}
-                className="group relative overflow-hidden rounded-2xl border border-white/15 bg-white/[0.035] p-6 transition-all hover:border-white/30 hover:bg-white/[0.06]"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("threadly:select-module", { detail: { moduleId: index } }));
+                  document.getElementById("workspace")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/15 bg-white/[0.035] p-6 transition-all hover:-translate-y-1 hover:border-brand-orange hover:bg-white/[0.06] hover:shadow-[0_8px_24px_rgba(255,69,0,0.15)]"
               >
                 <div
                   className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full opacity-0 blur-3xl transition-opacity group-hover:opacity-100"
@@ -608,8 +610,13 @@ export default function LandingClient() {
                     </li>
                   ))}
                 </ul>
-                <div className="mt-5 border-t border-white/10 pt-3 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-orange">
-                  {module.stat}
+                <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3">
+                  <div className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-brand-orange">
+                    {module.stat}
+                  </div>
+                  <span className="inline-flex items-center gap-1 font-mono text-[8px] font-bold uppercase tracking-wider text-white/40 transition-colors group-hover:text-white">
+                    Test live <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
+                  </span>
                 </div>
               </article>
             ))}
@@ -664,87 +671,11 @@ export default function LandingClient() {
             </button>
           </div>
 
-          <div className="relative">
-            <div className="absolute -inset-3 rounded-[28px] border-2 border-dashed border-brand-black/15" aria-hidden />
-            <div className="relative overflow-hidden rounded-[20px] border-2 border-brand-black bg-white shadow-[10px_10px_0_#ff4500]">
-              <div className="grid grid-cols-[52px_1fr]">
-                <div className="flex flex-col items-center gap-3 border-r-2 border-brand-black bg-brand-paper py-4">
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-black text-white">
-                    <Image src="/threadly-mark.svg" alt="" width={18} height={18} />
-                  </span>
-                  {[Radar, Users, Mail, CircleDollarSign, CalendarClock, Globe2, BarChart3].map((Icon, index) => (
-                    <span
-                      key={index}
-                      className={`grid h-7 w-7 place-items-center rounded-md ${
-                        index === 0 ? "bg-brand-black text-brand-orange" : "text-brand-quiet"
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                    </span>
-                  ))}
-                </div>
-
-                <div className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-mono text-[8px] font-bold uppercase tracking-[0.13em] text-brand-quiet">
-                        Campaign command
-                      </div>
-                      <div className="mt-1 text-[18px] font-black tracking-[-0.04em]">Q4 Pipeline Sprint</div>
-                    </div>
-                    <span className="rounded-full bg-brand-orangeLight px-2.5 py-1 font-mono text-[8px] font-bold uppercase tracking-[0.08em] text-brand-orangeDark">
-                      Active
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    {[
-                      ["Spend", "$4,280"],
-                      ["Revenue", "$10,296"],
-                      ["ROAS", "2.41×"],
-                    ].map(([label, value]) => (
-                      <div key={label} className="rounded-lg border border-brand-line px-2.5 py-2">
-                        <div className="font-mono text-[7.5px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
-                          {label}
-                        </div>
-                        <div className="mt-0.5 text-[13px] font-black">{value}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-3 rounded-xl border border-brand-line p-3">
-                    <div className="mb-2 flex items-center justify-between font-mono text-[8px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
-                      <span>Channel allocation</span>
-                      <span className="text-brand-violet">auto-optimized</span>
-                    </div>
-                    {[
-                      ["Google Search", 78, "bg-brand-orange"],
-                      ["LinkedIn", 54, "bg-brand-violet"],
-                      ["Reddit", 36, "bg-brand-orangeDark"],
-                      ["X", 22, "bg-brand-black"],
-                    ].map(([channel, width, color]) => (
-                      <div key={channel as string} className="mb-1.5 last:mb-0">
-                        <div className="flex items-center justify-between text-[8.5px] font-semibold text-brand-muted">
-                          <span>{channel}</span>
-                          <span>{width}%</span>
-                        </div>
-                        <div className="mt-0.5 h-1.5 rounded-full bg-brand-line">
-                          <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${width}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-3 flex items-center gap-2 rounded-xl border-2 border-brand-black bg-brand-black px-3 py-2 text-white">
-                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-orange" />
-                    <span className="text-[9px] leading-snug text-white/80">
-                      Threadly shifted <b className="text-white">$240</b> into Google Search after ROAS
-                      crossed 3.1×.
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="relative [perspective:1200px]">
+            <div className="pointer-events-none absolute -inset-3 rounded-[28px] border-2 border-dashed border-brand-black/15" aria-hidden />
+            <LenisParallax speed={0.05} velocityTilt>
+              <InteractiveLiveWorkspace />
+            </LenisParallax>
           </div>
         </div>
       </section>
@@ -786,24 +717,25 @@ export default function LandingClient() {
                 role: "Founder · Slate AI",
                 metric: "38% AI answer share",
               },
-            ].map((story) => (
-              <figure
-                key={story.name}
-                className="flex flex-col justify-between rounded-2xl border-2 border-brand-black bg-brand-paper p-6 transition-transform hover:-translate-y-1"
-              >
-                <blockquote className="text-[13.5px] leading-relaxed text-brand-black">
-                  “{story.quote}”
-                </blockquote>
-                <figcaption className="mt-6 border-t border-brand-line pt-4">
-                  <div className="text-[12px] font-black">{story.name}</div>
-                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-brand-quiet">
-                    {story.role}
-                  </div>
-                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-orangeLight px-2.5 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.08em] text-brand-orangeDark">
-                    <Flame className="h-3 w-3" /> {story.metric}
-                  </div>
-                </figcaption>
-              </figure>
+            ].map((story, index) => (
+              <LenisParallax key={story.name} speed={index === 1 ? -0.05 : 0.04} className="h-full">
+                <figure
+                  className="flex h-full flex-col justify-between rounded-2xl border-2 border-brand-black bg-brand-paper p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-[6px_6px_0_#0a0a0a]"
+                >
+                  <blockquote className="text-[13.5px] leading-relaxed text-brand-black">
+                    “{story.quote}”
+                  </blockquote>
+                  <figcaption className="mt-6 border-t border-brand-line pt-4">
+                    <div className="text-[12px] font-black">{story.name}</div>
+                    <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-brand-quiet">
+                      {story.role}
+                    </div>
+                    <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-orangeLight px-2.5 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.08em] text-brand-orangeDark">
+                      <Flame className="h-3 w-3" /> {story.metric}
+                    </div>
+                  </figcaption>
+                </figure>
+              </LenisParallax>
             ))}
           </div>
         </div>
@@ -840,13 +772,12 @@ export default function LandingClient() {
             >
               Request beta access <ArrowRight className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => setModalOpen(true)}
+            <a
+              href="#workspace"
               className="btn-tactile-white inline-flex items-center gap-2 rounded-2xl border-2 border-white px-7 py-4 text-[15px] font-black text-white"
             >
-              Request early access <ArrowUpRight className="h-4 w-4" />
-            </button>
+              Explore live workspace <ArrowUpRight className="h-4 w-4" />
+            </a>
           </div>
         </div>
       </section>
@@ -861,16 +792,17 @@ export default function LandingClient() {
           className="fixed inset-0 z-[80] flex items-center justify-center bg-brand-black/70 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-label="Request early access"
+          aria-label="Request beta access"
+          data-lenis-prevent
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setModalOpen(false);
           }}
         >
-          <div className="relative w-full max-w-lg overflow-hidden rounded-[22px] border-2 border-brand-black bg-brand-paper shadow-[10px_10px_0_#ff4500]">
+          <div data-lenis-prevent className="relative w-full max-w-lg overflow-y-auto max-h-[92vh] rounded-[22px] border-2 border-brand-black bg-brand-paper shadow-[10px_10px_0_#ff4500]">
             <div className="flex items-start justify-between border-b-2 border-brand-black bg-white px-6 py-4">
               <div>
                 <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-brand-orange">
-                  Early access · cohort 01
+                  Private beta · cohort 01
                 </div>
                 <h3 className="mt-1 text-[22px] font-black tracking-[-0.045em]">Request beta access</h3>
               </div>

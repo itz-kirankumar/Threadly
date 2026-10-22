@@ -5,7 +5,6 @@ import {
   createCustomWorkflow,
   deleteWorkflow,
   duplicateDraft,
-  executeWorkflow,
   generateDrafts,
   generateOutreachEmail,
   getOutreachEmailForDelivery,
@@ -36,6 +35,9 @@ import { requireApprovedIdentity } from "@/lib/admin-auth";
 import { sendFounderOutreachEmail } from "@/lib/mailer";
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { checkRateLimit, rateLimitUnavailable, tooManyRequests } from "@/lib/rate-limit";
+import { auditPublicWebsite } from "@/lib/seo-audit";
+import { analyzeOutreachWebsite } from "@/lib/outreach-website";
+import { syncOnMapsImport } from "@/lib/insights-sync-engine";
 import {
   addGeoQuery,
   advanceSequence,
@@ -101,6 +103,8 @@ export async function POST(request: Request) {
       campaignOptimize: { limit: 60, windowSeconds: 60 * 60 },
       sequenceAdvance: { limit: 120, windowSeconds: 60 * 60 },
       geoScan: { limit: 60, windowSeconds: 60 * 60 },
+      seoAudit: { limit: 15, windowSeconds: 60 * 60 },
+      analyzeWebsite: { limit: 10, windowSeconds: 60 * 60 },
       scoreRefresh: { limit: 60, windowSeconds: 60 * 60 },
     };
     const quota = costlyActions[action];
@@ -122,6 +126,60 @@ export async function POST(request: Request) {
       }
 
       switch (action) {
+        case "analyzeWebsite": {
+          const result = await analyzeOutreachWebsite(text(body, "websiteUrl", 2048)!);
+          return Response.json({
+            ok: true,
+            analysis: {
+              company: { name: result.companyName, description: result.description, targetAudience: result.customer },
+              productSummary: result.description,
+              icp: result.icp,
+              discoveryKeywords: result.searchPhrases.split(/[,;\n]/).map((phrase) => phrase.trim()).filter(Boolean),
+              source: result.extractor,
+            },
+          });
+        }
+        case "onboardCompany": {
+          const name = text(body, "name", 160)!;
+          const websiteInput = text(body, "website", 2048, true) || "";
+          let website = "";
+          let domain = "";
+          if (websiteInput) {
+            let parsed: URL;
+            try { parsed = new URL(/^https?:\/\//i.test(websiteInput) ? websiteInput : `https://${websiteInput}`); }
+            catch { throw new Error("Enter a valid company website URL."); }
+            if (parsed.protocol !== "https:" || parsed.username || parsed.password) throw new Error("Use a public HTTPS company website URL.");
+            parsed.hash = "";
+            website = parsed.toString();
+            domain = parsed.hostname.replace(/^www\./i, "");
+          }
+          const description = text(body, "description", 3000, true) || "";
+          const customer = text(body, "customer", 1200, true) || "";
+          const icp = text(body, "icp", 2000, true) || "";
+          const keywords = Array.isArray(body.keywords)
+            ? body.keywords.filter((value): value is string => typeof value === "string").map((value) => value.trim().slice(0, 120)).filter(Boolean).slice(0, 30)
+            : [];
+          const painPoints = Array.isArray(body.painPoints)
+            ? body.painPoints.filter((value): value is string => typeof value === "string").map((value) => value.trim().slice(0, 300)).filter(Boolean).slice(0, 20)
+            : [];
+          const current = await getState(user.uid);
+          const context = {
+            ...current.workspace.context,
+            ...(description ? { description } : {}),
+            ...(customer ? { customer } : {}),
+            ...(icp ? { icp } : {}),
+            ...(painPoints.length ? { painPoints: painPoints.join("\n") } : {}),
+            ...(keywords.length ? { outreachSearchPhrases: keywords.join(", ") } : {}),
+          };
+          await updateContext(user.uid, context, name, undefined, domain || undefined, {
+            website: website || current.workspace.website || "",
+          });
+          return Response.json({ ok: true, companyName: name, website: website || current.workspace.website || "" });
+        }
+        case "seoAudit": {
+          const report = await auditPublicWebsite(text(body, "url", 2048)!);
+          return Response.json({ ok: true, audit: report });
+        }
         case "outreachGenerate": {
           const email = await generateOutreachEmail(user.uid, text(body, "leadId", 160)!);
           return Response.json({ ok: true, email });
@@ -218,6 +276,7 @@ export async function POST(request: Request) {
         case "importMapsLeads": {
           const rawPlaces = Array.isArray(body.places) ? (body.places as any[]) : [];
           let imported = 0;
+          const leadIds: string[] = [];
           for (const p of rawPlaces) {
             if (!p || typeof p.title !== "string") continue;
             const companyName = p.title.trim();
@@ -226,7 +285,7 @@ export async function POST(request: Request) {
             const websiteStr = typeof p.website === "string" ? p.website : "";
             const ratingStr = typeof p.rating === "number" ? `${p.rating}★ (${p.reviewCount || 0} reviews)` : "";
 
-            await saveLead(user.uid, {
+            const saved = await saveLead(user.uid, {
               opportunityId: p.id || null,
               name: p.ownerName || `${companyName} Owner`,
               email: contactEmail,
@@ -236,7 +295,12 @@ export async function POST(request: Request) {
               pain: `Local business listing: ${p.address || ""}. Rating: ${ratingStr}`,
               notes: `Scraped via Google Maps Scraper.\nCategory: ${p.category || ""}\nAddress: ${p.address || ""}\nPhone: ${phoneStr}\nWebsite: ${websiteStr}\nRating: ${ratingStr}\nMaps: ${p.mapsUrl || ""}`,
             }, user.email);
+            if (saved?.id) leadIds.push(saved.id);
             imported++;
+          }
+          if (leadIds.length > 0 && rawPlaces.length > 0) {
+            const firstPlace = rawPlaces[0] || {};
+            await syncOnMapsImport(user.uid, firstPlace.category || "Local Business", firstPlace.city || firstPlace.location || "", leadIds).catch(() => undefined);
           }
           return Response.json({ ok: true, imported });
         }
@@ -261,8 +325,7 @@ export async function POST(request: Request) {
           await toggleWorkflow(user.uid, text(body, "id", 160)!, Boolean(body.enabled));
           break;
         case "workflowExecute": {
-          const res = await executeWorkflow(user.uid, text(body, "id", 160)!);
-          return Response.json(res);
+          return Response.json({ error: "Automatic workflow execution is not connected yet. Run this step from its workspace page." }, { status: 409 });
         }
         case "workflowCreate": {
           const wfAction = (body.workflowAction as any) || (body.actionType as any) || (body.wfAction as any) || "priority_alert";

@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { getDecisionModelStatus } from "@/lib/decision-models";
+
 export function GET() {
   const firebase = Boolean(
     (process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyBh_cw7QS00FX2ZwaGtNnuiNhXaVWbdYWM")
@@ -14,6 +16,7 @@ export function GET() {
     authenticatedRateLimiting: firebase,
     betaEmailDelivery: resend,
     anonymousRateLimitStore: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+    prospectQualification: getDecisionModelStatus(),
   };
   const ready = checks.firebase && checks.firebaseWaitlistStorage && checks.authenticatedRateLimiting && checks.betaEmailDelivery;
   return Response.json({ status: ready ? "ready" : "not_ready", checks }, {

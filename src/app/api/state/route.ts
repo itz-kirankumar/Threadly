@@ -12,7 +12,14 @@ export async function GET(request: Request) {
     const user = await requireApprovedIdentity(request);
     return await withWorkspace(user.uid, user.idToken, async () => {
       const state = await getState(user.uid);
-      const growth = await getGrowthSnapshot(user.uid, state.leads);
+      const growth = await getGrowthSnapshot(
+        user.uid,
+        state.leads,
+        state.opportunities,
+        state.drafts,
+        state.outreachEmails,
+        state.workspace
+      );
       return Response.json({ ...state, growth });
     });
   } catch (error) {

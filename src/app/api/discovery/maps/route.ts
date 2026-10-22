@@ -1,51 +1,22 @@
 import { NextResponse } from "next/server";
-import { scrapeGoogleMaps, type GoogleMapsPlace } from "@/lib/maps-scraper";
+import { scrapeGoogleMaps } from "@/lib/maps-scraper";
+import type { GoogleMapsPlace } from "@/lib/maps-types";
 import { getState, storeDiscoveredOpportunities } from "@/lib/portal-data";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { withWorkspace } from "@/lib/portal-db";
+import { requireApprovedIdentity } from "@/lib/admin-auth";
 import { checkRateLimit, rateLimitUnavailable, tooManyRequests } from "@/lib/rate-limit";
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 
 export const maxDuration = 45;
 export const runtime = "nodejs";
 
-function requestKey(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwardedFor || request.headers.get("x-real-ip") || "unknown";
-}
-
 export async function POST(request: Request) {
-  let body: unknown;
   try {
-    body = await readJsonBody(request, 32 * 1024);
-  } catch {
-    try {
-      body = await request.json();
-    } catch (parseError) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid JSON request payload." },
-        { status: 400 }
-      );
-    }
-  }
-
-  try {
-    let user = null;
-    try {
-      user = await getFirebaseIdentity(request, true);
-    } catch {
-      // Optional fallback
-    }
-
-    const effectiveUser = user || {
-      uid: "local-workspace-uid",
-      email: "founder@threadly.io",
-      name: "Founder",
-      idToken: "demo-token",
-    };
-
-    const key = effectiveUser.uid || requestKey(request);
-    const limit = await checkRateLimit(`maps-scraper:${key}`, 60, 10 * 60, user || undefined);
-    if (limit && !limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+    const user = await requireApprovedIdentity(request);
+    const limit = await checkRateLimit(`maps-scraper:${user.uid}`, 60, 10 * 60, user);
+    if (!limit) return rateLimitUnavailable();
+    if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
+    const body = await readJsonBody(request, 32 * 1024);
 
     const payload = body as {
       query?: unknown;
@@ -84,10 +55,10 @@ export async function POST(request: Request) {
       minReviews,
     });
 
-    if (effectiveUser && autoSaveRadar && scrapeResult.places.length > 0) {
+    if (autoSaveRadar && scrapeResult.places.length > 0) {
       try {
-        await withWorkspace(effectiveUser.uid, effectiveUser.idToken, async () => {
-          await getState(effectiveUser.uid);
+        await withWorkspace(user.uid, user.idToken, async () => {
+          await getState(user.uid);
 
           const mappedOpportunities = scrapeResult.places.map((place: GoogleMapsPlace) => ({
             id: place.id,
@@ -102,7 +73,7 @@ export async function POST(request: Request) {
           }));
 
           await storeDiscoveredOpportunities(
-            effectiveUser.uid,
+            user.uid,
             mappedOpportunities,
             "Google Maps Scraper",
             { autoOutreachThreshold: 60 }
@@ -122,11 +93,6 @@ export async function POST(request: Request) {
       provider: "Google Maps Scraper Engine",
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Google Maps scraping request failed";
-    console.error("Google Maps scrape failed:", error);
-    return NextResponse.json(
-      { ok: false, error: message },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
-    );
+    return errorResponse(error, "Google Maps scrape", 502);
   }
 }

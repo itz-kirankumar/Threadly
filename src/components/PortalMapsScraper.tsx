@@ -28,8 +28,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type { GoogleMapsPlace } from "@/lib/maps-scraper";
-import { exportPlacesToCSV } from "@/lib/maps-scraper";
+import type { GoogleMapsPlace } from "@/lib/maps-types";
+import { exportPlacesToCSV } from "@/lib/maps-export";
 
 const PRESET_CATEGORIES = [
   { label: "Software & SaaS", category: "Software Company", icon: "💻" },

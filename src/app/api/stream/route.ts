@@ -10,25 +10,15 @@ export const dynamic = "force-dynamic";
 /**
  * Server-Sent Events feed for the workspace.
  *
- * The browser opens one GET and receives a `snapshot` event every few
+ * The browser opens one authenticated GET and receives a `snapshot` event every few
  * seconds plus an immediate `hello` so the UI can show connection state.
- * The connection is closed by the client (EventSource) or after a
+ * The connection is closed by the client or after a
  * bounded number of ticks to stay friendly to serverless runtimes.
  */
 export async function GET(request: Request) {
-  // EventSource cannot set headers, so the client may pass its ID token as a
-  // query parameter. Fall back to the standard Authorization header.
-  const url = new URL(request.url);
-  const queryToken = url.searchParams.get("token");
-  const requestForAuth = queryToken
-    ? new Request(request.url, {
-        headers: { authorization: `Bearer ${queryToken}` },
-      })
-    : request;
-
   let user;
   try {
-    user = await requireApprovedIdentity(requestForAuth);
+    user = await requireApprovedIdentity(request);
   } catch (error) {
     return errorResponse(error, "Workspace live feed");
   }
