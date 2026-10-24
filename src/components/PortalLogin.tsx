@@ -57,7 +57,7 @@ export default function PortalLogin() {
     }
   }
 
-  return <main id="threadly-portal" className="portal-auth">
+  return <main id="wisentry-portal" className="portal-auth">
     <header className="portal-auth-header">
       <Link href="/" className="portal-auth-logo" aria-label="Threadly home">
         <Image src="/threadly-logo.svg" alt="Threadly" width={184} height={56} priority />
