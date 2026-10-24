@@ -10,11 +10,11 @@ if (USE_AWS) {
 }
 
 export async function sendCommunityInvite(email: string) {
-  const subject = "Welcome to the Wisentry B2C Founders Community! 🎉";
+  const subject = "Welcome to the Threadly Founders Community! 🎉";
   const bodyText = `
 Hi there!
 
-Thank you for joining the Wisentry waitlist. As promised, here is your exclusive invite to our Discord community:
+Thank you for joining the Threadly waitlist. As promised, here is your exclusive invite to our Discord community:
 https://discord.gg/xTeuQ9yE4
 
 Here is what you stand to gain by joining:
@@ -23,13 +23,13 @@ Here is what you stand to gain by joining:
 - Free Building Resources (including Free hosting and Free LLC incorporation for US startups)
 
 See you inside!
-The Wisentry Team
+The Threadly Team
   `;
 
   if (USE_AWS && sesClient) {
     try {
       await sesClient.send(new SendEmailCommand({
-        Source: process.env.FROM_EMAIL || "hello@wisentry.com",
+        Source: process.env.FROM_EMAIL || "hello@gothreadly.live",
         Destination: {
           ToAddresses: [email],
         },

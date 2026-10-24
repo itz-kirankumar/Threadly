@@ -18,7 +18,7 @@ export type WaitlistRequest = {
 function databaseUrl() {
   const url = process.env.FIREBASE_DATABASE_URL
     || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL
-    || "https://wisentry-510811-default-rtdb.firebaseio.com";
+    || "";
   return url.replace(/\/+$/, "");
 }
 
@@ -39,7 +39,7 @@ async function databaseRequest<T>(path: string, idToken: string, init?: RequestI
 }
 
 export async function getWaitlistRequest(uid: string, idToken: string): Promise<WaitlistRequest | null> {
-  if (idToken === "demo-token" || uid === "demo-founder-uid") {
+  if ((idToken === "demo-token" || uid === "demo-founder-uid") && process.env.ENABLE_DEMO_MODE === "true") {
     return {
       id: "demo-founder-uid",
       uid: "demo-founder-uid",
@@ -47,7 +47,7 @@ export async function getWaitlistRequest(uid: string, idToken: string): Promise<
       fullName: "Demo Founder",
       startupName: "Threadly",
       industry: "B2B SaaS",
-      url: "https://threadly.io",
+      url: "https://gothreadly.live",
       challenge1: "Growth",
       challenge2: "Outreach",
       status: "approved",

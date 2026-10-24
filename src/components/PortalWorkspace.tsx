@@ -579,7 +579,7 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
   };
   const firstName = name.split(" ")[0] || "Founder";
 
-  return <div id="wisentry-portal" className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+  return <div id="threadly-portal" className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
     {mobileNav && <button className="sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileNav(false)}/>}
     <aside id="portal-sidebar" className={`sidebar ${mobileNav ? "sidebar-open" : ""}`} aria-label="Portal navigation">
       <div className="sidebar-brand-wrapper">

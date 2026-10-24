@@ -123,48 +123,8 @@ export default function PortalGate() {
     return <PortalPreloader message="Checking your Threadly 2.0 beta access…" />;
   }
 
-  // Admin bypass: if user is admin, never block with beta access request screen
-  if (accessStatus !== "approved" && !isAdmin && !checkIsAdmin(user.email)) {
-    return (
-      <main id="wisentry-portal" className="portal-auth">
-        <header className="portal-auth-header">
-          <a href="/" className="portal-login-brand">
-            threadly<span className="brand-dot">.</span>
-          </a>
-          <button className="btn btn-outline" onClick={userSignOut}>
-            Sign out
-          </button>
-        </header>
-        <section className="portal-auth-copy" style={{ maxWidth: 700, margin: "14vh auto", padding: 28 }}>
-          <div className="eyebrow">
-            <span className="pulse-dot" /> THREADLY 2.0 · BETA ACCESS
-          </div>
-          <h1>
-            {accessStatus === "pending"
-              ? "Your request is under review."
-              : accessStatus === "rejected"
-                ? "Your request was not approved."
-                : "Request beta access to continue."}
-          </h1>
-          <p>
-            {accessStatus === "pending"
-              ? "The team is reviewing your application. Return to the homepage with this Google account to check your access."
-              : accessStatus === "rejected"
-                ? "You can update and resubmit your beta request from the homepage."
-                : "The Threadly workspace is available to approved beta members. Join the waitlist from the homepage to request access."}
-          </p>
-          <div className="welcome-actions">
-            <a className="btn btn-dark" href="/">
-              {accessStatus === "pending" ? "Back to homepage" : "Join the beta waitlist"}
-            </a>
-            <button className="btn btn-outline" onClick={userSignOut}>
-              Sign out
-            </button>
-          </div>
-        </section>
-      </main>
-    );
-  }
+  // Self-serve onboarding: any authenticated user gets access to the
+  // workspace for Signal Radar. Beta waitlist gating has been retired.
 
   return (
     <PortalWorkspace

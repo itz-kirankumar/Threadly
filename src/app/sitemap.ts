@@ -1,11 +1,12 @@
 import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://threadly.app";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.gothreadly.live";
   const now = new Date();
 
   const routes = [
     "",
+    "/demo",
     "/about",
     "/mission",
     "/playbook",
@@ -22,7 +23,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return routes.map((route) => ({
     url: `${baseUrl}${route}`,
     lastModified: now,
-    changeFrequency: route === "" || route === "/signal-radar" ? "daily" : "weekly",
-    priority: route === "" ? 1.0 : route === "/signal-radar" || route === "/ai-engine" ? 0.9 : 0.7,
+    changeFrequency: route === "" || route === "/signal-radar" || route === "/demo" ? "daily" : "weekly",
+    priority: route === "" ? 1.0 : route === "/signal-radar" || route === "/demo" || route === "/ai-engine" ? 0.9 : 0.7,
   }));
 }

@@ -54,7 +54,7 @@ function requestPage(url: URL, address: Address) {
   return new Promise<{ status: number; location: string | null; contentType: string; html: string }>((resolve, reject) => {
     const request = https.request(url, {
       method: "GET",
-      headers: { Accept: "text/html", "Accept-Encoding": "identity", "User-Agent": "WisentryWebsiteReview/1.0" },
+      headers: { Accept: "text/html", "Accept-Encoding": "identity", "User-Agent": "ThreadlyWebsiteReview/1.0" },
       lookup: (_hostname, _options, callback) => callback(null, address.address, address.family),
       timeout: 8000,
     }, response => {

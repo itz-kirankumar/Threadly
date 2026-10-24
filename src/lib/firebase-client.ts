@@ -3,7 +3,7 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 
-// Public Firebase web client identifiers for Wisentry (project: wisentry-510811)
+// Public Firebase web client identifiers for Threadly (project: wisentry-510811)
 export const defaultFirebaseConfig = {
   apiKey: "AIzaSyBh_cw7QS00FX2ZwaGtNnuiNhXaVWbdYWM",
   authDomain: "wisentry-510811.firebaseapp.com",

@@ -250,7 +250,7 @@ export async function findGoogleMeeting(
   const params = new URLSearchParams({
     timeMin: new Date(input.start.getTime() - 60_000).toISOString(),
     timeMax: new Date(input.end.getTime() + 60_000).toISOString(),
-    q: "Wisentry",
+    q: "Threadly",
     singleEvents: "true",
     orderBy: "startTime",
     conferenceDataVersion: "1",

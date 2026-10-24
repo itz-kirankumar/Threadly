@@ -65,7 +65,8 @@ function demoWrite(uid: string, path: string, value: unknown) {
 }
 
 function databaseUrl() {
-  const url = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "https://wisentry-510811-default-rtdb.firebaseio.com";
+  const url = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "";
+  if (!url) throw new Error("Firebase is not configured. Set FIREBASE_DATABASE_URL and restart the app.");
   return url.replace(/\/+$/, "");
 }
 
@@ -77,9 +78,10 @@ export async function getFirebaseIdentity(request: Request, optional = false): P
     throw new Error("Sign in with Google to continue.");
   }
 
-  // Handle Demo Mode safely without external network call
+  // Demo mode: opt-in via ENABLE_DEMO_MODE=true. Read-only — demo
+  // sessions use an in-memory store and never call paid providers.
   if (idToken === "demo-token") {
-    if (process.env.NODE_ENV === "production") throw new Error("Demo sign-in is unavailable in production.");
+    if (process.env.ENABLE_DEMO_MODE !== "true") throw new Error("Demo mode is not enabled.");
     return {
       uid: "demo-founder-uid",
       email: "founder@demo.threadly.io",
@@ -88,7 +90,8 @@ export async function getFirebaseIdentity(request: Request, optional = false): P
     };
   }
 
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyBh_cw7QS00FX2ZwaGtNnuiNhXaVWbdYWM";
+  const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  if (!apiKey) throw new Error("Firebase is not configured. Set FIREBASE_API_KEY and restart the app.");
   const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

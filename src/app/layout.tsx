@@ -6,21 +6,21 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.gothreadly.live"),
   title: {
-    default: "Threadly — The Growth Operating System",
+    default: "Signal Radar by Threadly — Find High-Intent Buyers on X & Reddit",
     template: "%s · Threadly",
   },
-  description:
-    "Threadly turns real market conversations into revenue. Find high-intent leads, run multi-step outreach, optimize ad spend, schedule content at the right moment, and rank in search and AI answers — from one live workspace.",
+  description: "Signal Radar by Threadly finds buyers who are already describing your product's problem on X, Reddit and communities — before your competitors see the thread.",
   applicationName: "Threadly",
   keywords: [
-    "growth operating system",
+    "signal radar",
+    "social listening",
+    "intent discovery",
     "lead generation",
     "outreach automation",
-    "campaign optimization",
-    "generative engine optimization",
-    "content scheduling",
-    "revenue analytics",
+    "reddit leads",
+    "x buying signals",
   ],
   icons: {
     icon: [
@@ -30,17 +30,24 @@ export const metadata: Metadata = {
     apple: [{ url: "/icon.jpg", type: "image/jpeg" }],
   },
   openGraph: {
-    title: "Threadly — The Growth Operating System",
-    description:
-      "Lead gen, outreach, campaigns, scheduling, analytics and GEO in one live workspace.",
+    title: "Signal Radar by Threadly — Find High-Intent Buyers on X & Reddit",
+    description: "Find buyers who are already describing your product's problem on X, Reddit and communities.",
     siteName: "Threadly",
     type: "website",
+    images: [
+      {
+        url: "/logo.png",
+        width: 1200,
+        height: 630,
+        alt: "Threadly Signal Radar",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Threadly — The Growth Operating System",
-    description:
-      "Lead gen, outreach, campaigns, scheduling, analytics and GEO in one live workspace.",
+    title: "Signal Radar by Threadly — Find High-Intent Buyers on X & Reddit",
+    description: "Find buyers who are already describing your product's problem on X, Reddit and communities.",
+    images: ["/logo.png"],
   },
 };
 
@@ -52,7 +59,7 @@ export default function RootLayout({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Threadly",
+    name: "Threadly Signal Radar",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     offers: {
@@ -60,13 +67,7 @@ export default function RootLayout({
       price: "0",
       priceCurrency: "USD",
     },
-    description:
-      "The growth operating system for founders: real-time lead discovery across Reddit, Hacker News, X, autonomous scoring, humanized outbound sequences, and revenue analytics.",
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "4.9",
-      ratingCount: "128",
-    },
+    description: "Signal Radar finds buyers who are already describing your product's problem on X, Reddit and communities — before your competitors see the thread.",
   };
 
   return (

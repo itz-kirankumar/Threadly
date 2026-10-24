@@ -20,67 +20,49 @@ import {
 
 const modules = [
   {
-    tag: "01 · Capture",
-    title: "Signal Radar",
-    copy: "Listen across X, Reddit and communities for the exact words buyers use. Threadly scores intent, dedupes the noise, and hands you the thread worth joining.",
-    stat: "+148% qualified conversations",
+    tag: "01 · Discover",
+    title: "X & Reddit Signals",
+    copy: "Scan X, Reddit and niche communities for conversations where someone describes your product's problem. Real-time discovery, not day-old alerts.",
+    stat: "Illustrative: +148% qualified conversations",
     accent: "orange" as const,
     icon: Radar,
-    points: ["Intent scoring", "Pain-point clustering", "Saved segments"],
+    points: ["Live X search via Apify", "Reddit & community scan", "Noise filtering"],
   },
   {
-    tag: "02 · Qualify",
-    title: "Lead Intelligence",
-    copy: "Every prospect gets a fit score, buying-intent estimate and a reason. Segments build themselves from behaviour, not spreadsheets.",
-    stat: "0% manual triage",
+    tag: "02 · Score",
+    title: "Intent Scoring",
+    copy: "Every signal gets a buying-intent score and a clear rationale. Hot leads surface first — skip the chatter, reply to the buyer.",
+    stat: "Illustrative: 0% manual triage",
     accent: "violet" as const,
-    icon: Users,
-    points: ["Dual-model scoring", "Auto-enrichment", "Dynamic segments"],
+    icon: Target,
+    points: ["Dual-model scoring", "Pain-point clustering", "Fit assessment"],
   },
   {
-    tag: "03 · Convert",
-    title: "Sequence Engine",
-    copy: "Multi-step outreach with conditional branches, A/B variants and best-time delivery. Every send is reviewed — no fire-and-forget spam.",
-    stat: "31% reply rate",
+    tag: "03 · Reply",
+    title: "Drafted Replies",
+    copy: "One click generates a human-sounding reply tailored to the post. Review it, edit it, post it. No fire-and-forget spam.",
+    stat: "Illustrative: 31% reply rate",
     accent: "orange" as const,
     icon: Mail,
-    points: ["Conditional steps", "A/B subject lines", "Reply detection"],
+    points: ["AI-drafted responses", "Anti-slop humanizer", "Review before send"],
   },
   {
-    tag: "04 · Amplify",
-    title: "Campaign Command",
-    copy: "Run paid and organic together. Threadly watches ROAS by channel and shifts budget to the winners while they're still winning.",
-    stat: "2.4× blended ROAS",
+    tag: "04 · Track",
+    title: "Lead Pipeline",
+    copy: "Every qualified conversation becomes a tracked lead. See who responded, who went cold, and what to follow up on.",
+    stat: "Illustrative: < 6 min signal → outreach",
     accent: "violet" as const,
-    icon: CircleDollarSign,
-    points: ["Budget reallocation", "Creative variants", "Spend guardrails"],
-  },
-  {
-    tag: "05 · Publish",
-    title: "Best-Time Scheduler",
-    copy: "Content slots are chosen from your own audience's behaviour, not a generic listicle. Group posts into threads, campaigns and launches.",
-    stat: "+22% engagement",
-    accent: "orange" as const,
-    icon: CalendarClock,
-    points: ["Best-time slots", "Group scheduling", "Queue health"],
-  },
-  {
-    tag: "06 · Compound",
-    title: "GEO & SEO",
-    copy: "Track how ChatGPT, Perplexity, Gemini and Google answer the questions your buyers ask. Then fix it — structure, citations and source coverage.",
-    stat: "38% answer share",
-    accent: "violet" as const,
-    icon: Globe2,
-    points: ["AI answer monitoring", "Citation gaps", "Entity coverage"],
+    icon: Users,
+    points: ["Auto-enrichment", "Stage tracking", "Activity timeline"],
   },
 ];
 
 const liveEvents = [
-  { who: "Signal Radar", what: "Detected buying intent in 12 new X threads", when: "now", tone: "orange" },
-  { who: "Sequence Engine", what: "Step 2 delivered · 41% open rate on variant B", when: "2s", tone: "violet" },
-  { who: "Lead Intelligence", what: "Scored 8 prospects · 3 strong-fit", when: "6s", tone: "orange" },
-  { who: "Campaign Command", what: "Reallocated $240 from Meta → Google · ROAS 3.1", when: "11s", tone: "violet" },
-  { who: "GEO Monitor", what: "ChatGPT now cites you for “outreach automation”", when: "18s", tone: "orange" },
+  { who: "Signal Radar", what: "Detected buying intent in 3 new X threads", when: "now", tone: "orange" },
+  { who: "Signal Radar", what: "Reddit thread matched: 'need a tool for cold outreach'", when: "2s", tone: "violet" },
+  { who: "Intent Scorer", what: "Scored 8 signals · 3 hot, 2 warm", when: "6s", tone: "orange" },
+  { who: "Reply Drafter", what: "Generated reply for @founder_jane's thread", when: "11s", tone: "violet" },
+  { who: "Signal Radar", what: "New community post: 'looking for growth tool recommendations'", when: "18s", tone: "orange" },
 ];
 
 const stack = [
@@ -314,12 +296,12 @@ export default function LandingClient() {
             </a>
 
             <h1 className="mt-7 text-[clamp(38px,7.2vw,92px)] font-black leading-[0.92] tracking-[-0.065em]">
-              <span className="block">Every growth</span>
-              <span className="block">channel, on</span>
+              <span className="block">Find buyers</span>
+              <span className="block">before your</span>
               <span className="mt-1 block">
-                one{" "}
+                competitors{" "}
                 <span className="relative inline-block text-brand-orange">
-                  thread
+                  do
                   <svg
                     viewBox="0 0 300 26"
                     className="absolute -bottom-2 left-0 h-4 w-full"
@@ -340,9 +322,9 @@ export default function LandingClient() {
             </h1>
 
             <p className="mt-7 max-w-xl text-[17px] leading-relaxed text-brand-muted">
-              Threadly finds the buyers already describing your product&apos;s problem, qualifies them,
-              runs the outreach, optimizes the ads, schedules the content and measures what actually
-              made money — in a single live workspace.
+              Signal Radar scans X, Reddit and communities for people describing your product&apos;s exact
+              problem — right now. It scores buying intent, drafts a reply, and hands you the thread
+              worth joining, before your competitors see it.
             </p>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -354,18 +336,18 @@ export default function LandingClient() {
                 Request beta access <ArrowRight className="h-4 w-4" />
               </button>
               <a
-                href="#workspace"
+                href="/demo"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-brand-black bg-white px-7 py-4 text-[15px] font-black transition-colors hover:bg-brand-orangeLight"
               >
-                Explore live workspace <ArrowRight className="h-4 w-4" />
+                Try the demo <ArrowRight className="h-4 w-4" />
               </a>
             </div>
 
             <div className="mt-10 grid w-full min-w-0 max-w-lg grid-cols-2 gap-3 sm:grid-cols-3">
               {[
-                ["2.4×", "blended ROAS"],
-                ["31%", "reply rate"],
-                ["< 6 min", "signal → outreach"],
+                ["Live", "X & Reddit scan"],
+                ["AI", "intent scoring"],
+                ["< 6 min", "signal → reply"],
               ].map(([value, label], index) => (
                 <div key={label} className={`min-w-0 rounded-2xl border-2 border-brand-black bg-white px-4 py-3 ${index === 2 ? "col-span-2 sm:col-span-1" : ""}`}>
                   <div className="text-[22px] font-black leading-none tracking-[-0.05em]">{value}</div>
@@ -403,9 +385,9 @@ export default function LandingClient() {
 
               <div className="grid grid-cols-3 gap-2.5 border-b border-brand-line p-4">
                 {[
-                  ["Pipeline", "$184k", "+18%"],
-                  ["Reply rate", "31.4%", "+6.2"],
-                  ["ROAS", "2.41×", "+0.36"],
+                  ["Signals", "47", "today"],
+                  ["Hot leads", "12", "this week"],
+                  ["Replies", "8", "drafted"],
                 ].map(([label, value, delta]) => (
                   <div key={label} className="rounded-xl border border-brand-line bg-brand-paper px-3 py-2.5">
                     <div className="font-mono text-[8px] font-bold uppercase tracking-[0.1em] text-brand-quiet">
@@ -520,10 +502,7 @@ export default function LandingClient() {
             </h2>
           </div>
           <p className="max-w-xl text-[15px] leading-relaxed text-brand-muted">
-            Most growth stacks break at the handoff: the signal lives in one tab, the CRM in another,
-            the ad account in a third, and nobody can tell which channel actually paid for the last
-            deal. Threadly keeps the whole thread — from the first public complaint to the closed
-            contract — in one workspace with one source of truth.
+            Founders waste hours refreshing X, scrolling Reddit, and monitoring communities for buying signals. By the time you spot one, your competitor already replied. Signal Radar automates the scan and scores every result so you reply to the ones that matter.
           </p>
         </div>
 
@@ -558,9 +537,8 @@ export default function LandingClient() {
                 The modules
               </span>
               <h2 className="mt-4 max-w-2xl text-[clamp(34px,4.6vw,60px)] font-black leading-[0.95] tracking-[-0.055em]">
-                Six engines.
-                <br />
-                <span className="text-brand-violetPastel">One compounding loop.</span>
+                Four steps.<br />
+                <span className="text-brand-violetPastel">Signal to pipeline.</span>
               </h2>
             </div>
             <button
@@ -572,7 +550,7 @@ export default function LandingClient() {
             </button>
           </div>
 
-          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-12 grid gap-4 md:grid-cols-2">
             {modules.map((module, index) => (
               <article
                 key={module.title}
@@ -692,10 +670,10 @@ export default function LandingClient() {
         <div className="mx-auto max-w-[1240px] px-5 lg:px-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <h2 className="max-w-xl text-[clamp(30px,3.6vw,46px)] font-black leading-[0.98] tracking-[-0.05em]">
-              Founders who stopped guessing.
+              How it works for founders.
             </h2>
             <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-brand-quiet">
-              Selected outcomes · 2025–2026
+              Illustrative scenarios · not real customer testimonials
             </span>
           </div>
 
@@ -778,10 +756,10 @@ export default function LandingClient() {
               Request beta access <ArrowRight className="h-4 w-4" />
             </button>
             <a
-              href="#workspace"
+              href="/demo"
               className="btn-tactile-white inline-flex items-center gap-2 rounded-2xl border-2 border-white px-7 py-4 text-[15px] font-black text-white"
             >
-              Explore live workspace <ArrowUpRight className="h-4 w-4" />
+              Try the demo <ArrowUpRight className="h-4 w-4" />
             </a>
           </div>
         </div>

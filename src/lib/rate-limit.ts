@@ -17,7 +17,7 @@ function hashedKey(key: string) {
  * shared Upstash Redis. Local development uses a bounded in-process bucket.
  */
 export async function checkRateLimit(key: string, limit: number, windowSeconds: number, identity?: FirebaseIdentity): Promise<RateLimitResult | null> {
-  if (identity && identity.idToken !== "demo-token") {
+  if (identity && !(identity.idToken === "demo-token" && process.env.ENABLE_DEMO_MODE === "true")) {
     try {
       const databaseUrl = (process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "").replace(/\/+$/, "");
       if (databaseUrl) {
@@ -58,7 +58,7 @@ export async function checkRateLimit(key: string, limit: number, windowSeconds: 
       const response = await fetch(redisUrl, {
         method: "POST",
         headers: { Authorization: `Bearer ${redisToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify(["EVAL", RATE_LIMIT_SCRIPT, "1", `wisentry:limit:${hashedKey(key)}`, String(windowSeconds * 1000)]),
+        body: JSON.stringify(["EVAL", RATE_LIMIT_SCRIPT, "1", `threadly:limit:${hashedKey(key)}`, String(windowSeconds * 1000)]),
         cache: "no-store",
         signal: AbortSignal.timeout(3000),
       });
