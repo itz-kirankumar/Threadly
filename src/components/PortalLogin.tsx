@@ -93,7 +93,7 @@ export default function PortalLogin() {
       }
     } catch (caught) {
       const code = (caught as { code?: string })?.code;
-      if (code === "auth/email-already-in-use") setError("That email already has an account - sign in instead.");
+      if (code === "auth/email-already-in-use") setError("That email already has an account - sign in (Google works too), then add a password in Settings to tie both to one account.");
       else if (code === "auth/invalid-credential" || code === "auth/wrong-password") setError("Email or password is incorrect.");
       else if (code === "auth/weak-password") setError("Password needs at least 6 characters.");
       else if (code === "auth/user-not-found") setError("No account with that email - create one instead.");

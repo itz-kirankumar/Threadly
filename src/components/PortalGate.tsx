@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import GeoDashboard from "@/components/geo/GeoDashboard";
+import PhoneGate from "@/components/PhoneGate";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
 
 export default function PortalGate() {
@@ -39,6 +40,13 @@ export default function PortalGate() {
 
   if (!ready || !user) {
     return <div className="py-24 text-center text-sm text-zinc-500">Loading…</div>;
+  }
+
+  // Phone verification is mandatory for every account, on every sign-in path.
+  // Phone-first sign-in already carries a verified number; Google and email
+  // accounts link one here before the workspace unlocks.
+  if (!user.phoneNumber) {
+    return <PhoneGate user={user} />;
   }
 
   return <GeoDashboard user={user} />;
