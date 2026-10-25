@@ -8,7 +8,7 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 const display = Instrument_Serif({ weight: "400", subsets: ["latin"], variable: "--font-display" });
 
 const description =
-  "Threadly is the enterprise GEO intelligence platform: monitor brand mentions and citation share across ChatGPT, Claude, Gemini and Perplexity.";
+  "Threadly is the enterprise GEO intelligence platform: monitor brand mentions and citation share across ChatGPT, Claude and Gemini.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.gothreadly.live"),
@@ -26,7 +26,6 @@ export const metadata: Metadata = {
     "ChatGPT mentions",
     "citation share",
     "share of voice",
-    "Perplexity",
     "Claude",
     "Gemini",
   ],

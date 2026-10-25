@@ -65,44 +65,38 @@ const CELLS: Record<string, Record<string, Cell>> = {
     chatgpt: { brandMentioned: true, brandCited: true, brandPosition: 4, competitorsMentioned: ["Loom", "Vidyard", "Vimeo"], citations: [["loom.com", "Loom"], ["vidyard.com", "Vidyard"], ["loomify.io", "Loomify"], ["g2.com", "G2"]] },
     claude: { brandMentioned: true, brandCited: false, brandPosition: 3, competitorsMentioned: ["Loom", "Vidyard"], citations: [["loom.com", "Loom"], ["vidyard.com", "Vidyard"], ["zapier.com", "Zapier blog"]] },
     gemini: { brandMentioned: false, brandCited: false, brandPosition: null, competitorsMentioned: ["Loom", "Vidyard", "Vimeo"], citations: [["loom.com", "Loom"], ["vimeo.com", "Vimeo"], ["pcmag.com", "PCMag"]] },
-    perplexity: { brandMentioned: true, brandCited: true, brandPosition: 2, competitorsMentioned: ["Loom"], citations: [["loomify.io", "Loomify"], ["loom.com", "Loom"], ["techradar.com", "TechRadar"]] },
   },
   "demo-q2": {
     chatgpt: { brandMentioned: false, brandCited: false, brandPosition: null, competitorsMentioned: ["Loom", "Vidyard"], citations: [["loom.com", "Loom"], ["vidyard.com", "Vidyard"], ["g2.com", "G2 comparison"]] },
     claude: { brandMentioned: false, brandCited: false, brandPosition: null, competitorsMentioned: ["Loom", "Vidyard"], citations: [["vidyard.com", "Vidyard"], ["loom.com", "Loom"]] },
     gemini: { brandMentioned: false, brandCited: false, brandPosition: null, competitorsMentioned: ["Loom", "Vidyard"], citations: [["loom.com", "Loom"], ["g2.com", "G2"]] },
-    perplexity: { brandMentioned: false, brandCited: false, brandPosition: null, competitorsMentioned: ["Loom", "Vidyard"], citations: [["vidyard.com", "Vidyard"], ["reddit.com", "Reddit thread"], ["loom.com", "Loom"]] },
   },
   "demo-q3": {
     chatgpt: { brandMentioned: true, brandCited: true, brandPosition: 2, competitorsMentioned: ["Vidyard", "Vimeo"], citations: [["loomify.io", "Loomify"], ["vidyard.com", "Vidyard"], ["g2.com", "G2"]] },
     claude: { brandMentioned: true, brandCited: true, brandPosition: 3, competitorsMentioned: ["Vidyard", "Vimeo"], citations: [["vimeo.com", "Vimeo"], ["loomify.io", "Loomify"]] },
     gemini: { brandMentioned: true, brandCited: false, brandPosition: 2, competitorsMentioned: ["Vidyard"], citations: [["vidyard.com", "Vidyard"], ["techcrunch.com", "TechCrunch"]] },
-    perplexity: { brandMentioned: true, brandCited: true, brandPosition: 1, competitorsMentioned: ["Vimeo"], citations: [["loomify.io", "Loomify"], ["vimeo.com", "Vimeo"]] },
   },
   "demo-q4": {
     chatgpt: { brandMentioned: true, brandCited: false, brandPosition: 2, competitorsMentioned: ["Loom"], citations: [["loom.com", "Loom"], ["hbr.org", "Harvard Business Review"]] },
     claude: { brandMentioned: false, brandCited: false, brandPosition: null, competitorsMentioned: ["Loom"], citations: [["loom.com", "Loom"], ["atlassian.com", "Atlassian blog"]] },
     gemini: { brandMentioned: true, brandCited: true, brandPosition: 2, competitorsMentioned: ["Loom"], citations: [["loomify.io", "Loomify"], ["loom.com", "Loom"]] },
-    perplexity: { brandMentioned: true, brandCited: false, brandPosition: 1, competitorsMentioned: ["Loom"], citations: [["loom.com", "Loom"], ["forbes.com", "Forbes"]] },
   },
   "demo-q5": {
     chatgpt: { brandMentioned: true, brandCited: true, brandPosition: 1, competitorsMentioned: ["Loom", "Vimeo"], citations: [["loomify.io", "Loomify"], ["loom.com", "Loom"]] },
     claude: { brandMentioned: true, brandCited: true, brandPosition: 1, competitorsMentioned: ["Loom"], citations: [["loomify.io", "Loomify"], ["producthunt.com", "Product Hunt"]] },
     gemini: { brandMentioned: true, brandCited: true, brandPosition: 1, competitorsMentioned: ["Loom", "Vimeo"], citations: [["loomify.io", "Loomify"], ["vimeo.com", "Vimeo"], ["reddit.com", "Reddit thread"]] },
-    perplexity: { brandMentioned: true, brandCited: true, brandPosition: 1, competitorsMentioned: ["Loom"], citations: [["loomify.io", "Loomify"], ["loom.com", "Loom"]] },
   },
   "demo-q6": {
     chatgpt: { brandMentioned: true, brandCited: true, brandPosition: 1, competitorsMentioned: ["Loom", "Vidyard"], citations: [["loomify.io", "Loomify"], ["zendesk.com", "Zendesk blog"]] },
     claude: { brandMentioned: true, brandCited: false, brandPosition: 2, competitorsMentioned: ["Loom", "Vidyard"], citations: [["loom.com", "Loom"], ["intercom.com", "Intercom"]] },
     gemini: { brandMentioned: true, brandCited: true, brandPosition: 1, competitorsMentioned: ["Loom"], citations: [["loomify.io", "Loomify"], ["loom.com", "Loom"]] },
-    perplexity: { brandMentioned: true, brandCited: false, brandPosition: 3, competitorsMentioned: ["Loom", "Vidyard"], citations: [["vidyard.com", "Vidyard"], ["loom.com", "Loom"]] },
   },
 };
 
 function buildResults(runId: string): QueryResult[] {
   return DEMO_QUERIES.map((query) => ({
     queryId: query.id,
-    results: (["chatgpt", "claude", "gemini", "perplexity"] as const).map((provider) => {
+    results: (["chatgpt", "claude", "gemini"] as const).map((provider) => {
       const cell = CELLS[query.id][provider];
       const brandCitationCount = cell.citations.filter(([domain]) => domain === "loomify.io").length;
       const result: ProviderResult = {
@@ -131,7 +125,7 @@ export function buildDemoWorkspace(): WorkspaceState {
     startedAt: new Date(BASE).toISOString(),
     finishedAt: new Date(BASE + 42_000).toISOString(),
     queryCount: DEMO_QUERIES.length,
-    providerStatus: { chatgpt: "scanned", claude: "scanned", gemini: "scanned", perplexity: "scanned" },
+    providerStatus: { chatgpt: "scanned", claude: "scanned", gemini: "scanned" },
   };
   const results = buildResults(run.id);
   const latest = computeSnapshot(run.id, results, run.providerStatus);
@@ -174,7 +168,6 @@ export function buildDemoWorkspace(): WorkspaceState {
       { id: "chatgpt", label: "ChatGPT", kind: "builtin" as const, source: "platform" as const },
       { id: "claude", label: "Claude", kind: "builtin" as const, source: "platform" as const },
       { id: "gemini", label: "Gemini", kind: "builtin" as const, source: "platform" as const },
-      { id: "perplexity", label: "Perplexity", kind: "builtin" as const, source: "platform" as const },
     ],
   };
 }

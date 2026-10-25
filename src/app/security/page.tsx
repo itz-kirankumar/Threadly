@@ -17,7 +17,7 @@ const ITEMS = [
   {
     icon: Key,
     title: "Provider keys stay server-side",
-    body: "OpenAI, Anthropic, Gemini and Perplexity API keys exist only as server environment variables. They are never sent to the browser, never logged, and never appear in scan results.",
+    body: "Platform AI provider keys (OpenAI, Anthropic, Gemini) exist only as server environment variables, and keys you add yourself are encrypted at rest (AES-256-GCM). Keys are never sent to the browser beyond a masked last-four, never logged, and never appear in scan results.",
   },
   {
     icon: ShieldCheck,

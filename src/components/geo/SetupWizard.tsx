@@ -52,7 +52,7 @@ export default function SetupWizard({ busy, error, onSave, initial, onCancel }: 
       <div>
         <h2 className="text-xl font-semibold text-white">{initial ? "Brand settings" : "Set up your brand"}</h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Threadly asks ChatGPT, Claude, Gemini and Perplexity the questions your buyers ask, then measures whether
+          Threadly asks ChatGPT, Claude and Gemini the questions your buyers ask, then measures whether
           those answers mention and cite you versus your competitors.
         </p>
       </div>

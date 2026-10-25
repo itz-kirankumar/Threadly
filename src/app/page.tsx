@@ -7,7 +7,6 @@ const PROVIDERS = [
   { name: "ChatGPT", note: "Responses API with live web search" },
   { name: "Claude", note: "Anthropic answers with web search" },
   { name: "Gemini", note: "Google AI with Search grounding" },
-  { name: "Perplexity", note: "Sonar answers with native citations" },
 ];
 
 const STEPS = [
@@ -21,7 +20,7 @@ const STEPS = [
   },
   {
     title: "See what AI says about you",
-    body: "Every scan asks all four providers each question and measures whether answers mention you, cite your site, and where you rank.",
+    body: "Every scan asks every provider each question and measures whether answers mention you, cite your site, and where you rank.",
   },
 ];
 
@@ -59,7 +58,7 @@ export default function LandingPage() {
                   </span>
                 </h1>
                 <p className="mt-6 max-w-xl text-lg leading-relaxed text-zinc-400">
-                  Threadly monitors how ChatGPT, Claude, Gemini and Perplexity answer the questions your buyers ask -
+                  Threadly monitors how ChatGPT, Claude and Gemini answer the questions your buyers ask -
                   tracking mentions, citation share and share of voice against your competitors, scan after scan.
                 </p>
                 <div className="mt-9 flex flex-wrap items-center gap-4">
@@ -84,7 +83,7 @@ export default function LandingPage() {
         <section className="border-t border-white/[0.06]">
           <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="mb-10 text-center font-mono text-xs uppercase tracking-[0.25em] text-zinc-500">
-              Measured across the four assistants your buyers use
+              Measured across the AI assistants your buyers use
             </h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {PROVIDERS.map((provider) => (

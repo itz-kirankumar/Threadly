@@ -7,7 +7,7 @@ export const PROVIDER_LABELS: Record<GeoProviderId, string> = {
   perplexity: "Perplexity",
 };
 
-export const PROVIDER_ORDER: GeoProviderId[] = ["chatgpt", "claude", "gemini", "perplexity"];
+export const PROVIDER_ORDER: GeoProviderId[] = ["chatgpt", "claude", "gemini"];
 
 export const PROVIDER_COLORS: Record<GeoProviderId, string> = {
   chatgpt: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",

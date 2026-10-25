@@ -236,7 +236,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     <div className="space-y-6">
       {readOnly && (
         <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          Sample data for a fictional brand (“Loomify”). Sign in to track your own brand across ChatGPT, Claude, Gemini and Perplexity.
+          Sample data for a fictional brand (“Loomify”). Sign in to track your own brand across ChatGPT, Claude and Gemini.
         </div>
       )}
 

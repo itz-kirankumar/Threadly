@@ -1,4 +1,4 @@
-// Built-in provider ids are "chatgpt" | "claude" | "gemini" | "perplexity";
+// Built-in provider ids are "chatgpt" | "claude" | "gemini";
 // user-added custom providers get "custom-*" ids, so the id type is string.
 export type GeoProviderId = string;
 
@@ -6,7 +6,6 @@ export const GEO_PROVIDERS: Array<{ id: GeoProviderId; label: string; envKey: st
   { id: "chatgpt", label: "ChatGPT", envKey: "OPENAI_API_KEY" },
   { id: "claude", label: "Claude", envKey: "ANTHROPIC_API_KEY" },
   { id: "gemini", label: "Gemini", envKey: "GEMINI_API_KEY" },
-  { id: "perplexity", label: "Perplexity", envKey: "PERPLEXITY_API_KEY" },
 ];
 
 export interface Competitor {

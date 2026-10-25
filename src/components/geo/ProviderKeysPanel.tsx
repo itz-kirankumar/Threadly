@@ -17,7 +17,6 @@ const BUILTIN_HINTS: Record<string, string> = {
   chatgpt: "platform.openai.com/api-keys",
   claude: "console.anthropic.com/settings/keys",
   gemini: "aistudio.google.com/apikey",
-  perplexity: "perplexity.ai/settings/api",
 };
 
 function SourceChip({ source, lastFour }: { source: ProviderKeyStatus["source"]; lastFour?: string }) {

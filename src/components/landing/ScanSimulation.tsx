@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 // Animated product mock for the landing hero: a scripted GEO scan of one buyer
-// question across the four providers. Everything is a pure function of elapsed
+// question across the three providers. Everything is a pure function of elapsed
 // time so the loop is deterministic and cheap to re-render.
 
 const QUESTION = "What is the best async video tool for remote teams?";
@@ -40,16 +40,6 @@ const PROVIDERS = [
     position: 2,
     cited: true,
     citations: ["loomify.io", "vidyard.com"],
-  },
-  {
-    name: "Perplexity",
-    start: 2700,
-    cps: 9,
-    answer:
-      "Based on recent reviews, Loom and Loomify are the most recommended. Loomify's free tier includes AI chapters; Vidyard suits sales-led teams.",
-    position: 1,
-    cited: true,
-    citations: ["loomify.io", "g2.com"],
   },
 ];
 

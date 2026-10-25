@@ -28,7 +28,7 @@ export interface EffectiveProvider {
   baseUrl?: string;
 }
 
-// Effective provider set for one workspace scan: the four built-ins (user key
+// Effective provider set for one workspace scan: the built-ins (user key
 // when saved, else the platform env key) plus the user's custom providers.
 export function resolveProviders(settings?: KeySettings | null): EffectiveProvider[] {
   const effective: EffectiveProvider[] = GEO_PROVIDERS.map(({ id, label, envKey }) => {

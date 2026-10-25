@@ -154,36 +154,10 @@ async function scanGemini(query: string, creds?: ProviderCredentials): Promise<P
   return { answer, citations: uniqueCitations(citations) };
 }
 
-async function scanPerplexity(query: string, creds?: ProviderCredentials): Promise<ProviderAnswer> {
-  const response = await fetch("https://api.perplexity.ai/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${creds?.apiKey ?? process.env.PERPLEXITY_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: creds?.model || process.env.GEO_PERPLEXITY_MODEL || "sonar",
-      messages: [
-        { role: "system", content: "You answer buyer research questions directly, recommending specific products or brands where relevant." },
-        { role: "user", content: query },
-      ],
-    }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (!response.ok) throw new Error(`Perplexity returned HTTP ${response.status}.`);
-  const payload = await response.json();
-  const answer = (payload.choices?.[0]?.message?.content ?? "").trim();
-  const rawCitations: unknown[] = Array.isArray(payload.citations) ? payload.citations : [];
-  const citations = rawCitations.map((url) => (typeof url === "string" ? toCitation(url) : null));
-  if (!answer) throw new Error("Perplexity returned no answer.");
-  return { answer, citations: uniqueCitations(citations) };
-}
-
 export const PROVIDER_SCANNERS: Record<string, (query: string, creds?: ProviderCredentials) => Promise<ProviderAnswer>> = {
   chatgpt: scanChatGPT,
   claude: scanClaude,
   gemini: scanGemini,
-  perplexity: scanPerplexity,
 };
 
 // Custom user-added providers speak the OpenAI chat-completions protocol.
