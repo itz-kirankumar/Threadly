@@ -73,8 +73,8 @@ export default function RedditPanel({ authedFetch }: { authedFetch: (path: strin
         <div>
           <h2 className="text-lg font-semibold text-white">Reddit monitor</h2>
           <p className="mt-1 text-sm text-zinc-500">
-            Buyer conversations, brand and competitor mentions from the last 30 days. Reddit threads are the
-            sources AI assistants cite most - being in the right thread is how you get cited.
+            Buyer conversations, brand and competitor mentions from the last 30 days. AI assistants frequently cite
+            public Reddit threads when answering product questions - being in the right thread is how you get cited.
           </p>
         </div>
         <button
