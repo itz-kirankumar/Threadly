@@ -10,7 +10,6 @@ import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
 import TrendChart from "./TrendChart";
 import RecommendationsPanel from "./RecommendationsPanel";
-import RedditPanel from "./RedditPanel";
 import SocialPanel from "./SocialPanel";
 import ProviderKeysPanel from "./ProviderKeysPanel";
 import TeamPanel from "./TeamPanel";
@@ -29,7 +28,7 @@ import {
   labelForProvider,
 } from "./helpers";
 
-type Tab = "overview" | "queries" | "citations" | "runs" | "reddit" | "social" | "settings";
+type Tab = "overview" | "queries" | "citations" | "runs" | "social" | "settings";
 
 interface Props {
   user: User | null;
@@ -192,7 +191,6 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         { id: "tab-queries", label: "Go to Questions", hint: "Section", run: () => setTab("queries") },
         { id: "tab-citations", label: "Go to Citations", hint: "Section", run: () => setTab("citations") },
         { id: "tab-runs", label: "Go to Scans", hint: "Section", run: () => setTab("runs") },
-        { id: "tab-reddit", label: "Go to Reddit", hint: "Section", run: () => setTab("reddit") },
         { id: "tab-social", label: "Go to Social search", hint: "Section", run: () => setTab("social") },
         { id: "tab-settings", label: "Go to Workspace settings", hint: "Section", run: () => setTab("settings") },
         { id: "account", label: "Open Account settings", hint: "Page", run: () => { window.location.href = "/portal/account"; } },
@@ -448,7 +446,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     { id: "queries", label: `Questions (${state.queries.length})` },
     { id: "citations", label: "Citations" },
     { id: "runs", label: `Scans (${state.runs.length})` },
-    ...(!readOnly ? [{ id: "reddit" as Tab, label: "Reddit" }, { id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
+    ...(!readOnly ? [{ id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
   ];
 
   const body = (
@@ -771,10 +769,6 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           )}
         </div>
       )}
-
-      {tab === "reddit" && !readOnly && (
-        <RedditPanel authedFetch={authedFetch} />
-      )}
       {tab === "social" && !readOnly && (
         <SocialPanel authedFetch={authedFetch} />
       )}
@@ -1069,11 +1063,6 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
   runs: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" /><path d="M13.5 2.5v2.6h-2.6" />
-    </svg>
-  ),
-  reddit: (
-    <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path d="M10 0a10 10 0 1 0 10 10A10 10 0 0 0 10 0Zm5.88 11.85c.06.33.1.66.1 1a3.09 3.09 0 0 1-.1.68c-.27 1.3-1.6 2.31-3.23 2.31-.73 0-1.39-.23-1.9-.63a5.2 5.2 0 0 1-1.5.1c-.21 0-.42-.01-.62-.03-.51.25-1.17.56-1.9.56-1.63 0-2.96-1.01-3.23-2.31a3.2 3.2 0 0 1-.1-.68c0-.34.04-.67.1-1a1.15 1.15 0 0 1-.48-.93 1.14 1.14 0 0 1 1.14-1.14c.41 0 .77.22.97.55a4.5 4.5 0 0 1 2.5-.77c.24 0 .48.02.71.05l.59-2.77a.2.2 0 0 1 .24-.15l1.96.42a.81.81 0 1 0 .2-.4l-2.13-.45-.67 3.15a4.5 4.5 0 0 1 2.34.72 1.13 1.13 0 0 1 2.11.58c0 .36-.17.69-.45.89Zm-9.29 0c0-.45.36-.81.81-.81s.81.36.81.81-.36.81-.81.81-.81-.36-.81-.81Zm5.57.81c-.45 0-.81-.36-.81-.81s.36-.81.81-.81.81.36.81.81-.37.81-.81.81Zm-2.6 1.77c.05-.05.13-.05.18 0 .05.05.05.13 0 .18-.39.39-.9.58-1.42.58s-1.03-.2-1.42-.58c-.05-.05-.05-.13 0-.18.05-.05.13-.05.18 0 .32.32.76.49 1.24.49s.91-.17 1.24-.49Z" transform="scale(0.92) translate(0.5,0.5)"/>
     </svg>
   ),
   social: (

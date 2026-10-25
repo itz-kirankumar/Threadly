@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import RedditPanel from "./RedditPanel";
 
 type SourceId = "reddit" | "x" | "linkedin" | "web";
 
@@ -46,6 +47,7 @@ export default function SocialPanel({ authedFetch }: { authedFetch: (path: strin
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [section, setSection] = useState<"search" | "reddit">("search");
 
   const allSelected = selected.length === SOURCE_META.length;
 
@@ -72,15 +74,35 @@ export default function SocialPanel({ authedFetch }: { authedFetch: (path: strin
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-white">Social search</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Search public conversations across Reddit, X and LinkedIn, or the wider web. Social results are public
-          posts indexed by search - not complete, native or logged-in platform data. Web is a general web search,
-          not Google-specific.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Social search</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Search public conversations across Reddit, X and LinkedIn, or the wider web. Social results are public
+            posts indexed by search - not complete, native or logged-in platform data. Web is a general web search,
+            not Google-specific.
+          </p>
+        </div>
+        <div className="flex rounded-lg border border-white/10 p-0.5 text-sm">
+          <button
+            onClick={() => setSection("search")}
+            className={`rounded-md px-3 py-1.5 ${section === "search" ? "bg-violet-500/20 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+          >
+            Search
+          </button>
+          <button
+            onClick={() => setSection("reddit")}
+            className={`rounded-md px-3 py-1.5 ${section === "reddit" ? "bg-violet-500/20 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+          >
+            Reddit monitor
+          </button>
+        </div>
       </div>
 
+      {section === "reddit" && <RedditPanel authedFetch={authedFetch} />}
+
+      {section === "search" && (
+      <>
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={query}
@@ -171,6 +193,8 @@ export default function SocialPanel({ authedFetch }: { authedFetch: (path: strin
         <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-zinc-600">
           Pick sources, type a query, and search public conversations buyers actually have.
         </div>
+      )}
+      </>
       )}
     </div>
   );
