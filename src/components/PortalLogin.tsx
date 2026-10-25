@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup } from "firebase/auth";
+import { getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signInWithRedirect } from "firebase/auth";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
 
 export default function PortalLogin() {
@@ -18,6 +18,15 @@ export default function PortalLogin() {
       const auth = getFirebaseAuth();
       unsubscribe = onAuthStateChanged(auth, (user) => {
         if (user) router.replace("/portal");
+      });
+      getRedirectResult(auth).catch((caught) => {
+        const code = (caught as { code?: string })?.code;
+        if (code === "auth/unauthorized-domain") {
+          const host = typeof window !== "undefined" ? window.location.hostname : "this domain";
+          setError(`Add ${host} to the Firebase project's authorized domains, then try again.`);
+        } else {
+          setError(caught instanceof Error ? caught.message : "Sign-in failed. Please try again.");
+        }
       });
       initializeFirebaseAnalytics().catch(() => undefined);
     } catch (caught) {
@@ -33,20 +42,10 @@ export default function PortalLogin() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      await signInWithPopup(getFirebaseAuth(), provider);
-      router.replace("/portal");
-    } catch (caught) {
-      const code = (caught as { code?: string })?.code;
-      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
-        setBusy(false);
-        return;
-      }
-      if (code === "auth/unauthorized-domain") {
-        const host = typeof window !== "undefined" ? window.location.hostname : "this domain";
-        setError(`Add ${host} to the Firebase project's authorized domains, then try again.`);
-      } else {
-        setError(caught instanceof Error ? caught.message : "Sign-in failed. Please try again.");
-      }
+      await signInWithRedirect(getFirebaseAuth(), provider);
+      // Redirect navigates away; onAuthStateChanged + getRedirectResult finish sign-in on return.
+    } catch {
+      setError("Sign-in failed. Please try again.");
       setBusy(false);
     }
   }
