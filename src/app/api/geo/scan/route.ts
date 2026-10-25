@@ -4,6 +4,8 @@ import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { runScan } from "@/lib/geo/engine";
 import { loadBrand, loadKeySettings, loadQueries, saveRun } from "@/lib/geo/store";
 import { loadPlan, loadRunCount, PLAN_LIMITS, planBlockResponse } from "@/lib/geo/plan";
+import { readData, writeData } from "@/lib/portal-db";
+import { sendLifecycleEmail } from "@/lib/email";
 import { appendAudit } from "@/lib/geo/store";
 
 export const runtime = "nodejs";
@@ -42,6 +44,20 @@ export async function POST(request: Request) {
       }
       const { run, results, snapshot, queries: scannedQueries } = await runScan(brand, queries, keySettings, queryIds);
       await saveRun(run, results, snapshot, scannedQueries);
+      // Trial accounts get one scan - when it lands, email the results pointer
+      // plus the upgrade nudge. Flagged so it sends once per workspace.
+      if (plan === "trial" && access.identity.email) {
+        try {
+          const flagPath = "lifecycle/trial-scan-complete";
+          const already = await readData<{ sentAt: string }>(flagPath);
+          if (!already?.sentAt) {
+            const sent = await sendLifecycleEmail("trial-scan-complete", access.identity.email, { name: access.identity.name });
+            if (sent.sent) await writeData(flagPath, { sentAt: new Date().toISOString() });
+          }
+        } catch {
+          // email must never fail a scan
+        }
+      }
       await appendAudit({
         actor: access.identity.email,
         action: "scan.completed",

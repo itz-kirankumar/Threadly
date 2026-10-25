@@ -307,6 +307,14 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     }
   }, []);
 
+  // Welcome + trial-live email, fired once the workspace unlocks. The server
+  // keeps a per-workspace flag, so repeat logins never resend.
+  useEffect(() => {
+    if (readOnly || !user) return;
+    authedFetch("/api/email/lifecycle", { method: "POST", body: JSON.stringify({ kind: "welcome-trial" }) }).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => {
       try {

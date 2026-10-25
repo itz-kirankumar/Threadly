@@ -17,6 +17,7 @@ import {
   signInWithRedirect,
   updateProfile,
   type ConfirmationResult,
+  type User,
 } from "firebase/auth";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
 
@@ -39,6 +40,9 @@ export default function PortalLogin() {
   const [recaptchaKey, setRecaptchaKey] = useState(0);
   const recaptchaContainer = useRef<HTMLDivElement>(null);
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [pendingVerifyUser, setPendingVerifyUser] = useState<User | null>(null);
+  const [verifyCooldown, setVerifyCooldown] = useState(0);
 
   useEffect(() => {
     let unsubscribe = () => {};
@@ -59,6 +63,18 @@ export default function PortalLogin() {
       recaptchaVerifier.current?.clear();
     };
   }, [router]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  useEffect(() => {
+    if (verifyCooldown <= 0) return;
+    const timer = setTimeout(() => setVerifyCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [verifyCooldown]);
 
   async function loginGoogle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,11 +119,15 @@ export default function PortalLogin() {
         const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
         if (name.trim()) await updateProfile(credential.user, { displayName: name.trim() });
         await sendEmailVerification(credential.user);
+        setPendingVerifyUser(credential.user);
+        setVerifyCooldown(30);
         setNotice("Account created. We sent a verification link to your email - open it to confirm your address.");
       } else {
         const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
         if (!credential.user.emailVerified) {
           await sendEmailVerification(credential.user);
+          setPendingVerifyUser(credential.user);
+          setVerifyCooldown(30);
           setNotice("Your email is not verified yet. We sent a fresh verification link - open it, then sign in again.");
         }
       }
@@ -123,8 +143,39 @@ export default function PortalLogin() {
     }
   }
 
+  async function resendVerificationEmail() {
+    if (!pendingVerifyUser) return;
+    setBusy(true);
+    setError("");
+    try {
+      await sendEmailVerification(pendingVerifyUser);
+      setVerifyCooldown(30);
+      setNotice("Verification link sent again - check your inbox and spam folder.");
+    } catch (caught) {
+      const code = (caught as { code?: string })?.code;
+      if (code === "auth/too-many-requests") setError("Too many attempts. Wait a few minutes and try again.");
+      else setError(caught instanceof Error ? caught.message : "Could not resend the link.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await deliverOtp();
+  }
+
+  // Resend: a used invisible reCAPTCHA cannot verify twice, so clear it and
+  // remount the container node before creating the next verifier.
+  async function resendOtp() {
+    recaptchaVerifier.current?.clear();
+    recaptchaVerifier.current = null;
+    setRecaptchaKey((k) => k + 1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await deliverOtp();
+  }
+
+  async function deliverOtp() {
     setBusy(true);
     setError("");
     setNotice("");
@@ -137,6 +188,7 @@ export default function PortalLogin() {
       if (!verifier) throw new Error("Verification widget did not load. Refresh and try again.");
       const result = await signInWithPhoneNumber(auth, phone.trim(), verifier);
       setConfirmation(result);
+      setResendCooldown(30);
       setNotice(`Code sent to ${phone.trim()}. Enter it below.`);
     } catch (caught) {
       const code = (caught as { code?: string })?.code;
@@ -274,7 +326,15 @@ export default function PortalLogin() {
                 {busy ? "Verifying…" : "Verify and sign in"}
               </button>
               <p className="text-center text-sm text-zinc-500">
-                Wrong number?{" "}
+                <button
+                  type="button"
+                  onClick={() => void resendOtp()}
+                  disabled={busy || resendCooldown > 0}
+                  className="text-violet-300 hover:text-violet-200 disabled:text-zinc-600 disabled:hover:text-zinc-600"
+                >
+                  {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+                </button>
+                {" · Wrong number? "}
                 <button type="button" onClick={() => { setConfirmation(null); setOtp(""); setNotice(""); }} className="text-violet-300 hover:text-violet-200">
                   Go back
                 </button>
@@ -287,6 +347,16 @@ export default function PortalLogin() {
           {notice && (
             <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
               <p className="text-sm text-emerald-200">{notice}</p>
+              {pendingVerifyUser && (
+                <button
+                  type="button"
+                  onClick={() => void resendVerificationEmail()}
+                  disabled={busy || verifyCooldown > 0}
+                  className="mt-1.5 text-sm font-medium text-emerald-100 underline underline-offset-2 hover:text-white disabled:text-emerald-500 disabled:no-underline"
+                >
+                  {verifyCooldown > 0 ? `Resend verification email in ${verifyCooldown}s` : "Resend verification email"}
+                </button>
+              )}
             </div>
           )}
           {error && (

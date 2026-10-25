@@ -18,6 +18,7 @@ export default function PhoneGate({ user }: { user: User }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [recaptchaKey, setRecaptchaKey] = useState(0);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const recaptchaContainer = useRef<HTMLDivElement>(null);
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
@@ -25,8 +26,28 @@ export default function PhoneGate({ user }: { user: User }) {
     return () => recaptchaVerifier.current?.clear();
   }, []);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
   async function sendCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await deliverCode();
+  }
+
+  // Resend: a used invisible reCAPTCHA cannot verify twice, so clear it and
+  // remount the container node before creating the next verifier.
+  async function resendCode() {
+    recaptchaVerifier.current?.clear();
+    recaptchaVerifier.current = null;
+    setRecaptchaKey((k) => k + 1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await deliverCode();
+  }
+
+  async function deliverCode() {
     setBusy(true);
     setError("");
     try {
@@ -38,6 +59,7 @@ export default function PhoneGate({ user }: { user: User }) {
       if (!verifier) throw new Error("Verification widget did not load. Refresh and try again.");
       const result = await linkWithPhoneNumber(user, phone.trim(), verifier);
       setConfirmation(result);
+      setResendCooldown(30);
     } catch (caught) {
       const code = (caught as { code?: string })?.code;
       if (code === "auth/invalid-phone-number") setError("Enter the full number with country code, like +919876543210.");
@@ -116,6 +138,15 @@ export default function PhoneGate({ user }: { user: User }) {
             </button>
             <p className="text-center text-sm text-zinc-500">
               Code sent to {phone.trim()}.{" "}
+              <button
+                type="button"
+                onClick={() => void resendCode()}
+                disabled={busy || resendCooldown > 0}
+                className="text-violet-300 hover:text-violet-200 disabled:text-zinc-600 disabled:hover:text-zinc-600"
+              >
+                {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+              </button>
+              {" · "}
               <button type="button" onClick={() => { setConfirmation(null); setOtp(""); setError(""); }} className="text-violet-300 hover:text-violet-200">
                 Change number
               </button>
