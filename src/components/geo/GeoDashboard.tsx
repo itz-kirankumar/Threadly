@@ -10,6 +10,7 @@ import TrendChart from "./TrendChart";
 import RecommendationsPanel from "./RecommendationsPanel";
 import ProviderKeysPanel from "./ProviderKeysPanel";
 import TeamPanel from "./TeamPanel";
+import ActivityPanel from "./ActivityPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import {
   buildCitationLeaderboard,
@@ -103,7 +104,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [showTour, setShowTour] = useState(false);
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team">("brand");
+  const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team" | "activity">("brand");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [runDetails, setRunDetails] = useState<Record<string, { queries: TrackedQuery[]; results: QueryResult[] } | "loading" | "error">>({});
@@ -685,6 +686,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
                     ] as const)
                   : []),
                 { id: "team", label: "Team", hint: "Members, roles, invite links" },
+                { id: "activity", label: "Activity log", hint: "Audit trail of workspace events" },
               ] as const
             ).map((item) => (
               <button
@@ -709,6 +711,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             )}
             {settingsSection === "team" && user && (
               <TeamPanel authedFetch={authedFetch} currentUid={user.uid} />
+            )}
+            {settingsSection === "activity" && (
+              <ActivityPanel authedFetch={authedFetch} />
             )}
             {settingsSection === "keys" && (
               <ProviderKeysPanel

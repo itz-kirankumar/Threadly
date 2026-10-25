@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
-import { createInvite, removeInvite, resolveWorkspaceAccess } from "@/lib/geo/team";
+import { createInvite, inWorkspace, removeInvite, resolveWorkspaceAccess } from "@/lib/geo/team";
+import { appendAudit } from "@/lib/geo/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,9 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request, 4 * 1024).catch(() => ({}))) as { role?: unknown };
     const role = body.role === "admin" ? "admin" : "member";
     const invite = await createInvite(access, role);
+    await inWorkspace(access, () =>
+      appendAudit({ actor: access.identity.email, action: "invite.created", detail: `role ${role}` }),
+    );
     return Response.json({ invite });
   } catch (error) {
     return errorResponse(error, "Create invite");

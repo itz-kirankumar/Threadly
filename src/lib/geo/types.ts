@@ -64,6 +64,14 @@ export interface WebResult {
   title: string;
 }
 
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actor: string;
+  action: string;
+  detail: string;
+}
+
 export interface QueryResult {
   queryId: string;
   results: ProviderResult[];

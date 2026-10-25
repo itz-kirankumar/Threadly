@@ -3,6 +3,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { runScan } from "@/lib/geo/engine";
 import { loadBrand, loadKeySettings, loadQueries, saveRun } from "@/lib/geo/store";
+import { appendAudit } from "@/lib/geo/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,11 @@ export async function POST(request: Request) {
       if (!brand) throw new Error("Set up your brand profile first.");
       const { run, results, snapshot, queries: scannedQueries } = await runScan(brand, queries, keySettings, queryIds);
       await saveRun(run, results, snapshot, scannedQueries);
+      await appendAudit({
+        actor: access.identity.email,
+        action: "scan.completed",
+        detail: `${scannedQueries.length} questions, mention rate ${snapshot.mentionRate}%`,
+      });
       return Response.json({ run, results, snapshot });
     });
   } catch (error) {

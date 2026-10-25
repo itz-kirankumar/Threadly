@@ -1,5 +1,7 @@
 import { readData, writeData } from "@/lib/portal-db";
+import { randomUUID } from "node:crypto";
 import type {
+  AuditEntry,
   BrandProfile,
   MetricsSnapshot,
   QueryResult,
@@ -23,6 +25,23 @@ export async function loadBrand(): Promise<BrandProfile | null> {
 
 export async function saveBrand(brand: BrandProfile): Promise<void> {
   await writeData(`${ROOT}/brand`, brand);
+}
+
+const AUDIT_LIMIT = 100;
+
+export async function appendAudit(entry: { actor: string; action: string; detail: string }): Promise<void> {
+  try {
+    const entries = toArray<AuditEntry>(await readData(`${ROOT}/audit`));
+    entries.push({ id: `a-${randomUUID()}`, at: new Date().toISOString(), ...entry });
+    await writeData(`${ROOT}/audit`, entries.slice(-AUDIT_LIMIT));
+  } catch {
+    // audit must never break the mutation it records
+  }
+}
+
+export async function loadAudit(limit = 50): Promise<AuditEntry[]> {
+  const entries = toArray<AuditEntry>(await readData(`${ROOT}/audit`));
+  return entries.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
 
 export async function loadQueries(): Promise<TrackedQuery[]> {

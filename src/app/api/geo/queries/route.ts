@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
-import { deleteQuery, loadQueries, saveQuery } from "@/lib/geo/store";
+import { appendAudit, deleteQuery, loadQueries, saveQuery } from "@/lib/geo/store";
 import { classifyIntent } from "@/lib/geo/engine";
 import type { TrackedQuery } from "@/lib/geo/types";
 
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
         createdAt: new Date().toISOString(),
       };
       await saveQuery(query);
+      await appendAudit({ actor: access.identity.email, action: "question.added", detail: text });
       return Response.json({ query });
     });
   } catch (error) {
@@ -44,7 +45,10 @@ export async function DELETE(request: Request) {
     const body = (await readJsonBody(request, 4 * 1024)) as { queryId?: unknown };
     if (typeof body.queryId !== "string" || !body.queryId) throw new RequestError("Missing query id.", 400);
     return await inWorkspace(access, async () => {
+      const existing = await loadQueries();
+      const target = existing.find((q) => q.id === body.queryId);
       await deleteQuery(body.queryId as string);
+      await appendAudit({ actor: access.identity.email, action: "question.removed", detail: target?.text ?? (body.queryId as string) });
       return Response.json({ ok: true });
     });
   } catch (error) {

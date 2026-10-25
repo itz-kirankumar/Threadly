@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
-import { removeMember, resolveWorkspaceAccess, updateMemberRole } from "@/lib/geo/team";
+import { removeMember, resolveWorkspaceAccess, updateMemberRole, inWorkspace } from "@/lib/geo/team";
+import { appendAudit } from "@/lib/geo/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,9 @@ export async function PATCH(request: Request) {
     if (typeof body.uid !== "string" || !body.uid) throw new RequestError("Missing member id.", 400);
     if (body.role !== "admin" && body.role !== "member") throw new RequestError("Role must be admin or member.", 400);
     await updateMemberRole(access.workspaceUid, body.uid, body.role);
+    await inWorkspace(access, () =>
+      appendAudit({ actor: access.identity.email, action: "member.role_changed", detail: `${body.uid} -> ${body.role}` }),
+    );
     return Response.json({ ok: true });
   } catch (error) {
     return errorResponse(error, "Change role");
@@ -32,6 +36,9 @@ export async function DELETE(request: Request) {
       // Leaving a shared workspace you were invited to.
       if (!access.shared) throw new RequestError("You own this workspace.", 400);
       await removeMember(access.workspaceUid, access.identity.uid);
+      await inWorkspace(access, () =>
+        appendAudit({ actor: access.identity.email, action: "member.left", detail: access.identity.email }),
+      );
       return Response.json({ ok: true, left: true });
     }
     if (removing === access.workspaceUid) throw new RequestError("The owner cannot be removed.", 400);
@@ -43,6 +50,9 @@ export async function DELETE(request: Request) {
       if (target && target.role !== "member") throw new RequestError("Admins can only remove members.", 403);
     }
     await removeMember(access.workspaceUid, removing);
+    await inWorkspace(access, () =>
+      appendAudit({ actor: access.identity.email, action: "member.removed", detail: removing }),
+    );
     return Response.json({ ok: true });
   } catch (error) {
     return errorResponse(error, "Remove member");

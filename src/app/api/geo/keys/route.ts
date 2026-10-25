@@ -10,6 +10,7 @@ import {
   saveBuiltinKey,
   saveCustomProvider,
 } from "@/lib/geo/store";
+import { appendAudit } from "@/lib/geo/store";
 import { GEO_PROVIDERS } from "@/lib/geo/types";
 
 export const runtime = "nodejs";
@@ -65,6 +66,7 @@ export async function PUT(request: Request) {
           lastFour: lastFour(apiKey),
           createdAt: new Date().toISOString(),
         });
+        await appendAudit({ actor: access.identity.email, action: "provider.added", detail: name.trim().slice(0, 40) });
       } else {
         if (typeof body.provider !== "string" || !BUILTIN_IDS.has(body.provider)) throw new Error("Unknown provider.");
         if (typeof body.apiKey !== "string" || body.apiKey.trim().length < 8) throw new Error("Paste the API key.");
@@ -74,6 +76,7 @@ export async function PUT(request: Request) {
           model: typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined,
           updatedAt: new Date().toISOString(),
         });
+        await appendAudit({ actor: access.identity.email, action: "key.saved", detail: body.provider });
       }
       const settings = await loadKeySettings();
       return Response.json({ providers: providerKeyStatuses(settings) });
@@ -91,8 +94,10 @@ export async function DELETE(request: Request) {
     return await inWorkspace(access, async () => {
       if (typeof body.customId === "string") {
         await deleteCustomProvider(body.customId);
+      await appendAudit({ actor: access.identity.email, action: "provider.removed", detail: "Custom provider removed" });
       } else if (typeof body.provider === "string" && BUILTIN_IDS.has(body.provider)) {
         await deleteBuiltinKey(body.provider);
+      await appendAudit({ actor: access.identity.email, action: "key.removed", detail: "Provider key removed" });
       } else {
         throw new Error("Say which key to remove.");
       }

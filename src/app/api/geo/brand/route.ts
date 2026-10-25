@@ -1,6 +1,6 @@
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
-import { loadBrand, saveBrand } from "@/lib/geo/store";
+import { appendAudit, loadBrand, saveBrand } from "@/lib/geo/store";
 import type { BrandProfile, Competitor } from "@/lib/geo/types";
 
 export const runtime = "nodejs";
@@ -57,7 +57,10 @@ export async function PUT(request: Request) {
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    await inWorkspace(access, () => saveBrand(brand));
+    await inWorkspace(access, async () => {
+      await saveBrand(brand);
+      await appendAudit({ actor: access.identity.email, action: "brand.updated", detail: `${brand.name} (${brand.domain})` });
+    });
     return Response.json({ brand });
   } catch (error) {
     return errorResponse(error, "Save brand");
