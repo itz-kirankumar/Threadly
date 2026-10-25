@@ -179,6 +179,105 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     });
   }, []);
 
+  // Command palette (Cmd/Ctrl+K) and sidebar toggle (Cmd/Ctrl+B).
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [paletteIndex, setPaletteIndex] = useState(0);
+
+  const paletteCommands = useMemo(() => {
+    const commands: { id: string; label: string; hint: string; run: () => void }[] = [];
+    if (!readOnly) {
+      commands.push(
+        { id: "tab-overview", label: "Go to Overview", hint: "Section", run: () => setTab("overview") },
+        { id: "tab-queries", label: "Go to Questions", hint: "Section", run: () => setTab("queries") },
+        { id: "tab-citations", label: "Go to Citations", hint: "Section", run: () => setTab("citations") },
+        { id: "tab-runs", label: "Go to Scans", hint: "Section", run: () => setTab("runs") },
+        { id: "tab-reddit", label: "Go to Reddit", hint: "Section", run: () => setTab("reddit") },
+        { id: "tab-social", label: "Go to Social search", hint: "Section", run: () => setTab("social") },
+        { id: "tab-settings", label: "Go to Workspace settings", hint: "Section", run: () => setTab("settings") },
+        { id: "account", label: "Open Account settings", hint: "Page", run: () => { window.location.href = "/portal/account"; } },
+        { id: "scan", label: "Run scan now", hint: "Action", run: () => void runScan() },
+      );
+    }
+    commands.push({ id: "sidebar", label: "Toggle sidebar", hint: "Ctrl/Cmd+B", run: () => toggleSidebar() });
+    return commands;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readOnly, toggleSidebar]);
+
+  const filteredCommands = useMemo(() => {
+    const q = paletteQuery.trim().toLowerCase();
+    if (!q) return paletteCommands;
+    return paletteCommands.filter((command) => command.label.toLowerCase().includes(q));
+  }, [paletteCommands, paletteQuery]);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+        setPaletteQuery("");
+        setPaletteIndex(0);
+      } else if (mod && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        toggleSidebar();
+      } else if (event.key === "Escape") {
+        setPaletteOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleSidebar]);
+
+  function runPaletteCommand(index: number) {
+    const command = filteredCommands[index];
+    if (!command) return;
+    setPaletteOpen(false);
+    command.run();
+  }
+
+  const commandPalette = paletteOpen ? (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-24"
+      onClick={() => setPaletteOpen(false)}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <input
+          autoFocus
+          value={paletteQuery}
+          onChange={(event) => { setPaletteQuery(event.target.value); setPaletteIndex(0); }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") { event.preventDefault(); setPaletteIndex((i) => Math.min(i + 1, filteredCommands.length - 1)); }
+            else if (event.key === "ArrowUp") { event.preventDefault(); setPaletteIndex((i) => Math.max(i - 1, 0)); }
+            else if (event.key === "Enter") { event.preventDefault(); runPaletteCommand(paletteIndex); }
+          }}
+          placeholder="Type a command or section name…"
+          className="w-full border-b border-white/10 bg-transparent px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none"
+        />
+        <div className="max-h-72 overflow-y-auto p-1.5">
+          {filteredCommands.length === 0 && <p className="px-3 py-4 text-sm text-zinc-600">No matching commands.</p>}
+          {filteredCommands.map((command, index) => (
+            <button
+              key={command.id}
+              type="button"
+              onClick={() => runPaletteCommand(index)}
+              onMouseEnter={() => setPaletteIndex(index)}
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
+                index === paletteIndex ? "bg-violet-500/20 text-white" : "text-zinc-300"
+              }`}
+            >
+              <span>{command.label}</span>
+              <span className="text-xs text-zinc-600">{command.hint}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const latest = state?.snapshots.length ? state.snapshots[state.snapshots.length - 1] : null;
   const citations = useMemo(() => (state ? buildCitationLeaderboard(state) : []), [state]);
   const competitorRows = useMemo(() => (state ? buildCompetitorComparison(state) : []), [state]);
@@ -426,6 +525,15 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           >
             <span aria-hidden className="shrink-0">{PANEL_TOGGLE_ICON}</span>
             <span className={sidebarCollapsed ? "hidden" : ""}>Collapse</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setPaletteOpen(true); setPaletteQuery(""); setPaletteIndex(0); }}
+            title="Command palette (Ctrl/Cmd+K)"
+            className={`mt-1 hidden items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-zinc-600 transition hover:text-zinc-300 md:flex ${sidebarCollapsed ? "justify-center" : ""}`}
+          >
+            <span aria-hidden className="shrink-0 rounded border border-white/10 px-1 py-0.5 text-[10px]">⌘K</span>
+            <span className={sidebarCollapsed ? "hidden" : ""}>Commands</span>
           </button>
         </nav>
         )}
@@ -736,6 +844,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   if (readOnly) {
     return (
       <div className="space-y-6 pb-20 md:pb-0">
+        {commandPalette}
         {body}
         {/* Mobile tab bar for the demo: the section rail is hidden below md. */}
         <nav
@@ -909,7 +1018,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       </aside>
 
       <main className="min-w-0 flex-1 px-4 pb-24 pt-6 md:px-8 md:py-8">
-        <div className="mx-auto max-w-6xl space-y-6">{body}</div>
+        <div className="mx-auto max-w-6xl space-y-6">{commandPalette}{body}</div>
       </main>
 
       {/* Mobile tab bar: the desktop rail is hidden below md, so navigation
