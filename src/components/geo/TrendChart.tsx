@@ -64,10 +64,10 @@ export default function TrendChart({ snapshots }: { snapshots: MetricsSnapshot[]
           {points.map((p) => (
             <g key={p.snapshot.runId}>
               <circle cx={p.x} cy={p.y} r="4" fill={color} />
-              <text x={p.x} y={height - 8} textAnchor="middle" fontSize="10" fill="#71717a">
+              <text x={Math.min(Math.max(p.x, pad.left + 6), width - pad.right - 6)} y={height - 8} textAnchor="middle" fontSize="10" fill="#71717a">
                 {formatDate(p.snapshot.date)}
               </text>
-              <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill="#e4e4e7">
+              <text x={Math.min(Math.max(p.x, pad.left + 6), width - pad.right - 6)} y={p.y - 10} textAnchor="middle" fontSize="10" fill="#e4e4e7">
                 {p.snapshot[metric]}%
               </text>
             </g>
