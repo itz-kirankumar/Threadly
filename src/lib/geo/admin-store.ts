@@ -77,6 +77,50 @@ export async function adminLoadWorkspace(uid: string): Promise<{ brand: BrandPro
   };
 }
 
+export async function adminSaveApiKey(uid: string, record: import("./types").ApiKeyRecord): Promise<void> {
+  const database = await db();
+  await database.ref(`users/${uid}/geo/apiKeys/${record.id}`).set(record);
+  await database.ref(`apiKeyIndex/${record.hash}`).set({ uid, id: record.id });
+}
+
+export async function adminLoadApiKeys(uid: string): Promise<import("./types").ApiKeyRecord[]> {
+  const database = await db();
+  const snapshot = await database.ref(`users/${uid}/geo/apiKeys`).get();
+  return toArray<import("./types").ApiKeyRecord>(snapshot.val()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export async function adminDeleteApiKey(uid: string, id: string, hash: string): Promise<void> {
+  const database = await db();
+  await database.ref(`users/${uid}/geo/apiKeys/${id}`).remove();
+  await database.ref(`apiKeyIndex/${hash}`).remove();
+}
+
+export async function adminResolveApiKey(hash: string): Promise<{ uid: string; id: string } | null> {
+  const database = await db();
+  const snapshot = await database.ref(`apiKeyIndex/${hash}`).get();
+  const value = snapshot.val() as { uid?: string; id?: string } | null;
+  if (!value?.uid || !value.id) return null;
+  await database.ref(`users/${value.uid}/geo/apiKeys/${value.id}/lastUsedAt`).set(new Date().toISOString());
+  return { uid: value.uid, id: value.id };
+}
+
+export async function adminLoadLatestSummary(uid: string) {
+  const database = await db();
+  const snapshot = await database.ref(`users/${uid}/geo`).get();
+  const geo = snapshot.val() as {
+    brand?: BrandProfile;
+    latestRun?: string;
+    runs?: Record<string, ScanRun>;
+    snapshots?: Record<string, MetricsSnapshot>;
+  } | null;
+  const latestRunId = geo?.latestRun ?? null;
+  return {
+    brand: geo?.brand ?? null,
+    latestRun: latestRunId ? geo?.runs?.[latestRunId] ?? null : null,
+    snapshot: latestRunId ? geo?.snapshots?.[latestRunId] ?? null : null,
+  };
+}
+
 export async function adminSaveRun(uid: string, run: ScanRun, results: QueryResult[], snapshot: MetricsSnapshot, queries?: TrackedQuery[]): Promise<void> {
   const database = await db();
   const resultMap = Object.fromEntries(results.map((r) => [r.queryId, r]));

@@ -11,6 +11,7 @@ import RecommendationsPanel from "./RecommendationsPanel";
 import ProviderKeysPanel from "./ProviderKeysPanel";
 import TeamPanel from "./TeamPanel";
 import ActivityPanel from "./ActivityPanel";
+import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import {
   buildCitationLeaderboard,
@@ -104,7 +105,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [showTour, setShowTour] = useState(false);
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team" | "activity">("brand");
+  const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team" | "activity" | "api">("brand");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [runDetails, setRunDetails] = useState<Record<string, { queries: TrackedQuery[]; results: QueryResult[] } | "loading" | "error">>({});
@@ -687,6 +688,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
                   : []),
                 { id: "team", label: "Team", hint: "Members, roles, invite links" },
                 { id: "activity", label: "Activity log", hint: "Audit trail of workspace events" },
+                { id: "api", label: "API access", hint: "Programmatic access keys" },
               ] as const
             ).map((item) => (
               <button
@@ -714,6 +716,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             )}
             {settingsSection === "activity" && (
               <ActivityPanel authedFetch={authedFetch} />
+            )}
+            {settingsSection === "api" && (
+              <ApiKeysPanel authedFetch={authedFetch} />
             )}
             {settingsSection === "keys" && (
               <ProviderKeysPanel

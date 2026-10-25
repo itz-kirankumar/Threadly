@@ -16,6 +16,8 @@ const ACTION_LABELS: Record<string, string> = {
   "member.role_changed": "Member role changed",
   "member.removed": "Member removed",
   "member.left": "Member left",
+  "api_key.created": "API key created",
+  "api_key.revoked": "API key revoked",
 };
 
 export default function ActivityPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {

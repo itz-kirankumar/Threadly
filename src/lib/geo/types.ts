@@ -64,6 +64,16 @@ export interface WebResult {
   title: string;
 }
 
+export interface ApiKeyRecord {
+  id: string;
+  name: string;
+  /** sha256 hex of the secret; the secret itself is never stored */
+  hash: string;
+  lastFour: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
 export interface AuditEntry {
   id: string;
   at: string;
