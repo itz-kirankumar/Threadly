@@ -5,7 +5,7 @@ import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, isInterval, isPaidPlan, type BillingInterval, type PaidPlanId } from "@/lib/billing/dodo";
 import { razorpayPlanFromPlanId, verifyRazorpaySignature } from "@/lib/billing/razorpay";
 import { decideTransition, type IncomingStatus } from "@/lib/billing/entitlement";
-import { loadBilling, recordWebhookEvent, saveBilling, webhookEventProcessed } from "@/lib/billing/store";
+import { loadBilling, loadCheckoutAttempt, recordWebhookEvent, saveBilling, saveCheckoutAttempt, webhookEventProcessed } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +20,16 @@ interface RazorpayWebhookPayload {
         plan_id?: string;
         status?: string;
         customer_id?: string;
+        notes?: Record<string, string>;
+      };
+    };
+    payment?: {
+      entity?: {
+        id?: string;
+        order_id?: string;
+        status?: string;
+        amount?: number;
+        currency?: string;
         notes?: Record<string, string>;
       };
     };
@@ -51,6 +61,30 @@ export async function POST(request: Request) {
   }
   const event = JSON.parse(rawBody) as RazorpayWebhookPayload;
   const type = event.event ?? "";
+
+  // One-time order flow (Standard Checkout): reconcile the durable attempt.
+  // Entitlement itself is granted by the verify route (signature + server-side
+  // payment fetch); the webhook only keeps attempt state honest.
+  if (type === "payment.captured" || type === "payment.failed") {
+    const payment = event.payload?.payment?.entity ?? {};
+    const workspaceUid = payment.notes?.workspace_uid;
+    if (workspaceUid && payment.order_id) {
+      try {
+        const attempt = await loadCheckoutAttempt(workspaceUid);
+        if (attempt && attempt.providerRef === payment.order_id && (attempt.state === "issued" || attempt.state === "pending" || attempt.state === "uncertain")) {
+          await saveCheckoutAttempt(workspaceUid, {
+            ...attempt,
+            state: type === "payment.captured" ? "reconciled" : "failed",
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      } catch {
+        // attempt reconciliation is best-effort
+      }
+    }
+    return Response.json({ received: true });
+  }
+
   const status = STATUS_BY_EVENT[type];
   if (!status) return Response.json({ received: true });
 

@@ -13,6 +13,9 @@ export interface BillingRecord {
   customerEmail: string | null;
   mode: "test" | "live";
   updatedAt: string;
+  /** One-time (Razorpay order) entitlements: when the paid term ends. */
+  periodEnd?: string | null;
+  orderId?: string | null;
 }
 
 const BILLING_ROOT = "geo/billing";
@@ -37,4 +40,33 @@ export async function webhookEventProcessed(eventId: string): Promise<boolean> {
 export async function recordWebhookEvent(eventId: string): Promise<void> {
   const ids = (await readData<string[]>(EVENTS_ROOT)) ?? [];
   await writeData(EVENTS_ROOT, [eventId, ...ids.filter((id) => id !== eventId)].slice(0, EVENTS_CAP));
+}
+
+// ---- durable one-at-a-time checkout attempts (atomic via RTDB transaction) ----
+
+import { getAdminDatabase } from "@/lib/geo/admin-store";
+import { evaluateAttempt, type CheckoutAttempt } from "./attempt";
+
+const attemptPath = (workspaceUid: string) => `users/${workspaceUid}/geo/billingAttempt`;
+
+export async function loadCheckoutAttempt(workspaceUid: string): Promise<CheckoutAttempt | null> {
+  const snapshot = await (await getAdminDatabase()).ref(attemptPath(workspaceUid)).get();
+  return (snapshot.val() as CheckoutAttempt | null) ?? null;
+}
+
+export async function saveCheckoutAttempt(workspaceUid: string, attempt: CheckoutAttempt): Promise<void> {
+  await (await getAdminDatabase()).ref(attemptPath(workspaceUid)).set(attempt);
+}
+
+/** Atomically claim the attempt slot. Commits only when the slot is open. */
+export async function claimCheckoutAttempt(
+  workspaceUid: string,
+  attempt: CheckoutAttempt,
+  now: Date,
+): Promise<{ claimed: boolean; existing: CheckoutAttempt | null }> {
+  const ref = (await getAdminDatabase()).ref(attemptPath(workspaceUid));
+  const result = await ref.transaction((current: CheckoutAttempt | null) => {
+    return evaluateAttempt(current, now).open ? attempt : undefined; // undefined aborts the transaction
+  });
+  return { claimed: result.committed, existing: (result.snapshot.val() as CheckoutAttempt | null) ?? null };
 }

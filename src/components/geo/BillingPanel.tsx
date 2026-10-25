@@ -20,6 +20,23 @@ interface BillingStatus {
   canCheckout: boolean;
 }
 
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void; on: (event: string, handler: (response: unknown) => void) => void };
+  }
+}
+
+function loadRazorpayScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Could not load the Razorpay checkout."));
+    document.body.appendChild(script);
+  });
+}
+
 const PLANS = [
   { id: "pro" as const, name: "Pro", monthly: 49, annualMonthly: 39, blurb: "50 tracked questions, unlimited scans, 5 seats." },
   { id: "growth" as const, name: "Growth", monthly: 149, annualMonthly: 119, blurb: "150 tracked questions, 25 seats, audit log, API access." },
@@ -56,10 +73,60 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
     }
   }, [load]);
 
+  const razorpayCheckout = async (plan: "pro" | "growth") => {
+    const order = (await authedFetch("/api/billing/razorpay/order", {
+      method: "POST",
+      body: JSON.stringify({ plan, interval: annual ? "annual" : "monthly" }),
+    })) as { orderId: string; amount: number; currency: string; keyId: string };
+    await loadRazorpayScript();
+    if (!window.Razorpay) throw new Error("Could not load the Razorpay checkout.");
+    const rzp = new window.Razorpay({
+      key: order.keyId,
+      order_id: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      name: "Threadly",
+      description: `${plan === "pro" ? "Pro" : "Growth"} - ${annual ? "annual" : "monthly"}`,
+      handler: async (response: { razorpay_payment_id?: string; razorpay_order_id?: string; razorpay_signature?: string }) => {
+        try {
+          await authedFetch("/api/billing/razorpay/verify", {
+            method: "POST",
+            body: JSON.stringify({
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+            }),
+          });
+          setNotice("Payment confirmed - your plan is updated.");
+          setBusyPlan(null);
+          load();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Payment could not be verified. No entitlement was granted.");
+          setBusyPlan(null);
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          setBusyPlan(null);
+          setError("Checkout closed - no payment was made.");
+        },
+      },
+    });
+    rzp.on("payment.failed", () => {
+      setBusyPlan(null);
+      setError("The payment failed - no charge was made. Try again or use another payment method.");
+    });
+    rzp.open();
+  };
+
   const checkout = async (plan: "pro" | "growth") => {
     setBusyPlan(plan);
     setError(null);
     try {
+      if (status && !status.providers?.dodo && status.providers?.razorpay) {
+        await razorpayCheckout(plan);
+        return;
+      }
       const payload = (await authedFetch("/api/billing/checkout", {
         method: "POST",
         body: JSON.stringify({ plan, interval: annual ? "annual" : "monthly" }),
@@ -158,9 +225,9 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
 
               <p className="text-[11px] leading-relaxed text-zinc-600">
                 {status.providers?.dodo && status.providers?.razorpay
-                  ? "Checkout uses Dodo Payments and switches to Razorpay automatically if Dodo is unavailable."
+                  ? "Checkout uses Dodo Payments (Razorpay available as backup)."
                   : status.providers?.razorpay
-                    ? "Checkout uses Razorpay."
+                    ? "Checkout uses Razorpay - one-time purchase, each payment covers the selected term."
                     : "Checkout uses Dodo Payments."}
                 {status.testMode ? " Billing is in test mode while launch is prepared - checkouts run against the payment sandbox and no real card is charged." : ""}
               </p>

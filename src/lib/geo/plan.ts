@@ -32,7 +32,28 @@ const PLAN_ROOT = "geo/plan";
 
 export async function loadPlan(email?: string): Promise<PlanId> {
   const stored = await readData<PlanId>(PLAN_ROOT);
-  if (stored && stored in PLAN_LIMITS) return stored;
+  if (stored && stored in PLAN_LIMITS) {
+    // One-time Razorpay purchases grant a fixed term; lapse it when the term
+    // ends. Dodo subscriptions renew via webhook and carry no periodEnd.
+    try {
+      const billing = await readData<{ provider?: string; status?: string; periodEnd?: string | null }>("geo/billing");
+      if (
+        stored !== "trial" &&
+        billing?.provider === "razorpay" &&
+        billing.status === "active" &&
+        billing.periodEnd &&
+        Date.parse(billing.periodEnd) < Date.now()
+      ) {
+        await savePlan("trial");
+        const { writeData: write } = await import("@/lib/portal-db");
+        await write("geo/billing", { ...billing, status: "ended", updatedAt: new Date().toISOString() });
+        return "trial";
+      }
+    } catch {
+      // billing record unreadable - keep the stored plan
+    }
+    return stored;
+  }
   const exempt = (process.env.TRIAL_EXEMPT_EMAILS ?? "")
     .split(",")
     .map((entry) => entry.trim().toLowerCase())

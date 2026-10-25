@@ -78,3 +78,92 @@ export function verifyRazorpaySignature(rawBody: string, signature: string | nul
   const b = Buffer.from(signature);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+
+// ---- Standard Web Checkout (one-time orders) ----
+
+// Server-authoritative pricing in the smallest currency unit (cents/paise).
+// Mirrors the public pricing page exactly; clients never supply amounts.
+export const ORDER_PRICES: Record<PaidPlanId, Record<BillingInterval, { amount: number; currency: string }>> = {
+  pro: {
+    monthly: { amount: 4900, currency: "USD" },
+    annual: { amount: 46800, currency: "USD" },
+  },
+  growth: {
+    monthly: { amount: 14900, currency: "USD" },
+    annual: { amount: 142800, currency: "USD" },
+  },
+};
+
+export function razorpayKeyId(): string | null {
+  return process.env.RAZORPAY_KEY_ID ?? null;
+}
+
+export async function razorpayCreateOrder(params: {
+  plan: PaidPlanId;
+  interval: BillingInterval;
+  workspaceUid: string;
+  email: string;
+}): Promise<{ id: string; amount: number; currency: string }> {
+  const price = ORDER_PRICES[params.plan][params.interval];
+  const response = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: authHeader() },
+    body: JSON.stringify({
+      amount: price.amount,
+      currency: price.currency,
+      receipt: `ws_${params.workspaceUid.slice(0, 24)}_${Date.now().toString(36)}`,
+      notes: {
+        workspace_uid: params.workspaceUid,
+        plan: params.plan,
+        interval: params.interval,
+        email: params.email,
+      },
+    }),
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const description = (payload as { error?: { description?: string } }).error?.description ?? `Razorpay returned HTTP ${response.status}`;
+    const err = new Error(description) as Error & { status?: number };
+    err.status = response.status;
+    throw err;
+  }
+  return payload as unknown as { id: string; amount: number; currency: string };
+}
+
+export async function razorpayFetchPayment(paymentId: string): Promise<{
+  id: string;
+  order_id?: string;
+  status?: string;
+  amount?: number;
+  currency?: string;
+  notes?: Record<string, string>;
+}> {
+  const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+    headers: { Authorization: authHeader() },
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const description = (payload as { error?: { description?: string } }).error?.description ?? `Razorpay returned HTTP ${response.status}`;
+    throw new Error(description);
+  }
+  return payload as never;
+}
+
+/** Standard Checkout signature: HMAC-SHA256(order_id + "|" + payment_id, key_secret). */
+export function verifyPaymentSignature(orderId: string, paymentId: string, signature: string): boolean {
+  const secret = process.env.RAZORPAY_KEY_SECRET;
+  if (!secret || !signature) return false;
+  const expected = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(String(signature));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export function periodEndFor(interval: BillingInterval, from: Date): string {
+  const end = new Date(from);
+  if (interval === "annual") end.setFullYear(end.getFullYear() + 1);
+  else end.setMonth(end.getMonth() + 1);
+  return end.toISOString();
+}

@@ -4,7 +4,7 @@ import { adminConfigured } from "@/lib/geo/admin-store";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, dodoClient, isInterval, isPaidPlan, planFromProductId, type BillingInterval, type PaidPlanId } from "@/lib/billing/dodo";
 import { decideTransition, type IncomingStatus } from "@/lib/billing/entitlement";
-import { loadBilling, recordWebhookEvent, saveBilling, webhookEventProcessed } from "@/lib/billing/store";
+import { loadBilling, loadCheckoutAttempt, recordWebhookEvent, saveBilling, saveCheckoutAttempt, webhookEventProcessed } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,6 +89,15 @@ export async function POST(request: Request) {
         else await savePlan(decision.plan);
         await saveBilling(decision.record);
         if (eventId) await recordWebhookEvent(`dodo:${eventId}`);
+        // A confirmed subscription reconciles any uncertain/pending checkout attempt.
+        try {
+          const attempt = await loadCheckoutAttempt(workspaceUid);
+          if (attempt && attempt.provider === "dodo" && (attempt.state === "uncertain" || attempt.state === "pending")) {
+            await saveCheckoutAttempt(workspaceUid, { ...attempt, state: "reconciled", updatedAt: new Date().toISOString() });
+          }
+        } catch {
+          // best-effort
+        }
         try {
           await appendAudit({
             actor: data.customer?.email ?? "billing webhook",
