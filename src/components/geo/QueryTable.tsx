@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useState } from "react";
-import type { GeoProviderId, ProviderResult, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
+import { Fragment, useMemo, useState } from "react";
+import type { BrandProfile, GeoProviderId, ProviderResult, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
 import { colorForProvider, labelForProvider } from "./helpers";
 
 interface Props {
@@ -37,7 +37,154 @@ function Cell({ result }: { result?: ProviderResult }) {
   );
 }
 
-function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryResult: QueryResult; providerOrder: GeoProviderId[]; providerLabels: Record<string, string> }) {
+
+const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)\],.;]+)/g;
+const BOLD_RE = /\*\*([^*]+)\*\*/g;
+
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+interface HighlightName {
+  name: string;
+  kind: "brand" | "competitor";
+}
+
+function highlightPattern(brand: BrandProfile | null): { re: RegExp; kinds: Map<string, "brand" | "competitor"> } | null {
+  if (!brand) return null;
+  const names: HighlightName[] = [
+    ...[brand.name, ...(brand.aliases ?? [])].filter((n) => n?.trim()).map((name) => ({ name, kind: "brand" as const })),
+    ...(brand.competitors ?? []).flatMap((c) =>
+      [c.name, ...(c.aliases ?? [])].filter((n) => n?.trim()).map((name) => ({ name, kind: "competitor" as const })),
+    ),
+  ];
+  if (!names.length) return null;
+  const kinds = new Map(names.map((n) => [n.name.toLowerCase(), n.kind]));
+  const re = new RegExp(
+    `(^|[^a-z0-9])(${names.map((n) => escapeRe(n.name)).sort((a, b) => b.length - a.length).join("|")})(?=[^a-z0-9]|$)`,
+    "gi",
+  );
+  return { re, kinds };
+}
+
+function renderInline(text: string, highlight: { re: RegExp; kinds: Map<string, "brand" | "competitor"> } | null, keyPrefix: string): React.ReactNode[] {
+  // First pass: markdown links + bare URLs become anchors.
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  LINK_RE.lastIndex = 0;
+  let k = 0;
+  while ((m = LINK_RE.exec(text))) {
+    if (m.index > last) nodes.push(...renderFormattedText(text.slice(last, m.index), highlight, `${keyPrefix}-t${k++}`));
+    const label = m[1] ?? m[3];
+    const url = m[2] ?? m[3];
+    nodes.push(
+      <a key={`${keyPrefix}-a${k++}`} href={url} target="_blank" rel="noreferrer" className="text-cyan-300 underline decoration-cyan-500/40 hover:decoration-cyan-300">
+        {label}
+      </a>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) nodes.push(...renderFormattedText(text.slice(last), highlight, `${keyPrefix}-t${k++}`));
+  return nodes;
+}
+
+function renderFormattedText(text: string, highlight: { re: RegExp; kinds: Map<string, "brand" | "competitor"> } | null, keyPrefix: string): React.ReactNode[] {
+  // Second pass: **bold**.
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  BOLD_RE.lastIndex = 0;
+  let k = 0;
+  while ((m = BOLD_RE.exec(text))) {
+    if (m.index > last) nodes.push(...renderHighlighted(text.slice(last, m.index), highlight, `${keyPrefix}-p${k++}`));
+    nodes.push(
+      <strong key={`${keyPrefix}-b${k++}`} className="font-semibold text-zinc-100">
+        {renderHighlighted(m[1], highlight, `${keyPrefix}-bi${k}`)}
+      </strong>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) nodes.push(...renderHighlighted(text.slice(last), highlight, `${keyPrefix}-p${k++}`));
+  return nodes;
+}
+
+function renderHighlighted(text: string, highlight: { re: RegExp; kinds: Map<string, "brand" | "competitor"> } | null, keyPrefix: string): React.ReactNode[] {
+  // Final pass: brand + competitor name highlights.
+  if (!highlight) return [text];
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  highlight.re.lastIndex = 0;
+  let k = 0;
+  while ((m = highlight.re.exec(text))) {
+    const start = m.index + m[1].length;
+    if (start > last) nodes.push(text.slice(last, start));
+    const kind = highlight.kinds.get(m[2].toLowerCase()) ?? "competitor";
+    nodes.push(
+      <mark
+        key={`${keyPrefix}-h${k++}`}
+        className={
+          kind === "brand"
+            ? "rounded bg-violet-500/25 px-0.5 font-medium text-violet-200"
+            : "rounded bg-amber-500/20 px-0.5 text-amber-200/90"
+        }
+      >
+        {m[2]}
+      </mark>,
+    );
+    last = start + m[2].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+function AnswerText({ answer, brand }: { answer: string; brand: BrandProfile | null }) {
+  const highlight = useMemo(() => highlightPattern(brand), [brand]);
+  const blocks: React.ReactNode[] = [];
+  const lines = answer.split("\n");
+  let list: string[] = [];
+  let ordered = false;
+  let k = 0;
+  const flushList = () => {
+    if (!list.length) return;
+    const items = list.map((item, i) => <li key={i}>{renderInline(item, highlight, `li${k}-${i}`)}</li>);
+    blocks.push(
+      ordered ? (
+        <ol key={`ol${k++}`} className="list-decimal space-y-1 pl-5">{items}</ol>
+      ) : (
+        <ul key={`ul${k++}`} className="list-disc space-y-1 pl-5">{items}</ul>
+      ),
+    );
+    list = [];
+  };
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const bullet = /^[-*•]\s+(.+)$/.exec(line);
+    const numbered = /^\d+[.)]\s+(.+)$/.exec(line);
+    if (bullet || numbered) {
+      if (list.length && ordered !== Boolean(numbered)) flushList();
+      ordered = Boolean(numbered);
+      list.push((bullet ?? numbered)![1]);
+      continue;
+    }
+    flushList();
+    const heading = /^(#{1,4})\s+(.+)$/.exec(line);
+    if (heading) {
+      blocks.push(
+        <p key={`h${k++}`} className="pt-1 font-semibold text-zinc-100">
+          {renderInline(heading[2], highlight, `h${k}`)}
+        </p>,
+      );
+    } else if (line.trim()) {
+      blocks.push(<p key={`p${k++}`}>{renderInline(line, highlight, `p${k}`)}</p>);
+    }
+  }
+  flushList();
+  return <div className="space-y-2 rounded-lg bg-white/[0.03] p-3 text-sm leading-relaxed text-zinc-300">{blocks}</div>;
+}
+
+function AnswerDrawer({ queryResult, brand, providerOrder, providerLabels }: { queryResult: QueryResult; brand: BrandProfile | null; providerOrder: GeoProviderId[]; providerLabels: Record<string, string> }) {
   const answered = providerOrder.filter((id) =>
     queryResult.results.some((r) => r.provider === id && r.status === "scanned"),
   );
@@ -63,9 +210,7 @@ function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryRes
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">Answer</p>
-            <p className="whitespace-pre-wrap rounded-lg bg-white/[0.03] p-3 text-sm leading-relaxed text-zinc-300">
-              {result.answer}
-            </p>
+            <AnswerText answer={result.answer} brand={brand} />
           </div>
           <div>
             <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
@@ -78,7 +223,7 @@ function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryRes
                     href={citation.url}
                     target="_blank"
                     rel="noreferrer"
-                    className={`hover:underline ${citation.domain.includes("loomify") ? "text-violet-300" : "text-cyan-300"}`}
+                    className={`hover:underline ${brand && citation.domain.includes(brand.domain.replace(/^www\./, "")) ? "text-violet-300" : "text-cyan-300"}`}
                   >
                     {citation.domain}
                   </a>
@@ -235,7 +380,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
                   {open === query.id && queryResult && (
                     <tr key={`${query.id}-drawer`}>
                       <td colSpan={!canDelete ? providerOrder.length + 1 : providerOrder.length + 2} className="p-0">
-                        <AnswerDrawer queryResult={queryResult} providerOrder={providerOrder} providerLabels={providerLabels} />
+                        <AnswerDrawer queryResult={queryResult} brand={state.brand} providerOrder={providerOrder} providerLabels={providerLabels} />
                       </td>
                     </tr>
                   )}
