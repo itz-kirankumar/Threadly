@@ -37,6 +37,7 @@ interface RedditResult {
 }
 
 function ageLabel(createdUtc: number): string {
+  if (!createdUtc) return "date unknown";
   const hours = Math.max(1, Math.round((Date.now() / 1000 - createdUtc) / 3600));
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
@@ -148,7 +149,7 @@ export default function RedditPanel({ authedFetch }: { authedFetch: (path: strin
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">High-intent opportunities</h3>
-              <p className="text-xs text-zinc-600">score = intent phrases + recency + engagement</p>
+              <p className="text-xs text-zinc-600">score = intent phrases + recency</p>
             </div>
             {result.opportunities.length === 0 ? (
               <p className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-zinc-500">
@@ -170,7 +171,7 @@ export default function RedditPanel({ authedFetch }: { authedFetch: (path: strin
                     </span>
                   </div>
                   <p className="mt-1.5 text-xs text-zinc-500">
-                    r/{opp.subreddit} · {ageLabel(opp.createdUtc)} · {opp.score} points · {opp.comments} comments
+                    {opp.subreddit ? `r/${opp.subreddit} · ` : ""}{ageLabel(opp.createdUtc)}
                   </p>
                   {opp.intentReasons.length > 0 && (
                     <p className="mt-1.5 text-xs text-zinc-600">{opp.intentReasons.join(" · ")}</p>
@@ -203,7 +204,7 @@ export default function RedditPanel({ authedFetch }: { authedFetch: (path: strin
                   </div>
                   <p className="mt-2 text-sm font-medium text-zinc-100">{mention.title}</p>
                   <p className="mt-1 text-xs text-zinc-500">
-                    r/{mention.subreddit} · {ageLabel(mention.createdUtc)} · {mention.score} points · {mention.comments} comments
+                    {mention.subreddit ? `r/${mention.subreddit} · ` : ""}{ageLabel(mention.createdUtc)}
                   </p>
                 </a>
               ))

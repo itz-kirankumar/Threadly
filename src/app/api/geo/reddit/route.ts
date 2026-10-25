@@ -5,8 +5,6 @@ import { checkRateLimit } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const UA = "Threadly/1.0 (https://www.gothreadly.live; brand monitoring)";
-
 interface RedditPost {
   id: string;
   title: string;
@@ -57,26 +55,46 @@ function estimateSentiment(text: string): "positive" | "neutral" | "negative" {
   return "neutral";
 }
 
+// Reddit thread discovery runs over Tavily web search scoped to reddit.com:
+// Reddit's own JSON API blocks datacenter traffic, and this backend is already
+// provisioned per workspace. Engagement metadata (points/comments) is not
+// available through search - those fields come back as -1 and the UI hides them.
 async function searchReddit(query: string, limit = 15): Promise<RedditPost[]> {
-  const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=new&limit=${limit}&t=month&type=link`;
-  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error(`Reddit returned ${res.status} for "${query}".`);
-  const json = (await res.json()) as {
-    data?: { children?: { data: Record<string, unknown> }[] };
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) throw new Error("Search backend is not configured.");
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: apiKey,
+      query: `site:reddit.com ${query}`,
+      max_results: Math.min(limit, 20),
+      search_depth: "advanced",
+      include_answer: false,
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`Search returned ${res.status} for "${query}".`);
+  const payload = (await res.json()) as {
+    results?: { url?: string; title?: string; content?: string; published_date?: string }[];
   };
-  return (json.data?.children ?? []).map((child) => {
-    const d = child.data;
-    return {
-      id: String(d.id ?? ""),
-      title: String(d.title ?? ""),
-      subreddit: String(d.subreddit ?? ""),
-      score: Number(d.score ?? 0),
-      comments: Number(d.num_comments ?? 0),
-      createdUtc: Number(d.created_utc ?? 0),
-      url: `https://www.reddit.com${String(d.permalink ?? "")}`,
-      snippet: String(d.selftext ?? "").slice(0, 400),
-    };
-  }).filter((p) => p.id && p.title);
+  return (payload.results ?? [])
+    .filter((r) => typeof r.url === "string" && r.url.includes("reddit.com/r/"))
+    .map((r) => {
+      const sub = /reddit\.com\/r\/([A-Za-z0-9_]+)/.exec(r.url ?? "");
+      const published = r.published_date ? Date.parse(r.published_date) / 1000 : 0;
+      return {
+        id: (r.url ?? "").split("/").filter(Boolean).pop() ?? r.url ?? "",
+        title: (r.title ?? "").replace(/\s*:\s*r\/[^:]*$|\s*-\s*Reddit$/, "").trim() || (r.url ?? ""),
+        subreddit: sub?.[1] ?? "",
+        score: -1,
+        comments: -1,
+        createdUtc: Number.isFinite(published) ? published : 0,
+        url: r.url ?? "",
+        snippet: (r.content ?? "").slice(0, 400),
+      };
+    })
+    .filter((p) => p.id && p.url);
 }
 
 function containsName(post: RedditPost, name: string): boolean {
@@ -147,11 +165,10 @@ export async function POST(request: Request) {
           oppSeen.add(post.id);
           const text = ` ${post.title.toLowerCase()} `;
           const reasons = INTENT_PHRASES.filter((p) => text.includes(p.phrase));
-          const ageHours = (nowSec - post.createdUtc) / 3600;
+          const ageHours = post.createdUtc > 0 ? (nowSec - post.createdUtc) / 3600 : Infinity;
           let score = reasons.reduce((sum, r) => sum + r.points, 0);
           if (ageHours < 48) score += 3;
           else if (ageHours < 168) score += 1;
-          score += Math.min(4, Math.round(Math.log2(1 + post.score + post.comments)));
           if (score < 4) continue;
           opportunities.push({
             ...post,
