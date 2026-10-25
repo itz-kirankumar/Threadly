@@ -3,6 +3,8 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { billingConfigured, billingTestMode, canCheckout, dodoClient, isInterval, isPaidPlan, productFor } from "@/lib/billing/dodo";
 import { razorpayConfigured, razorpayCreateSubscription } from "@/lib/billing/razorpay";
+import { inWorkspace } from "@/lib/geo/team";
+import { loadBilling } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,28 +46,50 @@ export async function POST(request: Request) {
     const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://www.gothreadly.live";
     const requested = body.provider === "dodo" || body.provider === "razorpay" ? body.provider : "auto";
 
-    // Provider redundancy: Dodo is primary, Razorpay the backup. Fail over only
-    // when the primary clearly failed BEFORE issuing a checkout - never retry
-    // across providers after a checkout link exists (double-charge risk).
+    // Never open a second checkout while a subscription is live or in dunning -
+    // this is what actually prevents double subscriptions across providers,
+    // including explicit provider overrides.
+    const existing = await inWorkspace(access, () => loadBilling());
+    if (existing && (existing.status === "active" || existing.status === "grace")) {
+      return Response.json(
+        { error: "This workspace already has a subscription. Manage it from Settings - Billing." },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
+    // Provider redundancy: Dodo is primary, Razorpay the backup.
+    // Safety rules:
+    // - Never fail over after Dodo returned a checkout link (exactly one link
+    //   ever reaches the customer, so no double charge is possible).
+    // - A thrown error does NOT prove nothing was created (the response may
+    //   have been lost in transit). But an orphan checkout session is only an
+    //   unpaid link nobody sees - it cannot charge anyone - so after a network
+    //   or 5xx failure we retry Dodo once, then fail over. A definitive 4xx
+    //   rejection fails over immediately.
     let checkoutUrl: string | null = null;
     let usedProvider: "dodo" | "razorpay" = "dodo";
     let dodoError: string | null = null;
     if ((requested === "auto" || requested === "dodo") && billingConfigured()) {
-      try {
-        const session = await dodoClient().checkoutSessions.create({
-          product_cart: [{ product_id: productFor(body.plan, body.interval), quantity: 1 }],
-          customer: { email: access.identity.email, name: access.identity.name || undefined },
-          return_url: `${origin}/portal?billing=success`,
-          metadata: {
-            workspace_uid: access.workspaceUid,
-            plan: body.plan,
-            interval: body.interval,
-          },
-        });
-        checkoutUrl = session.checkout_url ?? null;
-        usedProvider = "dodo";
-      } catch (error) {
-        dodoError = error instanceof Error ? error.message : "Dodo checkout failed.";
+      for (let attempt = 0; attempt < 2 && !checkoutUrl; attempt += 1) {
+        try {
+          const session = await dodoClient().checkoutSessions.create({
+            product_cart: [{ product_id: productFor(body.plan, body.interval), quantity: 1 }],
+            customer: { email: access.identity.email, name: access.identity.name || undefined },
+            return_url: `${origin}/portal?billing=success`,
+            metadata: {
+              workspace_uid: access.workspaceUid,
+              plan: body.plan,
+              interval: body.interval,
+            },
+          });
+          checkoutUrl = session.checkout_url ?? null;
+          usedProvider = "dodo";
+        } catch (error) {
+          const status = (error as { status?: number }).status ?? 0;
+          dodoError = error instanceof Error ? error.message : "Dodo checkout failed.";
+          if (status >= 400 && status < 500) break; // definitive rejection - fail over now
+          // network/5xx: loop retries Dodo once before failover
+        }
       }
     }
     if (!checkoutUrl && (requested === "razorpay" || (requested === "auto" && dodoError !== null)) && razorpayConfigured()) {

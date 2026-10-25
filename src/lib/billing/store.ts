@@ -24,3 +24,17 @@ export async function loadBilling(): Promise<BillingRecord | null> {
 export async function saveBilling(record: BillingRecord): Promise<void> {
   await writeData(BILLING_ROOT, record);
 }
+
+const EVENTS_ROOT = "geo/billingEvents";
+const EVENTS_CAP = 200;
+
+/** Recently processed webhook delivery ids, for at-least-once delivery dedupe. */
+export async function webhookEventProcessed(eventId: string): Promise<boolean> {
+  const ids = (await readData<string[]>(EVENTS_ROOT)) ?? [];
+  return ids.includes(eventId);
+}
+
+export async function recordWebhookEvent(eventId: string): Promise<void> {
+  const ids = (await readData<string[]>(EVENTS_ROOT)) ?? [];
+  await writeData(EVENTS_ROOT, [eventId, ...ids.filter((id) => id !== eventId)].slice(0, EVENTS_CAP));
+}

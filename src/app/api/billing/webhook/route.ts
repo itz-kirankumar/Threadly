@@ -1,9 +1,10 @@
 import { withWorkspace } from "@/lib/portal-db";
-import { savePlan, type PlanId } from "@/lib/geo/plan";
+import { savePlan } from "@/lib/geo/plan";
 import { adminConfigured } from "@/lib/geo/admin-store";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, dodoClient, isInterval, isPaidPlan, planFromProductId, type BillingInterval, type PaidPlanId } from "@/lib/billing/dodo";
-import { loadBilling, saveBilling } from "@/lib/billing/store";
+import { decideTransition, type IncomingStatus } from "@/lib/billing/entitlement";
+import { loadBilling, recordWebhookEvent, saveBilling, webhookEventProcessed } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,30 +13,22 @@ interface SubscriptionPayload {
   subscription_id?: string;
   product_id?: string;
   status?: string;
+  created_at?: string;
+  updated_at?: string;
   customer?: { customer_id?: string; email?: string };
   metadata?: Record<string, string>;
 }
 
-async function applyPlan(workspaceUid: string, plan: PlanId, record: Parameters<typeof saveBilling>[0]): Promise<void> {
-  await withWorkspace(
-    workspaceUid,
-    "",
-    async () => {
-      if (record.status === "cancelled" || record.status === "expired" || record.status === "failed") {
-        // Only downgrade when this subscription is still the active billing record -
-        // a stale cancel event must not clobber a newer subscription.
-        const current = await loadBilling();
-        if (current?.subscriptionId && record.subscriptionId && current.subscriptionId !== record.subscriptionId) return;
-        await savePlan("trial");
-        await saveBilling(record);
-        return;
-      }
-      await savePlan(plan);
-      await saveBilling(record);
-    },
-    { useAdmin: true },
-  );
-}
+const STATUS_BY_EVENT: Record<string, IncomingStatus> = {
+  "subscription.active": "active",
+  "subscription.renewed": "active",
+  "subscription.plan_changed": "active",
+  "subscription.past_due": "grace",
+  "subscription.on_hold": "grace",
+  "subscription.cancelled": "ended",
+  "subscription.expired": "ended",
+  "subscription.failed": "ended",
+};
 
 export async function POST(request: Request) {
   const webhookKey = process.env.DODO_PAYMENTS_WEBHOOK_KEY;
@@ -51,7 +44,7 @@ export async function POST(request: Request) {
     const value = request.headers.get(name);
     if (value) headers[name] = value;
   }
-  let event: { type?: string; data?: SubscriptionPayload };
+  let event: { type?: string; timestamp?: string; data?: SubscriptionPayload };
   try {
     event = dodoClient().webhooks.unwrap(rawBody, { headers, key: webhookKey }) as typeof event;
   } catch {
@@ -59,65 +52,58 @@ export async function POST(request: Request) {
   }
 
   const type = event.type ?? "";
-  const data = event.data ?? {};
-  if (!type.startsWith("subscription.")) {
-    // payment.* events are acknowledged; plan state follows subscription events.
-    return Response.json({ received: true });
-  }
+  if (!type.startsWith("subscription.")) return Response.json({ received: true });
+  const status = STATUS_BY_EVENT[type];
+  if (!status) return Response.json({ received: true });
 
+  const data = event.data ?? {};
   const metadata = data.metadata ?? {};
   const workspaceUid = metadata.workspace_uid;
-  const metaPlan = metadata.plan;
-  const metaInterval = metadata.interval;
-  const plan: PaidPlanId | null = isPaidPlan(metaPlan) ? metaPlan : planFromProductId(data.product_id);
-  const interval: BillingInterval | null = isInterval(metaInterval) ? metaInterval : null;
+  const plan: PaidPlanId | null = isPaidPlan(metadata.plan) ? metadata.plan : planFromProductId(data.product_id);
+  const interval: BillingInterval | null = isInterval(metadata.interval) ? metadata.interval : null;
+  if (!workspaceUid || !plan) return Response.json({ received: true });
 
-  if (!workspaceUid || !plan) {
-    // Not a Threadly workspace subscription (or legacy without metadata) - ack without action.
-    return Response.json({ received: true });
-  }
-
-  const status = type === "subscription.active" || type === "subscription.renewed"
-    ? "active"
-    : type === "subscription.on_hold"
-      ? "on_hold"
-      : type === "subscription.cancelled"
-        ? "cancelled"
-        : type === "subscription.expired"
-          ? "expired"
-          : type === "subscription.failed"
-            ? "failed"
-            : (data.status ?? "unknown");
+  const eventId = headers["webhook-id"] ?? null;
+  const eventAt = event.timestamp ?? data.updated_at ?? data.created_at ?? null;
 
   try {
-    await applyPlan(workspaceUid, plan, {
-      provider: "dodo",
-      plan,
-      interval,
-      status,
-      subscriptionId: data.subscription_id ?? null,
-      customerId: data.customer?.customer_id ?? null,
-      customerEmail: data.customer?.email ?? null,
-      mode: billingTestMode() ? "test" : "live",
-      updatedAt: new Date().toISOString(),
-    });
-    try {
-      await withWorkspace(
-        workspaceUid,
-        "",
-        () =>
-          appendAudit({
+    const result = await withWorkspace(
+      workspaceUid,
+      "",
+      async () => {
+        if (eventId && (await webhookEventProcessed(`dodo:${eventId}`))) return "duplicate";
+        const decision = decideTransition(await loadBilling(), {
+          provider: "dodo",
+          eventId,
+          eventAt,
+          subscriptionId: data.subscription_id ?? null,
+          customerId: data.customer?.customer_id ?? null,
+          customerEmail: data.customer?.email ?? null,
+          plan,
+          interval,
+          status,
+          mode: billingTestMode() ? "test" : "live",
+        });
+        if (decision.action === "ignore") return `ignored: ${decision.reason}`;
+        if (decision.action === "downgrade") await savePlan("trial");
+        else await savePlan(decision.plan);
+        await saveBilling(decision.record);
+        if (eventId) await recordWebhookEvent(`dodo:${eventId}`);
+        try {
+          await appendAudit({
             actor: data.customer?.email ?? "billing webhook",
             action: `billing.${type.replace(".", "_")}`,
-            detail: `${plan} subscription ${status}${billingTestMode() ? " - test mode" : ""}`,
-          }),
-        { useAdmin: true },
-      );
-    } catch {
-      // audit is best-effort
-    }
+            detail: `${plan} -> ${decision.action} (${decision.note})${billingTestMode() ? " - test mode" : ""}`,
+          });
+        } catch {
+          // audit is best-effort
+        }
+        return decision.action;
+      },
+      { useAdmin: true },
+    );
+    return Response.json({ received: true, result });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not apply billing update." }, { status: 500 });
   }
-  return Response.json({ received: true });
 }
