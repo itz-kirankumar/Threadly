@@ -332,7 +332,45 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
         <span>Click a row to read the answers</span>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-white/10">
+      {/* Mobile: stacked cards so the question text keeps full width */}
+      <div className="space-y-2 md:hidden">
+        {state.queries.map((query: TrackedQuery) => {
+          const queryResult = resultsByQuery.get(query.id);
+          const isOpen = open === query.id;
+          return (
+            <div key={query.id} className="rounded-xl border border-white/10">
+              <button
+                type="button"
+                onClick={() => setOpen(isOpen ? null : query.id)}
+                className="w-full px-3 py-3 text-left"
+              >
+                <p className="text-sm text-zinc-200">{query.text}</p>
+                <p className="mt-0.5 text-xs text-zinc-600">{query.intent}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  {columns.map((id) => (
+                    <span key={id} className="flex items-center gap-1.5 text-xs">
+                      <span className="text-zinc-500">{labelForProvider(id, providerLabels)}</span>
+                      <Cell result={queryResult?.results.find((r) => r.provider === id)} />
+                    </span>
+                  ))}
+                </div>
+              </button>
+              {isOpen && queryResult && (
+                <div className="border-t border-white/10 px-3 py-3">
+                  <AnswerDrawer queryResult={queryResult} brand={state.brand} providerOrder={providerOrder} providerLabels={providerLabels} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {!state.queries.length && (
+          <p className="rounded-xl border border-white/10 px-4 py-10 text-center text-sm text-zinc-500">
+            No questions tracked yet. Add the questions your buyers ask AI assistants.
+          </p>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-white/10 md:block">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">
