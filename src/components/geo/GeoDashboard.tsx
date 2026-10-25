@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { EmailAuthProvider, GoogleAuthProvider, getRedirectResult, linkWithCredential, linkWithRedirect, signOut, updateProfile, type User } from "firebase/auth";
+import { EmailAuthProvider, GoogleAuthProvider, getRedirectResult, linkWithCredential, linkWithPopup, linkWithRedirect, signOut, updateProfile, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 import type { MetricsSnapshot, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
 import SetupWizard from "./SetupWizard";
@@ -134,7 +134,15 @@ function SignInMethods({ user }: { user: User }) {
     setMessage("");
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    await linkWithRedirect(getFirebaseAuth().currentUser ?? user, provider);
+    const target = getFirebaseAuth().currentUser ?? user;
+    try {
+      await linkWithPopup(target, provider);
+      window.location.reload();
+    } catch (popupError) {
+      const code = (popupError as { code?: string })?.code;
+      if (code === "auth/popup-blocked") await linkWithRedirect(target, provider);
+      else if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") throw popupError;
+    }
   }
 
   async function linkPasswordAccount(event: React.FormEvent<HTMLFormElement>) {

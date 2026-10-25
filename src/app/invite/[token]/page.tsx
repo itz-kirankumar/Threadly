@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithRedirect, type User } from "firebase/auth";
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
 interface Preview {
@@ -55,7 +55,17 @@ export default function InvitePage() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      await signInWithRedirect(getFirebaseAuth(), provider);
+      const auth = getFirebaseAuth();
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (popupError) {
+        const code = (popupError as { code?: string })?.code;
+        if (code === "auth/popup-blocked") {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        throw popupError;
+      }
     } catch (caught) {
       const code = (caught as { code?: string })?.code;
       if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {

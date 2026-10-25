@@ -13,6 +13,7 @@ import {
   sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
+  signInWithPopup,
   signInWithRedirect,
   updateProfile,
   type ConfirmationResult,
@@ -66,7 +67,22 @@ export default function PortalLogin() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      await signInWithRedirect(getFirebaseAuth(), provider);
+      const auth = getFirebaseAuth();
+      try {
+        // Popup first: the redirect flow loses the session on return when the
+        // browser blocks third-party storage (Chrome + extensions), which
+        // dropped users back on the login page with no error.
+        await signInWithPopup(auth, provider);
+        router.replace("/portal");
+      } catch (popupError) {
+        const code = (popupError as { code?: string })?.code;
+        if (code === "auth/popup-blocked") {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return;
+        throw popupError;
+      }
     } catch {
       setError("Sign-in failed. Please try again.");
       setBusy(false);
