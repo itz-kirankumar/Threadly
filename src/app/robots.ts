@@ -12,7 +12,7 @@ export default function robots(): MetadataRoute.Robots {
       },
       {
         userAgent: ["GPTBot", "ChatGPT-User", "PerplexityBot", "ClaudeBot", "Amazonbot"],
-        allow: ["/", "/demo", "/security", "/terms", "/privacy"],
+        allow: ["/", "/demo", "/pricing", "/docs", "/blog", "/security", "/terms", "/privacy"],
         disallow: ["/api/", "/portal/"],
       },
     ],

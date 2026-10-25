@@ -8,6 +8,7 @@ export default function Footer() {
         <div className="flex gap-5">
           <Link href="/pricing" className="transition hover:text-zinc-300">Pricing</Link>
           <Link href="/docs" className="transition hover:text-zinc-300">Docs</Link>
+          <Link href="/blog" className="transition hover:text-zinc-300">Blog</Link>
           <Link href="/terms" className="transition hover:text-zinc-300">Terms</Link>
           <Link href="/privacy" className="transition hover:text-zinc-300">Privacy</Link>
           <Link href="/security" className="transition hover:text-zinc-300">Security</Link>
