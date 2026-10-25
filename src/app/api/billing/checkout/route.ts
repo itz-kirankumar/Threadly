@@ -1,7 +1,7 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
-import { billingConfigured, billingTestMode, dodoClient, isInterval, isPaidPlan, productFor } from "@/lib/billing/dodo";
+import { billingConfigured, billingTestMode, canCheckout, dodoClient, isInterval, isPaidPlan, productFor } from "@/lib/billing/dodo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +18,12 @@ export async function POST(request: Request) {
     if (access.role !== "owner") {
       return Response.json(
         { error: "Only the workspace owner can manage billing." },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (!canCheckout(access.identity.email)) {
+      return Response.json(
+        { error: "Billing is in test mode while launch is prepared - checkout is not open yet." },
         { status: 403, headers: { "Cache-Control": "no-store" } },
       );
     }

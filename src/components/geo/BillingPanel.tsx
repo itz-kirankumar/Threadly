@@ -15,6 +15,7 @@ interface BillingStatus {
   billingAvailable: boolean;
   testMode: boolean;
   isOwner: boolean;
+  canCheckout: boolean;
 }
 
 const PLANS = [
@@ -108,7 +109,10 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
             )}
           </div>
 
-          {status.billingAvailable && status.isOwner && (
+          {status.billingAvailable && status.isOwner && !status.canCheckout && (
+            <p className="rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-2.5 text-xs text-zinc-500">Billing is in test mode while launch is prepared - checkout opens when payments go live.</p>
+          )}
+          {status.billingAvailable && status.isOwner && status.canCheckout && (
             <>
               <div className="flex items-center gap-3 text-sm">
                 <span className={annual ? "text-zinc-500" : "text-zinc-200"}>Monthly</span>

@@ -49,3 +49,13 @@ export function isPaidPlan(value: unknown): value is PaidPlanId {
 export function isInterval(value: unknown): value is BillingInterval {
   return value === "monthly" || value === "annual";
 }
+
+/** While in test mode, only these emails can start checkout (comma-separated env). */
+export function canCheckout(email: string | null | undefined): boolean {
+  if (!billingTestMode()) return true;
+  const allowed = (process.env.BILLING_TEST_EMAILS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  return Boolean(email) && allowed.includes(email!.toLowerCase());
+}
