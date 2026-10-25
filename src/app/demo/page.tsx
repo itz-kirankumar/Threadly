@@ -1,7 +1,7 @@
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import GeoDashboard from "@/components/geo/GeoDashboard";
-import { buildDemoWorkspace } from "@/lib/geo/demo";
+import { buildDemoRunDetails, buildDemoWorkspace } from "@/lib/geo/demo";
 
 export const metadata = {
   title: "Live demo",
@@ -14,7 +14,7 @@ export default function DemoPage() {
     <div className="flex min-h-screen flex-col bg-zinc-950">
       <Navbar />
       <main className="mx-auto w-full max-w-6xl flex-grow px-6 py-10">
-        <GeoDashboard user={null} readOnly initialState={state} />
+        <GeoDashboard user={null} readOnly initialState={state} demoRunDetails={buildDemoRunDetails()} />
       </main>
       <Footer />
     </div>

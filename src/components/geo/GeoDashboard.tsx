@@ -33,6 +33,8 @@ interface Props {
   user: User | null;
   readOnly?: boolean;
   initialState?: WorkspaceState;
+  /** Read-only demo: per-run results served locally instead of the API. */
+  demoRunDetails?: Record<string, { queries: TrackedQuery[]; results: QueryResult[] }>;
 }
 
 function displayNameOf(user: User): string {
@@ -220,7 +222,7 @@ function SignInMethods({ user }: { user: User }) {
   );
 }
 
-export default function GeoDashboard({ user, readOnly = false, initialState }: Props) {
+export default function GeoDashboard({ user, readOnly = false, initialState, demoRunDetails }: Props) {
   const [state, setState] = useState<WorkspaceState | null>(initialState ?? null);
   const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(!initialState);
@@ -268,6 +270,11 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       }
       setExpandedRunId(runId);
       if (runDetails[runId]) return;
+      if (readOnly) {
+        // Demo mode has no API session - serve the bundled per-run results.
+        setRunDetails((prev) => ({ ...prev, [runId]: demoRunDetails?.[runId] ?? "error" }));
+        return;
+      }
       setRunDetails((prev) => ({ ...prev, [runId]: "loading" }));
       try {
         const detail = (await authedFetch(`/api/geo/run-results?runId=${encodeURIComponent(runId)}`)) as {
@@ -518,7 +525,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     <>
       {readOnly && (
         <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          Sample data for a fictional brand (“Loomify”). Sign in to track your own brand across ChatGPT, Claude and Gemini.
+          Sample data for a fictional brand (“Loomify”). Everything is clickable - open a question or a scan to read the full AI answers. Sign in to track your own brand across ChatGPT, Claude and Gemini.
         </div>
       )}
 

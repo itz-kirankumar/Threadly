@@ -93,11 +93,25 @@ const CELLS: Record<string, Record<string, Cell>> = {
   },
 };
 
-function buildResults(runId: string): QueryResult[] {
-  return DEMO_QUERIES.map((query) => ({
+function buildResults(runId: string, keepWins?: number): QueryResult[] {
+  // Historical runs show fewer brand wins, matching the snapshot ramp. Wins
+  // drop in a deterministic order so each run's answers stay stable.
+  const PROVIDERS = ["chatgpt", "claude", "gemini"] as const;
+  const winOrder: string[] = [];
+  DEMO_QUERIES.forEach((query, qi) => {
+    PROVIDERS.forEach((provider, pi) => {
+      if (CELLS[query.id][provider].brandMentioned) winOrder.push(`${query.id}:${provider}:${qi * 3 + pi}`);
+    });
+  });
+  const keep = new Set(keepWins === undefined ? winOrder : winOrder.slice(0, keepWins));
+  return DEMO_QUERIES.map((query, qi) => ({
     queryId: query.id,
-    results: (["chatgpt", "claude", "gemini"] as const).map((provider) => {
-      const cell = CELLS[query.id][provider];
+    results: PROVIDERS.map((provider, pi) => {
+      const rawCell = CELLS[query.id][provider];
+      const isWin = rawCell.brandMentioned && keep.has(`${query.id}:${provider}:${qi * 3 + pi}`);
+      const cell: Cell = isWin
+        ? rawCell
+        : { ...rawCell, brandMentioned: false, brandCited: false, brandPosition: null, citations: rawCell.citations.filter(([domain]) => domain !== "loomify.io") };
       const brandCitationCount = cell.citations.filter(([domain]) => domain === "loomify.io").length;
       const result: ProviderResult = {
         provider,
@@ -117,6 +131,20 @@ function buildResults(runId: string): QueryResult[] {
       return result;
     }),
   }));
+}
+
+// Per-run detail for the demo's expandable scan history: the latest run plus
+// five historical runs with progressively fewer brand wins (matches the
+// snapshot ramp 38% -> 72% mention rate).
+export function buildDemoRunDetails(): Record<string, { queries: TrackedQuery[]; results: QueryResult[] }> {
+  const historicalWins = [7, 8, 9, 10, 11];
+  const details: Record<string, { queries: TrackedQuery[]; results: QueryResult[] }> = {
+    "demo-run-6": { queries: DEMO_QUERIES, results: buildResults("demo-run-6") },
+  };
+  historicalWins.forEach((wins, i) => {
+    details[`demo-run-${i + 1}`] = { queries: DEMO_QUERIES, results: buildResults(`demo-run-${i + 1}`, wins) };
+  });
+  return details;
 }
 
 export function buildDemoWorkspace(): WorkspaceState {
