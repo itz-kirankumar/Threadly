@@ -158,7 +158,7 @@ export function buildCompetitorComparison(state: WorkspaceState): CompetitorRow[
   ];
 
   for (const competitor of state.brand.competitors) {
-    const aliases = [competitor.name, ...competitor.aliases].map((n) => n.toLowerCase());
+    const aliases = [competitor.name, ...(competitor.aliases ?? [])].map((n) => n.toLowerCase());
     const mentioned = scanned.filter((result) =>
       result.competitorsMentioned.some((name) => aliases.includes(name.toLowerCase())) ||
       aliases.some((alias) => result.competitorsMentioned.some((m) => m.toLowerCase().includes(alias) || alias.includes(m.toLowerCase()))),
