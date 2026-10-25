@@ -16,18 +16,18 @@ interface Tier {
 
 const TIERS: Tier[] = [
   {
-    name: "Starter",
+    name: "Trial",
     monthly: 0,
     annualMonthly: 0,
     blurb: "For founders getting their first read on AI visibility.",
-    cta: "Start free",
+    cta: "Start free trial",
     features: [
       "10 tracked buyer questions",
+      "1 full scan across all providers",
       "ChatGPT, Claude and Gemini",
-      "Daily automatic scans",
       "Mention rate, share of voice, citations",
       "AI crawler access check",
-      "30-day scan history",
+      "7-day scan history",
       "1 workspace seat",
     ],
   },
@@ -87,12 +87,13 @@ const TIERS: Tier[] = [
 
 const COMPARISON: { label: string; values: (string | boolean)[] }[] = [
   { label: "Tracked buyer questions", values: ["10", "50", "150", "Unlimited"] },
+  { label: "Full scans", values: ["1 total", "Unlimited", "Unlimited", "Unlimited"] },
   { label: "ChatGPT, Claude and Gemini", values: [true, true, true, true] },
   { label: "Custom OpenAI-compatible providers", values: [false, true, true, true] },
   { label: "Bring your own API keys", values: [false, true, true, true] },
   { label: "Visibility gap recommendations", values: [false, true, true, true] },
   { label: "AI crawler access check", values: [true, true, true, true] },
-  { label: "Scan history", values: ["30 days", "Unlimited", "Unlimited", "Unlimited"] },
+  { label: "Scan history", values: ["7 days", "Unlimited", "Unlimited", "Unlimited"] },
   { label: "Workspace seats", values: ["1", "5", "25", "Unlimited"] },
   { label: "Roles and invite links", values: [false, true, true, true] },
   { label: "Activity log (audit trail)", values: [false, false, true, true] },
@@ -113,7 +114,7 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
   return (
     <div>
       <p className="mx-auto w-fit rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-center text-sm font-medium text-emerald-200">
-        Early access: every plan is free right now - pick any plan, no card needed.
+        Early access: paid plans are free until billing launches - no card collected today.
       </p>
 
       <div className="mt-6 flex items-center justify-center gap-3 text-sm">
@@ -164,7 +165,7 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
                 {annual && tier.unitAnchor ? ` · ${tier.unitAnchor}` : ""}
               </p>
             )}
-            {tier.monthly === 0 && <p className="mt-1 text-xs text-zinc-500">Free forever</p>}
+            {tier.monthly === 0 && <p className="mt-1 text-xs text-zinc-500">Free, no card needed</p>}
             <p className="mt-3 text-sm leading-relaxed text-zinc-400">{tier.blurb}</p>
             <Link
               href="/portal"

@@ -3,6 +3,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { runScan } from "@/lib/geo/engine";
 import { loadBrand, loadKeySettings, loadQueries, saveRun } from "@/lib/geo/store";
+import { loadPlan, loadRunCount, PLAN_LIMITS, planBlockResponse } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 
 export const runtime = "nodejs";
@@ -30,8 +31,15 @@ export async function POST(request: Request) {
           { status: 429, headers: { "Cache-Control": "no-store" } },
         );
       }
-      const [brand, queries, keySettings] = await Promise.all([loadBrand(), loadQueries(), loadKeySettings()]);
+      const [brand, queries, keySettings, plan] = await Promise.all([loadBrand(), loadQueries(), loadKeySettings(), loadPlan(access.identity.email)]);
       if (!brand) throw new Error("Set up your brand profile first.");
+      const scanCap = PLAN_LIMITS[plan].scans;
+      if (scanCap !== null && (await loadRunCount()) >= scanCap) {
+        return planBlockResponse(
+          `Your free trial includes ${scanCap} full scan - and it is used. Upgrade to Pro or Growth for unlimited scans (paid plans are free during early access).`,
+          plan,
+        );
+      }
       const { run, results, snapshot, queries: scannedQueries } = await runScan(brand, queries, keySettings, queryIds);
       await saveRun(run, results, snapshot, scannedQueries);
       await appendAudit({

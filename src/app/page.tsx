@@ -174,7 +174,7 @@ export default function LandingPage() {
                 Free during early access
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-                Competitive tiers for when billing launches - every plan is free today, no card collected.
+                Paid plans are free until billing launches - the trial always stays free, no card needed.
               </p>
             </div>
             </Reveal>

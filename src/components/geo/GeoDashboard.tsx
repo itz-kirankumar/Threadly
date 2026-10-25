@@ -407,15 +407,22 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
           </p>
         </div>
         {!readOnly && (
-          <button
-            type="button"
-            data-tour="run-scan"
-            onClick={runScan}
-            disabled={scanning || !state.queries.length}
-            className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
-          >
-            {scanning ? "Scanning AI providers…" : "Run scan now"}
-          </button>
+          <div className="flex items-center gap-3">
+            {state.plan === "trial" && (
+              <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200">
+                Free trial - 1 scan included
+              </span>
+            )}
+            <button
+              type="button"
+              data-tour="run-scan"
+              onClick={runScan}
+              disabled={scanning || !state.queries.length}
+              className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
+            >
+              {scanning ? "Scanning AI providers…" : "Run scan now"}
+            </button>
+          </div>
         )}
       </div>
 

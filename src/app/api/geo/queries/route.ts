@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit, deleteQuery, loadQueries, saveQuery } from "@/lib/geo/store";
+import { loadPlan, PLAN_LIMITS, planBlockResponse } from "@/lib/geo/plan";
 import { classifyIntent } from "@/lib/geo/engine";
 import type { TrackedQuery } from "@/lib/geo/types";
 
@@ -19,8 +20,15 @@ export async function POST(request: Request) {
     }
     const text = body.text.trim().slice(0, 200);
     return await inWorkspace(access, async () => {
-      const queries = await loadQueries();
-      if (queries.length >= MAX_QUERIES) throw new RequestError(`Track up to ${MAX_QUERIES} questions.`, 400);
+      const [queries, plan] = await Promise.all([loadQueries(), loadPlan(access.identity.email)]);
+      const planCap = PLAN_LIMITS[plan].queries ?? MAX_QUERIES;
+      const cap = Math.min(MAX_QUERIES, planCap);
+      if (queries.length >= cap) {
+        if (planCap < MAX_QUERIES) {
+          return planBlockResponse(`Your ${plan} plan tracks up to ${planCap} questions. Upgrade for more.`, plan);
+        }
+        throw new RequestError(`Track up to ${MAX_QUERIES} questions.`, 400);
+      }
       if (queries.some((q) => q.text.toLowerCase() === text.toLowerCase())) {
         throw new RequestError("You are already tracking that question.", 400);
       }

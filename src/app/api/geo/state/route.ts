@@ -1,3 +1,4 @@
+import { loadPlan } from "@/lib/geo/plan";
 import { errorResponse } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadKeySettings, loadWorkspace } from "@/lib/geo/store";
@@ -10,10 +11,11 @@ export async function GET(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "view");
     return await inWorkspace(access, async () => {
-      const [state, keySettings] = await Promise.all([loadWorkspace(), loadKeySettings()]);
+      const [state, keySettings, plan] = await Promise.all([loadWorkspace(), loadKeySettings(), loadPlan(access.identity.email)]);
       state.providers = providerKeyStatuses(keySettings);
       return Response.json({
         ...state,
+        plan,
         team: {
           role: access.role,
           shared: access.shared,

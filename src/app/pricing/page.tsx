@@ -6,7 +6,7 @@ import Pricing from "@/components/landing/Pricing";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Threadly pricing: free starter plan, Pro and Growth for marketing teams, and Enterprise for global brands. Every plan is free during early access.",
+    "Threadly pricing: free trial (10 questions, 1 full scan), Pro and Growth for marketing teams, and Enterprise for global brands. Paid plans are free during early access.",
 };
 
 export default function PricingPage() {

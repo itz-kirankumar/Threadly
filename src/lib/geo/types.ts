@@ -140,4 +140,5 @@ export interface WorkspaceState {
   runs: ScanRun[];
   providers: ProviderKeyStatus[];
   team?: WorkspaceTeamInfo;
+  plan?: "trial" | "pro" | "growth" | "enterprise";
 }

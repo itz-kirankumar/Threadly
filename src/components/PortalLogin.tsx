@@ -3,14 +3,40 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
-import { getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signInWithRedirect } from "firebase/auth";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  createUserWithEmailAndPassword,
+  getRedirectResult,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  RecaptchaVerifier,
+  sendEmailVerification,
+  signInWithEmailAndPassword,
+  signInWithPhoneNumber,
+  signInWithRedirect,
+  updateProfile,
+  type ConfirmationResult,
+} from "firebase/auth";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
+
+type Method = "email" | "phone";
 
 export default function PortalLogin() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [method, setMethod] = useState<Method>("email");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("+91");
+  const [otp, setOtp] = useState("");
+  const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
+  const recaptchaContainer = useRef<HTMLDivElement>(null);
+  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
   useEffect(() => {
     let unsubscribe = () => {};
@@ -20,22 +46,19 @@ export default function PortalLogin() {
         if (user) router.replace("/portal");
       });
       getRedirectResult(auth).catch((caught) => {
-        const code = (caught as { code?: string })?.code;
-        if (code === "auth/unauthorized-domain") {
-          const host = typeof window !== "undefined" ? window.location.hostname : "this domain";
-          setError(`Add ${host} to the Firebase project's authorized domains, then try again.`);
-        } else {
-          setError(caught instanceof Error ? caught.message : "Sign-in failed. Please try again.");
-        }
+        setError(caught instanceof Error ? caught.message : "Sign-in failed. Please try again.");
       });
       initializeFirebaseAnalytics().catch(() => undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Firebase is not configured.");
     }
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      recaptchaVerifier.current?.clear();
+    };
   }, [router]);
 
-  async function login(event: FormEvent<HTMLFormElement>) {
+  async function loginGoogle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError("");
@@ -43,12 +66,90 @@ export default function PortalLogin() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       await signInWithRedirect(getFirebaseAuth(), provider);
-      // Redirect navigates away; onAuthStateChanged + getRedirectResult finish sign-in on return.
     } catch {
       setError("Sign-in failed. Please try again.");
       setBusy(false);
     }
   }
+
+  async function loginEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    const auth = getFirebaseAuth();
+    try {
+      if (mode === "signup") {
+        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        if (name.trim()) await updateProfile(credential.user, { displayName: name.trim() });
+        await sendEmailVerification(credential.user);
+        setNotice("Account created. We sent a verification link to your email - open it to confirm your address.");
+      } else {
+        const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        if (!credential.user.emailVerified) {
+          await sendEmailVerification(credential.user);
+          setNotice("Your email is not verified yet. We sent a fresh verification link - open it, then sign in again.");
+        }
+      }
+    } catch (caught) {
+      const code = (caught as { code?: string })?.code;
+      if (code === "auth/email-already-in-use") setError("That email already has an account - sign in instead.");
+      else if (code === "auth/invalid-credential" || code === "auth/wrong-password") setError("Email or password is incorrect.");
+      else if (code === "auth/weak-password") setError("Password needs at least 6 characters.");
+      else if (code === "auth/user-not-found") setError("No account with that email - create one instead.");
+      else setError(caught instanceof Error ? caught.message : "Email sign-in failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const auth = getFirebaseAuth();
+      if (!recaptchaVerifier.current && recaptchaContainer.current) {
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaContainer.current, { size: "invisible" });
+      }
+      const verifier = recaptchaVerifier.current;
+      if (!verifier) throw new Error("Verification widget did not load. Refresh and try again.");
+      const result = await signInWithPhoneNumber(auth, phone.trim(), verifier);
+      setConfirmation(result);
+      setNotice(`Code sent to ${phone.trim()}. Enter it below.`);
+    } catch (caught) {
+      const code = (caught as { code?: string })?.code;
+      if (code === "auth/invalid-phone-number") setError("Enter the full number with country code, like +919876543210.");
+      else if (code === "auth/too-many-requests") setError("Too many attempts. Wait a few minutes and try again.");
+      else setError(caught instanceof Error ? caught.message : "Could not send the code.");
+      recaptchaVerifier.current?.clear();
+      recaptchaVerifier.current = null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!confirmation) return;
+    setBusy(true);
+    setError("");
+    try {
+      await confirmation.confirm(otp.trim());
+      router.replace("/portal");
+    } catch (caught) {
+      const code = (caught as { code?: string })?.code;
+      if (code === "auth/invalid-verification-code") setError("That code is not right - check the SMS and try again.");
+      else setError(caught instanceof Error ? caught.message : "Verification failed.");
+      setBusy(false);
+    }
+  }
+
+  const input =
+    "w-full rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-violet-400/60";
+  const primaryButton =
+    "w-full rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-60";
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950">
@@ -64,10 +165,10 @@ export default function PortalLogin() {
         <div className="w-full max-w-md">
           <h1 className="text-2xl font-bold text-white">Sign in to your workspace</h1>
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-            Your GEO workspace — brand profile, tracked questions and scan history — is private to your Google
-            account.
+            Your GEO workspace — brand profile, tracked questions and scan history — is private to your account.
           </p>
-          <form onSubmit={login} className="mt-8">
+
+          <form onSubmit={loginGoogle} className="mt-8">
             <button
               type="submit"
               disabled={busy}
@@ -79,9 +180,92 @@ export default function PortalLogin() {
                 <path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.29a12 12 0 0 0 0 10.74l3.98-3.1z"/>
                 <path fill="#EA4335" d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.42-3.42A11.97 11.97 0 0 0 12 0 12 12 0 0 0 1.29 6.63l3.98 3.1C6.22 6.88 8.87 4.77 12 4.77z"/>
               </svg>
-              {busy ? "Opening Google…" : "Continue with Google"}
+              {busy ? "Working…" : "Continue with Google"}
             </button>
           </form>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.08]" />
+            <span className="text-xs text-zinc-600">or</span>
+            <div className="h-px flex-1 bg-white/[0.08]" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+            {(["email", "phone"] as Method[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => { setMethod(m); setError(""); setNotice(""); }}
+                className={`rounded-md py-1.5 text-sm font-medium transition ${method === m ? "bg-violet-500/20 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+              >
+                {m === "email" ? "Email" : "Phone"}
+              </button>
+            ))}
+          </div>
+
+          {method === "email" && (
+            <form onSubmit={loginEmail} className="mt-4 space-y-3">
+              {mode === "signup" && (
+                <input className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name" required />
+              )}
+              <input className={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" required />
+              <input className={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signup" ? "Choose a password (6+ characters)" : "Password"} autoComplete={mode === "signup" ? "new-password" : "current-password"} required minLength={6} />
+              <button type="submit" disabled={busy} className={primaryButton}>
+                {busy ? "Working…" : mode === "signup" ? "Create account" : "Sign in with email"}
+              </button>
+              <p className="text-center text-sm text-zinc-500">
+                {mode === "signup" ? "Already have an account?" : "New to Threadly?"}{" "}
+                <button
+                  type="button"
+                  onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setError(""); setNotice(""); }}
+                  className="text-violet-300 hover:text-violet-200"
+                >
+                  {mode === "signup" ? "Sign in" : "Create one"}
+                </button>
+              </p>
+            </form>
+          )}
+
+          {method === "phone" && !confirmation && (
+            <form onSubmit={sendOtp} className="mt-4 space-y-3">
+              <input className={input} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+919876543210" autoComplete="tel" required />
+              <button type="submit" disabled={busy} className={primaryButton}>
+                {busy ? "Sending…" : "Send verification code"}
+              </button>
+              <p className="text-center text-xs text-zinc-600">We text you a one-time code. Standard SMS rates apply.</p>
+            </form>
+          )}
+
+          {method === "phone" && confirmation && (
+            <form onSubmit={verifyOtp} className="mt-4 space-y-3">
+              <input
+                className={`${input} text-center text-lg tracking-[0.3em]`}
+                inputMode="numeric"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="••••••"
+                autoComplete="one-time-code"
+                required
+              />
+              <button type="submit" disabled={busy || otp.length !== 6} className={primaryButton}>
+                {busy ? "Verifying…" : "Verify and sign in"}
+              </button>
+              <p className="text-center text-sm text-zinc-500">
+                Wrong number?{" "}
+                <button type="button" onClick={() => { setConfirmation(null); setOtp(""); setNotice(""); }} className="text-violet-300 hover:text-violet-200">
+                  Go back
+                </button>
+              </p>
+            </form>
+          )}
+
+          <div ref={recaptchaContainer} />
+
+          {notice && (
+            <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+              <p className="text-sm text-emerald-200">{notice}</p>
+            </div>
+          )}
           {error && (
             <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-rose-300">Sign-in needs attention</p>
