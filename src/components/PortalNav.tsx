@@ -119,9 +119,6 @@ export default function PortalNav() {
           </span>
         </Link>
         <nav className="flex items-center gap-5 text-sm">
-          <Link href="/demo" className="hidden text-zinc-400 transition hover:text-white sm:inline">
-            Live demo
-          </Link>
           {user ? (
             <ProfileMenu user={user} />
           ) : (
