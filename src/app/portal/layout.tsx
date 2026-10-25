@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Enterprise GEO Workspace · Threadly",
+  title: "Threadly Workspace",
   robots: { index: false, follow: false },
 };
 

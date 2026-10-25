@@ -6,42 +6,17 @@
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid",
-        "opportunities": {
-          ".indexOn": ["observed_at", "status", "platform", "intent", "source_kind", "relevance"]
-        },
-        "drafts": {
-          ".indexOn": ["created_at", "status", "platform", "scheduled_at", "kind"]
-        },
-        "leads": {
-          ".indexOn": ["created_at", "stage", "platform", "owner", "email", "meetingStart"]
-        },
-        "outreachEmails": {
-          ".indexOn": ["created_at", "status", "lead_id", "recipient"]
-        },
-        "workflows": {
-          ".indexOn": ["created_at", "status", "trigger", "category", "enabled"]
-        },
-        "team": {
-          ".indexOn": ["role", "status", "email", "joined_at", "timezone"]
-        },
-        "invites": {
-          ".indexOn": ["status", "email", "created_at", "token"]
+        "geo": {
+          "queries": {
+            ".indexOn": ["createdAt"]
+          },
+          "runs": {
+            ".indexOn": ["startedAt"]
+          },
+          "snapshots": {
+            ".indexOn": ["date"]
+          }
         }
-      }
-    },
-    "betaWaitlist": {
-      ".read": "auth != null && auth.token.email_verified === true && auth.token.email === 'kiran160703kumar@gmail.com'",
-      "$uid": {
-        ".read": "auth != null && auth.token.email_verified === true && (auth.uid === $uid || auth.token.email === 'kiran160703kumar@gmail.com')",
-        ".write": "auth != null && auth.token.email_verified === true && (auth.token.email === 'kiran160703kumar@gmail.com' || (auth.uid === $uid && (!data.exists() || data.child('status').val() !== 'approved') && newData.child('status').val() === 'pending' && newData.child('email').val() === auth.token.email))",
-        ".validate": "newData.hasChildren(['uid', 'email', 'fullName', 'startupName', 'industry', 'url', 'challenge1', 'challenge2', 'status', 'createdAt']) && newData.child('uid').val() === $uid && (newData.child('status').val() === 'pending' || newData.child('status').val() === 'approved' || newData.child('status').val() === 'rejected')"
-      }
-    },
-    "communityMembers": {
-      "$uid": {
-        ".read": "auth != null && auth.token.email_verified === true && auth.uid === $uid",
-        ".write": "auth != null && auth.token.email_verified === true && auth.uid === $uid && newData.child('email').val() === auth.token.email",
-        ".validate": "newData.hasChildren(['email', 'uid', 'createdAt']) && newData.child('uid').val() === $uid"
       }
     },
     "apiRateLimits": {

@@ -5,23 +5,28 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
+const description =
+  "Threadly is the enterprise GEO intelligence platform: monitor brand mentions and citation share across ChatGPT, Claude, Gemini and Perplexity.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.gothreadly.live"),
   title: {
-    default: "Threadly — Enterprise Generative Engine Optimization (GEO)",
-    template: "%s · Threadly Enterprise",
+    default: "Threadly — Enterprise GEO Intelligence",
+    template: "%s · Threadly",
   },
-  description:
-    "Enterprise GEO Platform: Monitor brand recommendations, citation share, and competitor displacement across ChatGPT, Perplexity, Gemini, and Claude.",
-  applicationName: "Threadly Enterprise GEO",
+  description,
+  applicationName: "Threadly",
   keywords: [
-    "enterprise geo",
+    "GEO",
     "generative engine optimization",
-    "ai answer share",
-    "chatgpt brand tracking",
-    "perplexity citations",
-    "llm answer intelligence",
-    "ai share of voice",
+    "AI visibility",
+    "brand monitoring",
+    "ChatGPT mentions",
+    "citation share",
+    "share of voice",
+    "Perplexity",
+    "Claude",
+    "Gemini",
   ],
   icons: {
     icon: [
@@ -31,25 +36,16 @@ export const metadata: Metadata = {
     apple: [{ url: "/icon.jpg", type: "image/jpeg" }],
   },
   openGraph: {
-    title: "Threadly — Enterprise Generative Engine Optimization (GEO)",
-    description:
-      "Monitor brand recommendations, citation share, and competitor displacement across ChatGPT, Perplexity, Gemini, and Claude.",
-    siteName: "Threadly Enterprise GEO",
+    title: "Threadly — Enterprise GEO Intelligence",
+    description,
+    siteName: "Threadly",
     type: "website",
-    images: [
-      {
-        url: "/logo.png",
-        width: 1200,
-        height: 630,
-        alt: "Threadly Enterprise GEO",
-      },
-    ],
+    images: [{ url: "/logo.png", width: 1200, height: 630, alt: "Threadly GEO Intelligence" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Threadly — Enterprise Generative Engine Optimization (GEO)",
-    description:
-      "Monitor brand recommendations, citation share, and competitor displacement across ChatGPT, Perplexity, Gemini, and Claude.",
+    title: "Threadly — Enterprise GEO Intelligence",
+    description,
     images: ["/logo.png"],
   },
 };
@@ -62,30 +58,16 @@ export default function RootLayout({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Threadly Enterprise GEO",
+    name: "Threadly",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
-    offers: {
-      "@type": "Offer",
-      price: "1500",
-      priceCurrency: "USD",
-    },
-    description:
-      "Enterprise GEO Platform: Monitor brand recommendations, citation share, and competitor displacement across ChatGPT, Perplexity, Gemini, and Claude.",
+    description,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD", description: "Free while in early access" },
   };
-
   return (
-    <html lang="en">
-      <head>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-      </head>
-      <body
-        suppressHydrationWarning
-        className={`${inter.variable} ${mono.variable} font-sans antialiased bg-[#07090e] text-[#f0f3f8]`}
-      >
+    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
+      <body className="font-sans">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
         {children}
       </body>
     </html>

@@ -1,17 +1,22 @@
-import EnterpriseGeoDashboard from "@/components/EnterpriseGeoDashboard";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import GeoDashboard from "@/components/geo/GeoDashboard";
+import { buildDemoWorkspace } from "@/lib/geo/demo";
 
 export const metadata = {
-  title: "Enterprise GEO Interactive Demo · Threadly",
-  description: "Live interactive demo of Threadly Enterprise GEO Intelligence Platform.",
+  title: "Live demo",
+  description: "A read-only Threadly GEO workspace with sample data - no sign-in required.",
 };
 
 export default function DemoPage() {
+  const state = buildDemoWorkspace();
   return (
-    <div>
-      <div className="bg-gradient-to-r from-amber-500/20 via-[#ff4500]/20 to-purple-500/20 border-b border-white/10 px-4 py-2 text-center text-xs font-mono text-amber-300">
-        ⚡ <strong>ENTERPRISE GEO LIVE DEMO</strong> — Showing real-time generative answer share and citation analytics for enterprise SaaS.
-      </div>
-      <EnterpriseGeoDashboard initialBrand="stripe" />
+    <div className="flex min-h-screen flex-col bg-zinc-950">
+      <Navbar />
+      <main className="mx-auto w-full max-w-6xl flex-grow px-6 py-10">
+        <GeoDashboard user={null} readOnly initialState={state} />
+      </main>
+      <Footer />
     </div>
   );
 }

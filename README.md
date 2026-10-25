@@ -1,47 +1,67 @@
-# Threadly — Enterprise Generative Engine Optimization (GEO) Intelligence Platform
+# Threadly — Enterprise GEO Intelligence
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Threadly measures how AI assistants talk about your brand. It asks ChatGPT,
+Claude, Gemini and Perplexity the questions your buyers ask, then tracks
+whether the answers mention you, cite your website, and how you rank against
+your competitors — scan after scan.
 
-**One dedicated enterprise wedge:** Threadly monitors brand recommendations, citation share, and competitor displacement across **ChatGPT**, **Perplexity**, **Google Gemini**, and **Claude**.
+## What it does
 
-When enterprise buyers ask conversational AI models for software recommendations, Threadly tracks whether your brand is cited, what sources influence the answer, and which competitors are winning share of voice.
+- **Brand setup** — name, domain, aliases and up to 8 competitors.
+- **Question tracking** — the buyer questions you want to win ("best async
+  video tools", "Loom vs Vidyard"), with AI-generated suggestions.
+- **Four-provider scans** — every question is asked to ChatGPT (OpenAI
+  Responses API + web search), Claude (Anthropic + web search), Gemini
+  (Google Search grounding) and Perplexity (Sonar, native citations).
+- **GEO metrics** — mention rate, citation share, share of voice and average
+  first-mention position, per provider and per question, with trend
+  snapshots across runs.
+- **Citation leaderboard** — which domains the assistants cite in your
+  category, labelled yours / competitor / source.
+- **Public demo** — `/demo` renders a read-only workspace with clearly
+  labelled sample data (fictional brand "Loomify"), no sign-in required.
+- **Scheduled scans** — daily Vercel cron scans every workspace when the
+  Firebase service-account variables are set.
 
----
+## Stack
 
-## Architecture & Features
+Next.js 15 (App Router) · React 19 · Firebase Auth (Google sign-in) ·
+Firebase Realtime Database · Tailwind CSS 4 · Vercel cron.
 
-- **Multi-Model Generative Scanner**: Real-time evaluation across OpenAI GPT-4o, Perplexity Sonar Pro, Google Gemini 2.5 Flash, and Claude 3.5 Sonnet.
-- **AI Share of Voice (SoV) & Ranking**: Percentage of buyer prompts where your brand is mentioned, position rank (#1 primary vs alternative), and net model sentiment.
-- **Citation Attribution Graph**: Source-level audit of every domain cited by LLMs (e.g. G2, Gartner, TechCrunch, Reddit, GitHub, Docs).
-- **Citation Gap Identification**: Highlights exact high-authority domains where competitors are cited, but your brand is absent, with actionable optimization guidance.
-- **Enterprise Workspaces**: Built-in support for enterprise profiles (Stripe, Datadog, Snowflake, Threadly) and custom enterprise prompt matrixes.
+## Run locally
 
----
+```bash
+npm ci
+cp .env.example .env.local   # fill in Firebase + at least one provider key
+npm run dev
+```
 
-## Routes
+Open http://localhost:3000 — the landing page links to the demo and the
+workspace (`/portal`, Google sign-in).
 
-- `/` — Enterprise GEO Landing Page with real-time AI prompt simulator.
-- `/demo` — Interactive Enterprise GEO Dashboard with pre-configured enterprise SaaS benchmarks.
-- `/portal` — Full Enterprise GEO Command Center.
-- `/api/geo/scan` — API route to execute live multi-model generative visibility scans.
+## Environment
 
----
+See `.env.example`. The app works with any subset of the four provider keys
+— providers without a key show as "not configured". All four are needed for
+full coverage. Never enable `ENABLE_DEMO_MODE` in production: it exists only
+for local development with an in-memory store that never calls paid APIs.
 
-## Local Setup
+## Deployment (Vercel)
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+1. Import the repo, set every variable from `.env.example` that you use.
+2. Push to `main` — Vercel deploys automatically.
+3. Scheduled scans: create a service account in the Firebase project
+   (Project settings → Service accounts), add `FIREBASE_ADMIN_*` and a random
+   `CRON_SECRET`. `vercel.json` registers a daily 03:00 UTC cron that calls
+   `/api/geo/cron`, which scans every workspace with a brand profile.
+4. Long scans: the scan route sets `maxDuration = 120` and the cron route
+   300. On the Hobby plan (60s cap), keep tracked questions to ~6 or upgrade.
 
-2. Run development server:
-   ```bash
-   npm run dev
-   ```
+## Security model
 
-3. Build for production:
-   ```bash
-   npm run build
-   ```
-
-4. Open [http://localhost:3000](http://localhost:3000) to view the platform.
+- All AI provider keys are server-only; the client never sees them.
+- API routes verify the Firebase ID token on every request and scope all
+  data to `users/<uid>` via `database.rules.json`.
+- Scan runs are rate-limited per user (6/hour) with an atomic counter.
+- The legacy `demo-token` bypass is gated behind `ENABLE_DEMO_MODE=false`
+  and never reaches paid providers.
