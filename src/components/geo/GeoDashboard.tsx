@@ -12,6 +12,10 @@ import TeamPanel from "./TeamPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import {
   buildCitationLeaderboard,
+  buildCompetitorComparison,
+  classifySourceDomain,
+  downloadCsv,
+  SOURCE_TYPE_LABELS,
   colorForProvider,
   delta,
   formatDateTime,
@@ -134,6 +138,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
 
   const latest = state?.snapshots.length ? state.snapshots[state.snapshots.length - 1] : null;
   const citations = useMemo(() => (state ? buildCitationLeaderboard(state) : []), [state]);
+  const competitorRows = useMemo(() => (state ? buildCompetitorComparison(state) : []), [state]);
 
   const providerOrder = useMemo(
     () => (state?.providers?.length ? state.providers.map((provider) => provider.id) : []),
@@ -395,6 +400,39 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             <TrendChart snapshots={state.snapshots} />
           </div>
 
+          {competitorRows.length > 1 && (
+            <div className="overflow-hidden rounded-xl border border-white/10">
+              <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3">
+                <p className="text-sm font-medium text-zinc-300">You vs competitors - latest scan</p>
+              </div>
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-zinc-500">
+                    <th className="px-4 py-2.5 font-medium">Brand</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Visibility</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Mentioned in</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Domain cited in</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {competitorRows.map((row) => (
+                    <tr key={row.domain} className={`border-b border-white/5 ${row.isBrand ? "bg-violet-500/[0.06]" : ""}`}>
+                      <td className="px-4 py-2.5">
+                        <span className={row.isBrand ? "font-medium text-violet-200" : "text-zinc-200"}>{row.name}</span>
+                        <span className="ml-2 text-xs text-zinc-600">{row.domain}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className={row.isBrand ? "font-semibold text-violet-200" : "text-zinc-300"}>{row.visibility}%</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-zinc-400">{row.mentioned} of {row.total} answers</td>
+                      <td className="px-4 py-2.5 text-right text-zinc-400">{row.citationCount} of {row.total} answers</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {!latest && (
             <p className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-center text-sm text-zinc-400">
               No scans yet. {readOnly ? "" : "Add buyer questions, then run your first scan to measure AI visibility."}
@@ -426,6 +464,33 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       )}
 
       {tab === "citations" && (
+        <div className="space-y-3">
+          {!readOnly && citations.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() =>
+                  downloadCsv(
+                    `threadly-citations-${state.brand?.domain ?? "workspace"}.csv`,
+                    [
+                      ["domain", "type", "source_type", "cited_in_answers", "example_url", "example_title"],
+                      ...citations.map((row) => [
+                        row.domain,
+                        row.kind === "brand" ? "you" : row.kind,
+                        row.kind === "other" ? SOURCE_TYPE_LABELS[classifySourceDomain(row.domain)] : "",
+                        String(row.count),
+                        row.exampleUrl,
+                        row.exampleTitle,
+                      ]),
+                    ],
+                  )
+                }
+                className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-white/[0.06]"
+              >
+                Export CSV
+              </button>
+            </div>
+          )}
         <div className="overflow-hidden rounded-xl border border-white/10">
           <table className="w-full text-left text-sm">
             <thead>
@@ -453,7 +518,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
                             : "bg-white/5 text-zinc-400"
                       }`}
                     >
-                      {row.kind === "brand" ? "You" : row.kind === "competitor" ? "Competitor" : "Source"}
+                      {row.kind === "brand" ? "You" : row.kind === "competitor" ? "Competitor" : SOURCE_TYPE_LABELS[classifySourceDomain(row.domain)]}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right text-zinc-300">{row.count}</td>
@@ -468,6 +533,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
               )}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 

@@ -91,3 +91,99 @@ export function colorForProvider(id: GeoProviderId): string {
 export function labelForProvider(id: GeoProviderId, labels?: Record<string, string>): string {
   return labels?.[id] ?? PROVIDER_LABELS[id] ?? id.replace(/^custom-/, "").replace(/-/g, " ");
 }
+
+// ---- Competitive intelligence derivations (all computed from real scan data) ----
+
+export type SourceType = "ugc" | "reference" | "editorial";
+
+const UGC_DOMAINS = [
+  "reddit.com", "quora.com", "youtube.com", "stackoverflow.com", "stackexchange.com",
+  "x.com", "twitter.com", "facebook.com", "tiktok.com", "instagram.com", "linkedin.com",
+  "medium.com", "discord.com", "news.ycombinator.com", "producthunt.com",
+];
+
+const REFERENCE_DOMAINS = [
+  "wikipedia.org", "investopedia.com", "britannica.com", "crunchbase.com", "wikidata.org",
+];
+
+export function classifySourceDomain(domain: string): SourceType {
+  const d = domain.toLowerCase();
+  if (UGC_DOMAINS.some((u) => d === u || d.endsWith(`.${u}`))) return "ugc";
+  if (REFERENCE_DOMAINS.some((r) => d === r || d.endsWith(`.${r}`))) return "reference";
+  if (/\.gov(\.|$)|\.edu(\.|$)/.test(d)) return "reference";
+  return "editorial";
+}
+
+export const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
+  ugc: "UGC",
+  reference: "Reference",
+  editorial: "Editorial",
+};
+
+export interface CompetitorRow {
+  name: string;
+  domain: string;
+  isBrand: boolean;
+  visibility: number; // % of scanned answers mentioning the brand
+  mentioned: number;
+  total: number;
+  citationCount: number; // answers citing the domain
+}
+
+export function buildCompetitorComparison(state: WorkspaceState): CompetitorRow[] {
+  if (!state.brand) return [];
+  const scanned = state.results.flatMap((queryResult) =>
+    queryResult.results.filter((result) => result.status === "scanned"),
+  );
+  const total = scanned.length;
+  if (!total) return [];
+
+  const countCitations = (domain: string) =>
+    scanned.reduce(
+      (acc, result) => acc + (result.citations.some((c) => c.domain === domain || c.domain.endsWith(`.${domain}`)) ? 1 : 0),
+      0,
+    );
+
+  const brandMentioned = scanned.filter((r) => r.brandMentioned).length;
+  const rows: CompetitorRow[] = [
+    {
+      name: state.brand.name,
+      domain: state.brand.domain,
+      isBrand: true,
+      mentioned: brandMentioned,
+      total,
+      visibility: Math.round((brandMentioned / total) * 1000) / 10,
+      citationCount: countCitations(state.brand.domain),
+    },
+  ];
+
+  for (const competitor of state.brand.competitors) {
+    const aliases = [competitor.name, ...competitor.aliases].map((n) => n.toLowerCase());
+    const mentioned = scanned.filter((result) =>
+      result.competitorsMentioned.some((name) => aliases.includes(name.toLowerCase())) ||
+      aliases.some((alias) => result.competitorsMentioned.some((m) => m.toLowerCase().includes(alias) || alias.includes(m.toLowerCase()))),
+    ).length;
+    rows.push({
+      name: competitor.name,
+      domain: competitor.domain,
+      isBrand: false,
+      mentioned,
+      total,
+      visibility: Math.round((mentioned / total) * 1000) / 10,
+      citationCount: countCitations(competitor.domain),
+    });
+  }
+  return rows.sort((a, b) => b.visibility - a.visibility || b.citationCount - a.citationCount);
+}
+
+export function downloadCsv(filename: string, rows: string[][]): void {
+  const escape = (cell: string) => (/[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell);
+  const csv = rows.map((row) => row.map(escape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
