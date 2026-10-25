@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { PROVIDER_SCANNERS } from "./providers";
+import { PROVIDER_SCANNERS, scanCustomProvider } from "./providers";
+import { decryptSecret } from "./crypto";
+import type { KeySettings } from "./store";
 import { analyzeAnswer } from "./extract";
 import {
   GEO_PROVIDERS,
@@ -16,6 +18,41 @@ import {
 
 export const MAX_QUERIES_PER_SCAN = 12;
 const CONCURRENCY = 8;
+
+export interface EffectiveProvider {
+  id: GeoProviderId;
+  label: string;
+  kind: "builtin" | "custom";
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+}
+
+// Effective provider set for one workspace scan: the four built-ins (user key
+// when saved, else the platform env key) plus the user's custom providers.
+export function resolveProviders(settings?: KeySettings | null): EffectiveProvider[] {
+  const effective: EffectiveProvider[] = GEO_PROVIDERS.map(({ id, label, envKey }) => {
+    const userKey = settings?.providers?.[id];
+    return {
+      id,
+      label,
+      kind: "builtin" as const,
+      apiKey: userKey ? decryptSecret(userKey.apiKeyEnc) : process.env[envKey],
+      model: userKey?.model || undefined,
+    };
+  });
+  for (const custom of Object.values(settings?.custom ?? {})) {
+    effective.push({
+      id: custom.id,
+      label: custom.name,
+      kind: "custom",
+      apiKey: decryptSecret(custom.apiKeyEnc),
+      model: custom.model,
+      baseUrl: custom.baseUrl,
+    });
+  }
+  return effective;
+}
 
 export function configuredProviders(): GeoProviderId[] {
   return GEO_PROVIDERS.filter((p) => Boolean(process.env[p.envKey])).map((p) => p.id);
@@ -57,8 +94,9 @@ export function computeSnapshot(
     ? Math.round((positions.reduce((a, b) => a + b, 0) / positions.length) * 10) / 10
     : null;
 
+  const providerIds = Object.keys(providerStatus);
   const perProvider = Object.fromEntries(
-    GEO_PROVIDERS.map(({ id }) => {
+    providerIds.map((id) => {
       const cells = results.flatMap((r) => r.results).filter((r) => r.provider === id && r.status === "scanned");
       const cellsMentioned = cells.filter((r) => r.brandMentioned);
       const cellsCitations = cells.flatMap((r) => r.citations);
@@ -78,6 +116,7 @@ export function computeSnapshot(
 export async function runScan(
   brand: BrandProfile,
   queries: TrackedQuery[],
+  keySettings?: KeySettings | null,
   queryIds?: string[],
 ): Promise<{ run: ScanRun; results: QueryResult[]; snapshot: MetricsSnapshot }> {
   const targets = queryIds?.length ? queries.filter((q) => queryIds.includes(q.id)) : queries;
@@ -85,9 +124,10 @@ export async function runScan(
   if (targets.length > MAX_QUERIES_PER_SCAN) {
     throw new Error(`Scan up to ${MAX_QUERIES_PER_SCAN} questions at a time.`);
   }
-  const active = configuredProviders();
+  const providers = resolveProviders(keySettings);
+  const active = providers.filter((p) => Boolean(p.apiKey));
   if (!active.length) {
-    throw new Error("No AI providers are configured. Add at least one provider API key to the environment.");
+    throw new Error("No AI provider keys yet. Add your own keys in Settings, or ask the platform admin to configure default keys.");
   }
 
   const run: ScanRun = {
@@ -96,22 +136,24 @@ export async function runScan(
     finishedAt: "",
     queryCount: targets.length,
     providerStatus: Object.fromEntries(
-      GEO_PROVIDERS.map(({ id }) => [id, active.includes(id) ? "scanned" : "not_configured"]),
+      providers.map(({ id }) => [id, active.some((p) => p.id === id) ? "scanned" : "not_configured"]),
     ) as Record<GeoProviderId, ProviderStatus>,
   };
 
-  const jobs = targets.flatMap((query) => GEO_PROVIDERS.map(({ id }) => ({ query, provider: id })));
+  const jobs = targets.flatMap((query) => providers.map((provider) => ({ query, provider })));
   const cells = await mapWithConcurrency(jobs, CONCURRENCY, async ({ query, provider }) => {
-    if (!active.includes(provider)) {
-      return { queryId: query.id, result: analyzeAnswer(provider, "not_configured", null, brand) };
+    if (!provider.apiKey) {
+      return { queryId: query.id, result: analyzeAnswer(provider.id, "not_configured", null, brand) };
     }
     try {
-      const raw = await PROVIDER_SCANNERS[provider](query.text);
-      return { queryId: query.id, result: analyzeAnswer(provider, "scanned", raw, brand) };
+      const raw = provider.kind === "custom"
+        ? await scanCustomProvider(query.text, { apiKey: provider.apiKey, model: provider.model!, baseUrl: provider.baseUrl! })
+        : await PROVIDER_SCANNERS[provider.id](query.text, { apiKey: provider.apiKey, model: provider.model });
+      return { queryId: query.id, result: analyzeAnswer(provider.id, "scanned", raw, brand) };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Provider request failed.";
-      const failed = analyzeAnswer(provider, "failed", null, brand, message);
-      run.providerStatus[provider] = "failed";
+      const failed = analyzeAnswer(provider.id, "failed", null, brand, message);
+      run.providerStatus[provider.id] = "failed";
       return { queryId: query.id, result: failed };
     }
   });
@@ -124,7 +166,7 @@ export async function runScan(
   }
   const results: QueryResult[] = targets.map((query) => ({
     queryId: query.id,
-    results: GEO_PROVIDERS.map(({ id }) => byQuery.get(query.id)!.find((r) => r.provider === id)!),
+    results: providers.map(({ id }) => byQuery.get(query.id)!.find((r) => r.provider === id)!),
   }));
 
   run.finishedAt = new Date().toISOString();

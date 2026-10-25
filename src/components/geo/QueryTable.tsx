@@ -1,8 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import type { ProviderResult, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
-import { PROVIDER_COLORS, PROVIDER_LABELS, PROVIDER_ORDER } from "./helpers";
+import type { GeoProviderId, ProviderResult, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
+import { colorForProvider, labelForProvider } from "./helpers";
 
 interface Props {
   state: WorkspaceState;
@@ -13,6 +13,8 @@ interface Props {
   onSuggest: () => Promise<void>;
   suggestions: string[];
   suggestBusy: boolean;
+  providerOrder: GeoProviderId[];
+  providerLabels: Record<string, string>;
 }
 
 function Cell({ result }: { result?: ProviderResult }) {
@@ -35,20 +37,20 @@ function Cell({ result }: { result?: ProviderResult }) {
   );
 }
 
-function AnswerDrawer({ queryResult }: { queryResult: QueryResult }) {
-  const [provider, setProvider] = useState(PROVIDER_ORDER[0]);
+function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryResult: QueryResult; providerOrder: GeoProviderId[]; providerLabels: Record<string, string> }) {
+  const [provider, setProvider] = useState(providerOrder[0]);
   const result = queryResult.results.find((r) => r.provider === provider);
   return (
     <div className="border-t border-white/5 bg-white/[0.02] px-4 py-4">
       <div className="mb-3 flex flex-wrap gap-2">
-        {PROVIDER_ORDER.map((id) => (
+        {providerOrder.map((id) => (
           <button
             key={id}
             type="button"
             onClick={() => setProvider(id)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${PROVIDER_COLORS[id]} ${provider === id ? "" : "opacity-50 hover:opacity-90"}`}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${colorForProvider(id)} ${provider === id ? "" : "opacity-50 hover:opacity-90"}`}
           >
-            {PROVIDER_LABELS[id]}
+            {labelForProvider(id, providerLabels)}
           </button>
         ))}
       </div>
@@ -94,7 +96,7 @@ function AnswerDrawer({ queryResult }: { queryResult: QueryResult }) {
   );
 }
 
-export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onSuggest, suggestions, suggestBusy }: Props) {
+export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onSuggest, suggestions, suggestBusy, providerOrder, providerLabels }: Props) {
   const [newQuery, setNewQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const resultsByQuery = new Map(state.results.map((r) => [r.queryId, r]));
@@ -163,8 +165,8 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">
               <th className="px-4 py-3 font-medium">Buyer question</th>
-              {PROVIDER_ORDER.map((id) => (
-                <th key={id} className="px-2 py-3 text-center font-medium">{PROVIDER_LABELS[id]}</th>
+              {providerOrder.map((id) => (
+                <th key={id} className="px-2 py-3 text-center font-medium">{labelForProvider(id, providerLabels)}</th>
               ))}
               {!readOnly && <th className="w-10" />}
             </tr>
@@ -182,7 +184,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
                       <p className="text-zinc-200">{query.text}</p>
                       <p className="mt-0.5 text-xs text-zinc-600">{query.intent}</p>
                     </td>
-                    {PROVIDER_ORDER.map((id) => (
+                    {providerOrder.map((id) => (
                       <td key={id} className="px-2 py-3 text-center">
                         <Cell result={queryResult?.results.find((r) => r.provider === id)} />
                       </td>
@@ -205,8 +207,8 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
                   </tr>
                   {open === query.id && queryResult && (
                     <tr key={`${query.id}-drawer`}>
-                      <td colSpan={readOnly ? 5 : 6} className="p-0">
-                        <AnswerDrawer queryResult={queryResult} />
+                      <td colSpan={readOnly ? providerOrder.length + 1 : providerOrder.length + 2} className="p-0">
+                        <AnswerDrawer queryResult={queryResult} providerOrder={providerOrder} providerLabels={providerLabels} />
                       </td>
                     </tr>
                   )}
@@ -215,7 +217,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
             })}
             {!state.queries.length && (
               <tr>
-                <td colSpan={readOnly ? 5 : 6} className="px-4 py-10 text-center text-sm text-zinc-500">
+                <td colSpan={readOnly ? providerOrder.length + 1 : providerOrder.length + 2} className="px-4 py-10 text-center text-sm text-zinc-500">
                   No questions tracked yet. Add the questions your buyers ask AI assistants.
                 </td>
               </tr>

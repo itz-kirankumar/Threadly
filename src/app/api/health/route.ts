@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { GEO_PROVIDERS } from "@/lib/geo/types";
 import { adminConfigured } from "@/lib/geo/admin-store";
+import { keyEncryptionReady } from "@/lib/geo/crypto";
 
 export function GET() {
   const firebase = Boolean(
@@ -19,6 +20,7 @@ export function GET() {
     providerCount: Object.values(providers).filter(Boolean).length,
     anonymousRateLimitStore: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
     scheduledScans: adminConfigured() && Boolean(process.env.CRON_SECRET),
+    keyEncryption: keyEncryptionReady(),
   };
   const ready = checks.firebase && checks.providerCount > 0;
   return Response.json({ status: ready ? "ready" : "not_ready", checks }, {

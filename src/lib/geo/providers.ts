@@ -5,6 +5,13 @@ export interface ProviderAnswer {
   citations: Citation[];
 }
 
+// Per-call credential overrides: a user's own key/model wins over platform env.
+export interface ProviderCredentials {
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+}
+
 const TIMEOUT_MS = 45_000;
 
 function toCitation(url: string, title?: string): Citation | null {
@@ -31,15 +38,15 @@ export function uniqueCitations(citations: Array<Citation | null>, limit = 12): 
 const BUYER_FRAMING =
   "Answer the following buyer question directly and helpfully, as you would for someone researching a purchase. Recommend specific products or brands where relevant.\n\nQuestion: ";
 
-async function scanChatGPT(query: string): Promise<ProviderAnswer> {
+async function scanChatGPT(query: string, creds?: ProviderCredentials): Promise<ProviderAnswer> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${creds?.apiKey ?? process.env.OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
-      model: process.env.GEO_OPENAI_MODEL || "gpt-4.1-mini",
+      model: creds?.model || process.env.GEO_OPENAI_MODEL || "gpt-4.1-mini",
       tools: [{ type: "web_search" }],
       tool_choice: "required",
       store: false,
@@ -74,16 +81,16 @@ async function scanChatGPT(query: string): Promise<ProviderAnswer> {
   return { answer, citations: uniqueCitations(citations) };
 }
 
-async function scanClaude(query: string): Promise<ProviderAnswer> {
+async function scanClaude(query: string, creds?: ProviderCredentials): Promise<ProviderAnswer> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
+      "x-api-key": (creds?.apiKey ?? process.env.ANTHROPIC_API_KEY)!,
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: process.env.GEO_ANTHROPIC_MODEL || "claude-sonnet-4-5",
+      model: creds?.model || process.env.GEO_ANTHROPIC_MODEL || "claude-sonnet-4-5",
       max_tokens: 1500,
       tools: [{ type: "web_search_20250305", name: "web_search" }],
       messages: [{ role: "user", content: BUYER_FRAMING + `"${query}"` }],
@@ -110,12 +117,12 @@ async function scanClaude(query: string): Promise<ProviderAnswer> {
   return { answer, citations: uniqueCitations(citations) };
 }
 
-async function scanGemini(query: string): Promise<ProviderAnswer> {
-  const model = process.env.GEO_GEMINI_MODEL || process.env.GEMINI_MODEL || "gemini-3.8-flash";
+async function scanGemini(query: string, creds?: ProviderCredentials): Promise<ProviderAnswer> {
+  const model = creds?.model || process.env.GEO_GEMINI_MODEL || process.env.GEMINI_MODEL || "gemini-3.8-flash";
   const request = () =>
     fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY! },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": (creds?.apiKey ?? process.env.GEMINI_API_KEY)! },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: BUYER_FRAMING + `"${query}"` }] }],
         tools: [{ google_search: {} }],
@@ -147,15 +154,15 @@ async function scanGemini(query: string): Promise<ProviderAnswer> {
   return { answer, citations: uniqueCitations(citations) };
 }
 
-async function scanPerplexity(query: string): Promise<ProviderAnswer> {
+async function scanPerplexity(query: string, creds?: ProviderCredentials): Promise<ProviderAnswer> {
   const response = await fetch("https://api.perplexity.ai/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+      Authorization: `Bearer ${creds?.apiKey ?? process.env.PERPLEXITY_API_KEY}`,
     },
     body: JSON.stringify({
-      model: process.env.GEO_PERPLEXITY_MODEL || "sonar",
+      model: creds?.model || process.env.GEO_PERPLEXITY_MODEL || "sonar",
       messages: [
         { role: "system", content: "You answer buyer research questions directly, recommending specific products or brands where relevant." },
         { role: "user", content: query },
@@ -172,9 +179,39 @@ async function scanPerplexity(query: string): Promise<ProviderAnswer> {
   return { answer, citations: uniqueCitations(citations) };
 }
 
-export const PROVIDER_SCANNERS: Record<GeoProviderId, (query: string) => Promise<ProviderAnswer>> = {
+export const PROVIDER_SCANNERS: Record<string, (query: string, creds?: ProviderCredentials) => Promise<ProviderAnswer>> = {
   chatgpt: scanChatGPT,
   claude: scanClaude,
   gemini: scanGemini,
   perplexity: scanPerplexity,
 };
+
+// Custom user-added providers speak the OpenAI chat-completions protocol.
+// Most such endpoints have no live web search, so answers are ungrounded;
+// citations are harvested from links in the answer text itself.
+const LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)/g;
+
+export async function scanCustomProvider(query: string, creds: Required<Pick<ProviderCredentials, "apiKey" | "model" | "baseUrl">>): Promise<ProviderAnswer> {
+  const base = creds.baseUrl.replace(/\/+$/, "");
+  const response = await fetch(`${base}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${creds.apiKey}` },
+    body: JSON.stringify({
+      model: creds.model,
+      messages: [
+        { role: "system", content: "You answer buyer research questions directly, recommending specific products or brands where relevant." },
+        { role: "user", content: query },
+      ],
+    }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`Custom provider returned HTTP ${response.status}.`);
+  const payload = await response.json();
+  const answer = (payload.choices?.[0]?.message?.content ?? "").trim();
+  if (!answer) throw new Error("Custom provider returned no answer.");
+  const citations: Array<Citation | null> = [];
+  for (const match of answer.matchAll(LINK_PATTERN)) {
+    citations.push(toCitation(match[2] ?? match[3], match[1]));
+  }
+  return { answer, citations: uniqueCitations(citations) };
+}

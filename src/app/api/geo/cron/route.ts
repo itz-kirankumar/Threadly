@@ -1,5 +1,5 @@
 import { runScan } from "@/lib/geo/engine";
-import { adminConfigured, adminLoadWorkspace, adminSaveRun, listWorkspaceIds } from "@/lib/geo/admin-store";
+import { adminConfigured, adminLoadKeySettings, adminLoadWorkspace, adminSaveRun, listWorkspaceIds } from "@/lib/geo/admin-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +33,8 @@ export async function GET(request: Request) {
         scanned.push({ uid, error: "no brand or queries" });
         continue;
       }
-      const { run, results, snapshot } = await runScan(brand, queries);
+      const keySettings = await adminLoadKeySettings(uid);
+      const { run, results, snapshot } = await runScan(brand, queries, keySettings);
       await adminSaveRun(uid, run, results, snapshot);
       scanned.push({ uid, runId: run.id });
     } catch (error) {

@@ -1,4 +1,6 @@
-export type GeoProviderId = "chatgpt" | "claude" | "gemini" | "perplexity";
+// Built-in provider ids are "chatgpt" | "claude" | "gemini" | "perplexity";
+// user-added custom providers get "custom-*" ids, so the id type is string.
+export type GeoProviderId = string;
 
 export const GEO_PROVIDERS: Array<{ id: GeoProviderId; label: string; envKey: string }> = [
   { id: "chatgpt", label: "ChatGPT", envKey: "OPENAI_API_KEY" },
@@ -84,6 +86,18 @@ export interface MetricsSnapshot {
   perProvider: Record<GeoProviderId, ProviderMetrics>;
 }
 
+export type ProviderKeySource = "user" | "platform" | "none";
+
+export interface ProviderKeyStatus {
+  id: GeoProviderId;
+  label: string;
+  kind: "builtin" | "custom";
+  source: ProviderKeySource;
+  model?: string;
+  baseUrl?: string;
+  lastFour?: string;
+}
+
 export interface WorkspaceState {
   brand: BrandProfile | null;
   queries: TrackedQuery[];
@@ -91,4 +105,5 @@ export interface WorkspaceState {
   results: QueryResult[];
   snapshots: MetricsSnapshot[];
   runs: ScanRun[];
+  providers: ProviderKeyStatus[];
 }

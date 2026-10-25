@@ -73,3 +73,21 @@ export function buildCitationLeaderboard(state: WorkspaceState): CitationRow[] {
 export function cellFor(results: ProviderResult[], provider: GeoProviderId): ProviderResult | undefined {
   return results.find((r) => r.provider === provider);
 }
+
+const CUSTOM_COLOR_POOL = [
+  "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30",
+  "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  "bg-lime-500/15 text-lime-300 border-lime-500/30",
+  "bg-rose-500/15 text-rose-300 border-rose-500/30",
+];
+
+export function colorForProvider(id: GeoProviderId): string {
+  if (PROVIDER_COLORS[id]) return PROVIDER_COLORS[id];
+  let hash = 0;
+  for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return CUSTOM_COLOR_POOL[hash % CUSTOM_COLOR_POOL.length];
+}
+
+export function labelForProvider(id: GeoProviderId, labels?: Record<string, string>): string {
+  return labels?.[id] ?? PROVIDER_LABELS[id] ?? id.replace(/^custom-/, "").replace(/-/g, " ");
+}

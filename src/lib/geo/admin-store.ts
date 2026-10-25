@@ -1,5 +1,6 @@
 import type { App } from "firebase-admin/app";
 import type { BrandProfile, MetricsSnapshot, QueryResult, ScanRun, TrackedQuery } from "./types";
+import type { KeySettings } from "./store";
 
 // Scheduled scans run with a Firebase service account instead of a user
 // session. Credentials come from FIREBASE_ADMIN_CLIENT_EMAIL and
@@ -50,6 +51,16 @@ export async function listWorkspaceIds(limit = 100): Promise<string[]> {
   return Object.entries(value)
     .filter(([, tree]) => Boolean(tree?.geo?.brand))
     .map(([uid]) => uid);
+}
+
+export async function adminLoadKeySettings(uid: string): Promise<KeySettings> {
+  const database = await db();
+  const snapshot = await database.ref(`users/${uid}/geo/settings/keys`).get();
+  const raw = snapshot.val() as Partial<KeySettings> | null;
+  return {
+    providers: raw?.providers && typeof raw.providers === "object" ? raw.providers : {},
+    custom: raw?.custom && typeof raw.custom === "object" ? raw.custom : {},
+  };
 }
 
 export async function adminLoadWorkspace(uid: string): Promise<{ brand: BrandProfile | null; queries: TrackedQuery[] }> {

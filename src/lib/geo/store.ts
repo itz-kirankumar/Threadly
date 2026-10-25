@@ -71,5 +71,54 @@ export async function loadWorkspace(): Promise<WorkspaceState> {
     results,
     snapshots: snapshots.slice(-30),
     runs: runs.slice(0, 20),
+    providers: [],
   };
+}
+
+// ---- BYOK: per-user provider key settings ----
+
+export interface StoredProviderKey {
+  apiKeyEnc: string;
+  lastFour: string;
+  model?: string;
+  updatedAt: string;
+}
+
+export interface StoredCustomProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  model: string;
+  apiKeyEnc: string;
+  lastFour: string;
+  createdAt: string;
+}
+
+export interface KeySettings {
+  providers: Record<string, StoredProviderKey>;
+  custom: Record<string, StoredCustomProvider>;
+}
+
+export async function loadKeySettings(): Promise<KeySettings> {
+  const raw = await readData<Partial<KeySettings>>(`${ROOT}/settings/keys`);
+  return {
+    providers: raw?.providers && typeof raw.providers === "object" ? raw.providers : {},
+    custom: raw?.custom && typeof raw.custom === "object" ? raw.custom : {},
+  };
+}
+
+export async function saveBuiltinKey(providerId: string, record: StoredProviderKey): Promise<void> {
+  await writeData(`${ROOT}/settings/keys/providers/${providerId}`, record);
+}
+
+export async function deleteBuiltinKey(providerId: string): Promise<void> {
+  await writeData(`${ROOT}/settings/keys/providers/${providerId}`, null);
+}
+
+export async function saveCustomProvider(record: StoredCustomProvider): Promise<void> {
+  await writeData(`${ROOT}/settings/keys/custom/${record.id}`, record);
+}
+
+export async function deleteCustomProvider(id: string): Promise<void> {
+  await writeData(`${ROOT}/settings/keys/custom/${id}`, null);
 }

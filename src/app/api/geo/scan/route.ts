@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
 import { runScan } from "@/lib/geo/engine";
-import { loadBrand, loadQueries, saveRun } from "@/lib/geo/store";
+import { loadBrand, loadKeySettings, loadQueries, saveRun } from "@/lib/geo/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,9 +29,9 @@ export async function POST(request: Request) {
           { status: 429, headers: { "Cache-Control": "no-store" } },
         );
       }
-      const [brand, queries] = await Promise.all([loadBrand(), loadQueries()]);
+      const [brand, queries, keySettings] = await Promise.all([loadBrand(), loadQueries(), loadKeySettings()]);
       if (!brand) throw new Error("Set up your brand profile first.");
-      const { run, results, snapshot } = await runScan(brand, queries, queryIds);
+      const { run, results, snapshot } = await runScan(brand, queries, keySettings, queryIds);
       await saveRun(run, results, snapshot);
       return Response.json({ run, results, snapshot });
     });

@@ -6,13 +6,14 @@ import type { MetricsSnapshot, WorkspaceState } from "@/lib/geo/types";
 import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
 import TrendChart from "./TrendChart";
+import ProviderKeysPanel from "./ProviderKeysPanel";
+import Tour, { TOUR_KEY } from "./Tour";
 import {
   buildCitationLeaderboard,
+  colorForProvider,
   delta,
   formatDateTime,
-  PROVIDER_COLORS,
-  PROVIDER_LABELS,
-  PROVIDER_ORDER,
+  labelForProvider,
 } from "./helpers";
 
 type Tab = "overview" | "queries" | "citations" | "runs" | "settings";
@@ -49,6 +50,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [error, setError] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggestBusy, setSuggestBusy] = useState(false);
+  const [showTour, setShowTour] = useState(false);
+  const [keyEncryption, setKeyEncryption] = useState(true);
+  const [justOnboarded, setJustOnboarded] = useState(false);
 
   const authedFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -85,6 +89,37 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const latest = state?.snapshots.length ? state.snapshots[state.snapshots.length - 1] : null;
   const citations = useMemo(() => (state ? buildCitationLeaderboard(state) : []), [state]);
 
+  const providerOrder = useMemo(
+    () => (state?.providers?.length ? state.providers.map((provider) => provider.id) : []),
+    [state],
+  );
+  const providerLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const provider of state?.providers ?? []) labels[provider.id] = provider.label;
+    return labels;
+  }, [state]);
+
+  useEffect(() => {
+    if (readOnly || !state?.brand) return;
+    try {
+      if (!window.localStorage.getItem(TOUR_KEY)) setShowTour(true);
+    } catch {
+      // storage unavailable - skip the tour
+    }
+  }, [readOnly, state?.brand]);
+
+  useEffect(() => {
+    if (readOnly || !user) return;
+    authedFetch("/api/geo/keys")
+      .then((payload) => {
+        const data = payload as { keyEncryption?: boolean };
+        if (typeof data.keyEncryption === "boolean") setKeyEncryption(data.keyEncryption);
+      })
+      .catch(() => {
+        // keys status unavailable - panel keeps its default
+      });
+  }, [authedFetch, readOnly, user]);
+
   async function runScan() {
     setScanning(true);
     setError("");
@@ -102,9 +137,11 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     setBusy(true);
     setError("");
     try {
+      const firstSave = !state?.brand;
       await authedFetch("/api/geo/brand", { method: "PUT", body: JSON.stringify(input) });
       await refresh();
       setTab("queries");
+      if (firstSave) setJustOnboarded(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save.");
     } finally {
@@ -145,6 +182,33 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     } finally {
       setSuggestBusy(false);
     }
+  }
+
+  async function keysRequest(init: RequestInit): Promise<void> {
+    setBusy(true);
+    setError("");
+    try {
+      const payload = (await authedFetch("/api/geo/keys", init)) as { keyEncryption?: boolean };
+      if (typeof payload.keyEncryption === "boolean") setKeyEncryption(payload.keyEncryption);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update keys.");
+      throw caught;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveBuiltinKey(provider: string, apiKey: string, model?: string) {
+    await keysRequest({ method: "PUT", body: JSON.stringify({ provider, apiKey, ...(model ? { model } : {}) }) });
+  }
+
+  async function addCustomProvider(input: { name: string; baseUrl: string; model: string; apiKey: string }) {
+    await keysRequest({ method: "PUT", body: JSON.stringify({ custom: input }) });
+  }
+
+  async function removeKey(target: { provider?: string; customId?: string }) {
+    await keysRequest({ method: "DELETE", body: JSON.stringify(target) });
   }
 
   if (loading) {
@@ -190,7 +254,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             disabled={scanning || !state.queries.length}
             className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
           >
-            {scanning ? "Scanning 4 AI providers…" : "Run scan now"}
+            {scanning ? `Scanning ${providerOrder.length || 4} AI providers…` : "Run scan now"}
           </button>
         )}
       </div>
@@ -222,11 +286,15 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {PROVIDER_ORDER.map((id) => {
+            {providerOrder.map((id) => {
               const metrics = latest?.perProvider[id];
+              const keyStatus = state.providers.find((provider) => provider.id === id);
               return (
-                <div key={id} className={`rounded-xl border p-4 ${PROVIDER_COLORS[id]}`}>
-                  <p className="text-sm font-semibold">{PROVIDER_LABELS[id]}</p>
+                <div key={id} className={`rounded-xl border p-4 ${colorForProvider(id)}`}>
+                  <p className="text-sm font-semibold">
+                    {labelForProvider(id, providerLabels)}
+                    {keyStatus?.source === "user" && <span className="ml-1.5 text-[10px] font-medium opacity-70">your key</span>}
+                  </p>
                   {metrics?.status === "scanned" ? (
                     <p className="mt-1 text-xs opacity-80">
                       Mentioned in {metrics.mentionRate}% · cited {metrics.citationShare}%
@@ -254,6 +322,13 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         </div>
       )}
 
+      {tab === "queries" && justOnboarded && !readOnly && (
+        <div className="rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200">
+          Brand saved - you are set up. Next: add the questions your buyers ask AI assistants (or press Suggest), then
+          run your first scan from the top of the page. You can add your own AI provider keys anytime in Settings.
+        </div>
+      )}
+
       {tab === "queries" && (
         <QueryTable
           state={state}
@@ -264,6 +339,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
           onSuggest={suggestQueries}
           suggestions={suggestions}
           suggestBusy={suggestBusy}
+          providerOrder={providerOrder}
+          providerLabels={providerLabels}
         />
       )}
 
@@ -319,12 +396,12 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             <div key={run.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <div>
                 <p className="text-sm text-zinc-200">{formatDateTime(run.startedAt)}</p>
-                <p className="text-xs text-zinc-500">{run.queryCount} questions × 4 providers</p>
+                <p className="text-xs text-zinc-500">{run.queryCount} questions × {Object.keys(run.providerStatus).length || providerOrder.length} providers</p>
               </div>
               <div className="flex gap-1.5">
-                {PROVIDER_ORDER.map((id) => (
-                  <span key={id} className={`rounded-full border px-2 py-0.5 text-xs ${PROVIDER_COLORS[id]} ${run.providerStatus[id] === "scanned" ? "" : "opacity-40"}`}>
-                    {PROVIDER_LABELS[id]} {run.providerStatus[id] === "scanned" ? "✓" : run.providerStatus[id] === "failed" ? "✗" : "—"}
+                {Object.keys(run.providerStatus).map((id) => (
+                  <span key={id} className={`rounded-full border px-2 py-0.5 text-xs ${colorForProvider(id)} ${run.providerStatus[id] === "scanned" ? "" : "opacity-40"}`}>
+                    {labelForProvider(id, providerLabels)} {run.providerStatus[id] === "scanned" ? "✓" : run.providerStatus[id] === "failed" ? "✗" : "—"}
                   </span>
                 ))}
               </div>
@@ -337,8 +414,31 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       )}
 
       {tab === "settings" && !readOnly && (
-        <SetupWizard busy={busy} error={error} onSave={saveBrand} initial={state.brand} />
+        <div className="space-y-6">
+          <SetupWizard busy={busy} error={error} onSave={saveBrand} initial={state.brand} />
+          <ProviderKeysPanel
+            providers={state.providers}
+            keyEncryption={keyEncryption}
+            busy={busy}
+            onSaveBuiltin={saveBuiltinKey}
+            onAddCustom={addCustomProvider}
+            onRemove={removeKey}
+          />
+          <section className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
+            <h3 className="text-base font-semibold text-white">Product tour</h3>
+            <p className="mt-1 text-sm text-zinc-500">A quick walkthrough of the workspace, for you or a teammate.</p>
+            <button
+              type="button"
+              onClick={() => setShowTour(true)}
+              className="mt-3 rounded-lg border border-violet-400/40 px-4 py-2 text-sm font-medium text-violet-300 transition hover:bg-violet-500/10"
+            >
+              Replay the tour
+            </button>
+          </section>
+        </div>
       )}
+
+      {showTour && !readOnly && <Tour onDone={() => setShowTour(false)} />}
     </div>
   );
 }

@@ -163,5 +163,18 @@ export function buildDemoWorkspace(): WorkspaceState {
     providerStatus: run.providerStatus,
   }))];
 
-  return { brand: DEMO_BRAND, queries: DEMO_QUERIES, latestRun: run, results, snapshots, runs };
+  return {
+    brand: DEMO_BRAND,
+    queries: DEMO_QUERIES,
+    latestRun: run,
+    results,
+    snapshots,
+    runs,
+    providers: [
+      { id: "chatgpt", label: "ChatGPT", kind: "builtin" as const, source: "platform" as const },
+      { id: "claude", label: "Claude", kind: "builtin" as const, source: "platform" as const },
+      { id: "gemini", label: "Gemini", kind: "builtin" as const, source: "platform" as const },
+      { id: "perplexity", label: "Perplexity", kind: "builtin" as const, source: "platform" as const },
+    ],
+  };
 }
