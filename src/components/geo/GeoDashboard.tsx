@@ -7,6 +7,7 @@ import type { MetricsSnapshot, QueryResult, TrackedQuery, WorkspaceState } from 
 import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
 import TrendChart from "./TrendChart";
+import RecommendationsPanel from "./RecommendationsPanel";
 import ProviderKeysPanel from "./ProviderKeysPanel";
 import TeamPanel from "./TeamPanel";
 import Tour, { TOUR_KEY } from "./Tour";
@@ -437,6 +438,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             <p className="mb-2 text-sm font-medium text-zinc-300">Trend across scans</p>
             <TrendChart snapshots={state.snapshots} />
           </div>
+
+          <RecommendationsPanel state={state} readOnly={readOnly} authedFetch={authedFetch} />
 
           {competitorRows.length > 1 && (
             <div className="overflow-hidden rounded-xl border border-white/10">
