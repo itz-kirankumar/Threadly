@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import type { User } from "firebase/auth";
+import { updateProfile, type User } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 import type { MetricsSnapshot, WorkspaceState } from "@/lib/geo/types";
 import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
@@ -41,6 +42,49 @@ function MetricCard({ label, value, suffix, change }: { label: string; value: st
   );
 }
 
+function ProfileSettings({ user, busy, onSave }: { user: User; busy: boolean; onSave: (name: string) => Promise<void> }) {
+  const [name, setName] = useState(user.displayName ?? "");
+  const [saved, setSaved] = useState(false);
+  const input =
+    "w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-violet-400/60";
+  const label = "mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-400";
+  return (
+    <form
+      className="max-w-xl space-y-5"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setSaved(false);
+        await onSave(name);
+        setSaved(true);
+      }}
+    >
+      <div>
+        <h2 className="text-xl font-semibold text-white">Profile</h2>
+        <p className="mt-1 text-sm text-zinc-400">How you appear inside your workspace.</p>
+      </div>
+      <div>
+        <label className={label} htmlFor="profile-name">Your name</label>
+        <input id="profile-name" className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" required />
+      </div>
+      <div>
+        <label className={label}>Email</label>
+        <p className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-sm text-zinc-500">{user.email}</p>
+        <p className="mt-1 text-xs text-zinc-600">Managed by your Google sign-in.</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={busy || !name.trim()}
+          className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
+        >
+          Save profile
+        </button>
+        {saved && <span className="text-xs text-emerald-400">Saved.</span>}
+      </div>
+    </form>
+  );
+}
+
 export default function GeoDashboard({ user, readOnly = false, initialState }: Props) {
   const [state, setState] = useState<WorkspaceState | null>(initialState ?? null);
   const [tab, setTab] = useState<Tab>("overview");
@@ -53,7 +97,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [showTour, setShowTour] = useState(false);
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"brand" | "keys">("brand");
+  const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys">("brand");
 
   const authedFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -108,6 +152,17 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       // storage unavailable - skip the tour
     }
   }, [readOnly, state?.brand]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    const handler = (event: Event) => {
+      const section = (event as CustomEvent<{ section?: "profile" | "brand" | "keys" }>).detail?.section;
+      setTab("settings");
+      if (section) setSettingsSection(section);
+    };
+    window.addEventListener("threadly:open-settings", handler);
+    return () => window.removeEventListener("threadly:open-settings", handler);
+  }, [readOnly]);
 
   useEffect(() => {
     if (readOnly || !user) return;
@@ -182,6 +237,22 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       setSuggestions([]);
     } finally {
       setSuggestBusy(false);
+    }
+  }
+
+  async function saveDisplayName(name: string) {
+    setBusy(true);
+    setError("");
+    try {
+      const current = getFirebaseAuth().currentUser;
+      if (!current) throw new Error("Sign in to continue.");
+      await updateProfile(current, { displayName: name.trim() || null });
+      window.dispatchEvent(new CustomEvent("threadly:user-updated"));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save your profile.");
+      throw caught;
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -427,6 +498,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
           <nav className="flex gap-1 overflow-x-auto md:flex-col">
             {(
               [
+                { id: "profile", label: "Profile", hint: "Your name and account" },
                 { id: "brand", label: "Brand profile", hint: "Name, domain, logo, competitors" },
                 { id: "keys", label: "AI provider keys", hint: "Your own keys, custom providers" },
               ] as const
@@ -445,6 +517,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             ))}
           </nav>
           <div>
+            {settingsSection === "profile" && user && (
+              <ProfileSettings user={user} busy={busy} onSave={saveDisplayName} />
+            )}
             {settingsSection === "brand" && (
               <SetupWizard busy={busy} error={error} onSave={saveBrand} initial={state.brand} />
             )}
