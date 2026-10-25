@@ -100,7 +100,7 @@ function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryRes
       {(queryResult.webResults ?? []).length > 0 && (
         <div className="mt-4 border-t border-white/5 pt-3">
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
-            Organic web results <span className="font-normal normal-case text-zinc-600">(via Tavily - classic search, not AI answers)</span>
+            Organic web results <span className="font-normal normal-case text-zinc-600">(classic search, not AI answers)</span>
           </p>
           <ul className="space-y-1.5">
             {(queryResult.webResults ?? []).map((item) => (
