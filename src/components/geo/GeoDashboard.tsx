@@ -561,8 +561,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         {readOnly && (
         <nav
           aria-label="Workspace sections"
-          className={`sticky top-20 flex shrink-0 flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-2 transition-all ${
-            sidebarCollapsed ? "w-12" : "w-12 md:w-48"
+          className={`sticky top-20 hidden shrink-0 flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-2 transition-all md:flex ${
+            sidebarCollapsed ? "md:w-12" : "md:w-48"
           }`}
         >
           {tabs.map((item) => (
