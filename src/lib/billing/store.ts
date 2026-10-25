@@ -1,7 +1,10 @@
 import { readData, writeData } from "@/lib/portal-db";
 import type { BillingInterval, PaidPlanId } from "./dodo";
 
+export type BillingProvider = "dodo" | "razorpay";
+
 export interface BillingRecord {
+  provider: BillingProvider;
   plan: PaidPlanId;
   interval: BillingInterval | null;
   status: string;

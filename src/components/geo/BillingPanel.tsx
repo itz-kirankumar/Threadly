@@ -6,6 +6,7 @@ interface BillingStatus {
   plan: "trial" | "pro" | "growth" | "enterprise";
   planLabel: string;
   billing: {
+    provider?: "dodo" | "razorpay";
     plan: string;
     interval: string | null;
     status: string;
@@ -13,6 +14,7 @@ interface BillingStatus {
     updatedAt: string;
   } | null;
   billingAvailable: boolean;
+  providers?: { dodo: boolean; razorpay: boolean };
   testMode: boolean;
   isOwner: boolean;
   canCheckout: boolean;
@@ -100,6 +102,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
             {status.billing && (
               <p className="mt-1.5 text-xs text-zinc-500">
                 Subscription {status.billing.status}
+                {status.billing.provider ? ` via ${status.billing.provider === "dodo" ? "Dodo Payments" : "Razorpay"}` : ""}
                 {status.billing.interval ? ` · billed ${status.billing.interval}` : ""}
                 {` · updated ${new Date(status.billing.updatedAt).toLocaleString()}`}
               </p>
@@ -153,11 +156,14 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                 ))}
               </div>
 
-              {status.testMode && (
-                <p className="text-[11px] leading-relaxed text-zinc-600">
-                  Billing is in test mode while launch is prepared - checkouts run against the payment sandbox and no real card is charged.
-                </p>
-              )}
+              <p className="text-[11px] leading-relaxed text-zinc-600">
+                {status.providers?.dodo && status.providers?.razorpay
+                  ? "Checkout uses Dodo Payments and switches to Razorpay automatically if Dodo is unavailable."
+                  : status.providers?.razorpay
+                    ? "Checkout uses Razorpay."
+                    : "Checkout uses Dodo Payments."}
+                {status.testMode ? " Billing is in test mode while launch is prepared - checkouts run against the payment sandbox and no real card is charged." : ""}
+              </p>
             </>
           )}
 

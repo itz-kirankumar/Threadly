@@ -90,7 +90,8 @@ export async function POST(request: Request) {
             : (data.status ?? "unknown");
 
   try {
-    await applyPlan(workspaceUid, status === "active" || status === "on_hold" ? plan : plan, {
+    await applyPlan(workspaceUid, plan, {
+      provider: "dodo",
       plan,
       interval,
       status,

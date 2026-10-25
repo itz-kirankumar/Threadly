@@ -2,6 +2,7 @@ import { errorResponse } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadPlan, PLAN_LABELS } from "@/lib/geo/plan";
 import { billingConfigured, billingTestMode, canCheckout } from "@/lib/billing/dodo";
+import { razorpayConfigured } from "@/lib/billing/razorpay";
 import { loadBilling } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
@@ -17,7 +18,8 @@ export async function GET(request: Request) {
           plan,
           planLabel: PLAN_LABELS[plan],
           billing,
-          billingAvailable: billingConfigured(),
+          billingAvailable: billingConfigured() || razorpayConfigured(),
+          providers: { dodo: billingConfigured(), razorpay: razorpayConfigured() },
           testMode: billingTestMode(),
           isOwner: access.role === "owner",
           canCheckout: canCheckout(access.identity.email),
