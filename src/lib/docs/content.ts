@@ -101,6 +101,31 @@ export const DOC_PAGES: DocPage[] = [
     ],
   },
   {
+    slug: "teams-and-roles",
+    section: "Using Threadly",
+    title: "Teams and roles",
+    description: "Invite your company with one link and control who can do what.",
+    blocks: [
+      { type: "p", text: "A workspace can be shared with your whole company. One invite link onboards everyone - each person signs in with their own Google account and lands in the shared workspace with the role you chose for the link." },
+      { type: "h2", text: "Roles" },
+      { type: "list", items: [
+        "Owner - everything: brand profile, provider keys, scans, roles, invites, removing anyone. The account that created the workspace.",
+        "Admin - brand profile, provider keys, custom providers, questions, scans, and creating invite links. Admins can remove members, not other admins.",
+        "Member - view every result, add and suggest questions, and run scans. Members cannot edit the brand, manage keys, or delete questions.",
+      ] },
+      { type: "h2", text: "Invite your team" },
+      { type: "list", items: [
+        "Open Settings, then Team.",
+        "Choose a role for the link (Member or Admin) and press Create invite link.",
+        "Share the link anywhere - email, chat, a wiki. Everyone who opens it signs in with Google and joins with that role.",
+        "Links expire after 7 days and can be revoked anytime from the same panel.",
+      ] },
+      { type: "h2", text: "Managing members" },
+      { type: "p", text: "The Team panel lists every member with their role. The owner can promote or demote anyone between Member and Admin, owners and admins can remove members, and invited members can leave the workspace themselves at any time." },
+      { type: "note", text: "Every member works in the same shared data: brand, questions, scans and history. Scans a member runs are visible to the whole team." },
+    ],
+  },
+  {
     slug: "own-api-keys",
     section: "Providers and keys",
     title: "Connecting your own AI keys",
