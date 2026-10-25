@@ -77,7 +77,7 @@ export async function adminLoadWorkspace(uid: string): Promise<{ brand: BrandPro
   };
 }
 
-export async function adminSaveRun(uid: string, run: ScanRun, results: QueryResult[], snapshot: MetricsSnapshot): Promise<void> {
+export async function adminSaveRun(uid: string, run: ScanRun, results: QueryResult[], snapshot: MetricsSnapshot, queries?: TrackedQuery[]): Promise<void> {
   const database = await db();
   const resultMap = Object.fromEntries(results.map((r) => [r.queryId, r]));
   await database.ref(`users/${uid}/geo`).update({
@@ -86,4 +86,7 @@ export async function adminSaveRun(uid: string, run: ScanRun, results: QueryResu
     [`snapshots/${run.id}`]: snapshot,
     latestRun: run.id,
   });
+  if (queries?.length) {
+    await database.ref(`users/${uid}/geo/runQueries/${run.id}`).set(Object.fromEntries(queries.map((q) => [q.id, q])));
+  }
 }

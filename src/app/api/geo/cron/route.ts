@@ -34,8 +34,8 @@ export async function GET(request: Request) {
         continue;
       }
       const keySettings = await adminLoadKeySettings(uid);
-      const { run, results, snapshot } = await runScan(brand, queries, keySettings);
-      await adminSaveRun(uid, run, results, snapshot);
+      const { run, results, snapshot, queries: scannedQueries } = await runScan(brand, queries, keySettings);
+      await adminSaveRun(uid, run, results, snapshot, scannedQueries);
       scanned.push({ uid, runId: run.id });
     } catch (error) {
       scanned.push({ uid, error: error instanceof Error ? error.message : "scan failed" });

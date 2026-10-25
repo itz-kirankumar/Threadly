@@ -38,12 +38,28 @@ export async function deleteQuery(queryId: string): Promise<void> {
   await writeData(`${ROOT}/queries/${queryId}`, null);
 }
 
-export async function saveRun(run: ScanRun, results: QueryResult[], snapshot: MetricsSnapshot): Promise<void> {
+export async function saveRun(run: ScanRun, results: QueryResult[], snapshot: MetricsSnapshot, queries?: TrackedQuery[]): Promise<void> {
   await writeData(`${ROOT}/runs/${run.id}`, run);
   const resultMap = Object.fromEntries(results.map((r) => [r.queryId, r]));
   await writeData(`${ROOT}/results/${run.id}`, resultMap);
   await writeData(`${ROOT}/snapshots/${run.id}`, snapshot);
+  if (queries?.length) {
+    await writeData(`${ROOT}/runQueries/${run.id}`, Object.fromEntries(queries.map((q) => [q.id, q])));
+  }
   await writeData(`${ROOT}/latestRun`, run.id);
+}
+
+export async function loadRunDetail(runId: string): Promise<{ queries: TrackedQuery[]; results: QueryResult[] } | null> {
+  const resultsRaw = await readData(`${ROOT}/results/${runId}`);
+  const results = toArray<QueryResult>(resultsRaw);
+  if (!results.length) return null;
+  const scannedIds = new Set(results.map((r) => r.queryId));
+  const stored = toArray<TrackedQuery>(await readData(`${ROOT}/runQueries/${runId}`)).filter((q) => scannedIds.has(q.id));
+  if (stored.length === scannedIds.size) return { queries: stored, results };
+  // Runs saved before per-run query storage: fall back to the current question list.
+  const current = (await loadQueries()).filter((q) => scannedIds.has(q.id));
+  const byId = new Map([...current, ...stored].map((q) => [q.id, q]));
+  return { queries: [...scannedIds].map((id) => byId.get(id)).filter((q): q is TrackedQuery => Boolean(q)), results };
 }
 
 export async function loadWorkspace(): Promise<WorkspaceState> {
@@ -69,8 +85,8 @@ export async function loadWorkspace(): Promise<WorkspaceState> {
     queries: toArray<TrackedQuery>(queriesRaw).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     latestRun,
     results,
-    snapshots: snapshots.slice(-30),
-    runs: runs.slice(0, 20),
+    snapshots: snapshots.slice(-365),
+    runs: runs.slice(0, 100),
     providers: [],
   };
 }

@@ -31,8 +31,8 @@ export async function POST(request: Request) {
       }
       const [brand, queries, keySettings] = await Promise.all([loadBrand(), loadQueries(), loadKeySettings()]);
       if (!brand) throw new Error("Set up your brand profile first.");
-      const { run, results, snapshot } = await runScan(brand, queries, keySettings, queryIds);
-      await saveRun(run, results, snapshot);
+      const { run, results, snapshot, queries: scannedQueries } = await runScan(brand, queries, keySettings, queryIds);
+      await saveRun(run, results, snapshot, scannedQueries);
       return Response.json({ run, results, snapshot });
     });
   } catch (error) {

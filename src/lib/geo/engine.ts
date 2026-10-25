@@ -119,7 +119,7 @@ export async function runScan(
   queries: TrackedQuery[],
   keySettings?: KeySettings | null,
   queryIds?: string[],
-): Promise<{ run: ScanRun; results: QueryResult[]; snapshot: MetricsSnapshot }> {
+): Promise<{ run: ScanRun; results: QueryResult[]; snapshot: MetricsSnapshot; queries: TrackedQuery[] }> {
   const targets = queryIds?.length ? queries.filter((q) => queryIds.includes(q.id)) : queries;
   if (!targets.length) throw new Error("Add at least one buyer question before running a scan.");
   if (targets.length > MAX_QUERIES_PER_SCAN) {
@@ -192,7 +192,7 @@ export async function runScan(
 
   run.finishedAt = new Date().toISOString();
   const snapshot = computeSnapshot(run.id, results, run.providerStatus);
-  return { run, results, snapshot };
+  return { run, results, snapshot, queries: targets };
 }
 
 const INTENT_KEYWORDS: Array<[RegExp, TrackedQuery["intent"]]> = [

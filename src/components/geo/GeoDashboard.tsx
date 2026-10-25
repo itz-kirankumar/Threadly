@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { updateProfile, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
-import type { MetricsSnapshot, WorkspaceState } from "@/lib/geo/types";
+import type { MetricsSnapshot, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
 import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
 import TrendChart from "./TrendChart";
@@ -103,6 +103,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team">("brand");
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [runDetails, setRunDetails] = useState<Record<string, { queries: TrackedQuery[]; results: QueryResult[] } | "loading" | "error">>({});
 
   const authedFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -117,6 +119,28 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       return payload;
     },
     [user],
+  );
+
+  const toggleRun = useCallback(
+    async (runId: string) => {
+      if (expandedRunId === runId) {
+        setExpandedRunId(null);
+        return;
+      }
+      setExpandedRunId(runId);
+      if (runDetails[runId]) return;
+      setRunDetails((prev) => ({ ...prev, [runId]: "loading" }));
+      try {
+        const detail = (await authedFetch(`/api/geo/run-results?runId=${encodeURIComponent(runId)}`)) as {
+          queries: TrackedQuery[];
+          results: QueryResult[];
+        };
+        setRunDetails((prev) => ({ ...prev, [runId]: detail }));
+      } catch {
+        setRunDetails((prev) => ({ ...prev, [runId]: "error" }));
+      }
+    },
+    [authedFetch, expandedRunId, runDetails],
   );
 
   const refresh = useCallback(async () => {
@@ -554,18 +578,51 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       {tab === "runs" && (
         <div className="space-y-2">
           {state.runs.map((run) => (
-            <div key={run.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <div>
-                <p className="text-sm text-zinc-200">{formatDateTime(run.startedAt)}</p>
-                <p className="text-xs text-zinc-500">{run.queryCount} questions × {Object.values(run.providerStatus).filter((status) => status === "scanned").length || providerOrder.length} providers</p>
-              </div>
-              <div className="flex gap-1.5">
-                {Object.keys(run.providerStatus).filter((id) => run.providerStatus[id] === "scanned").map((id) => (
-                  <span key={id} className={`rounded-full border px-2 py-0.5 text-xs ${colorForProvider(id)}`}>
-                    {labelForProvider(id, providerLabels)} ✓
-                  </span>
-                ))}
-              </div>
+            <div key={run.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+              <button
+                type="button"
+                onClick={() => toggleRun(run.id)}
+                className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-white/[0.04]"
+              >
+                <div>
+                  <p className="text-sm text-zinc-200">
+                    <span className="mr-2 inline-block text-zinc-500">{expandedRunId === run.id ? "▾" : "▸"}</span>
+                    {formatDateTime(run.startedAt)}
+                  </p>
+                  <p className="text-xs text-zinc-500">{run.queryCount} questions × {Object.values(run.providerStatus).filter((status) => status === "scanned").length || providerOrder.length} providers</p>
+                </div>
+                <div className="flex gap-1.5">
+                  {Object.keys(run.providerStatus).filter((id) => run.providerStatus[id] === "scanned").map((id) => (
+                    <span key={id} className={`rounded-full border px-2 py-0.5 text-xs ${colorForProvider(id)}`}>
+                      {labelForProvider(id, providerLabels)} ✓
+                    </span>
+                  ))}
+                </div>
+              </button>
+              {expandedRunId === run.id && (() => {
+                const detail = runDetails[run.id];
+                return (
+                  <div className="border-t border-white/10 px-2 py-3">
+                    {!detail || detail === "loading" ? (
+                      <p className="px-3 py-6 text-center text-xs text-zinc-500">Loading scan results…</p>
+                    ) : detail === "error" ? (
+                      <p className="px-3 py-6 text-center text-xs text-red-400">Could not load this scan's results.</p>
+                    ) : (
+                      <QueryTable
+                        state={{ ...state, queries: detail.queries, results: detail.results }}
+                        readOnly
+                        busy={false}
+                        onAdd={async () => {}}
+                        onSuggest={async () => {}}
+                        suggestions={[]}
+                        suggestBusy={false}
+                        providerOrder={providerOrder}
+                        providerLabels={providerLabels}
+                      />
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ))}
           {!state.runs.length && (
