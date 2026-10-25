@@ -9,6 +9,7 @@ import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
 import TrendChart from "./TrendChart";
 import RecommendationsPanel from "./RecommendationsPanel";
+import RedditPanel from "./RedditPanel";
 import ProviderKeysPanel from "./ProviderKeysPanel";
 import TeamPanel from "./TeamPanel";
 import ActivityPanel from "./ActivityPanel";
@@ -26,7 +27,7 @@ import {
   labelForProvider,
 } from "./helpers";
 
-type Tab = "overview" | "queries" | "citations" | "runs" | "settings";
+type Tab = "overview" | "queries" | "citations" | "runs" | "reddit" | "settings";
 
 interface Props {
   user: User | null;
@@ -381,7 +382,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     { id: "queries", label: `Questions (${state.queries.length})` },
     { id: "citations", label: "Citations" },
     { id: "runs", label: `Scans (${state.runs.length})` },
-    ...(!readOnly ? [{ id: "settings" as Tab, label: "Settings" }] : []),
+    ...(!readOnly ? [{ id: "reddit" as Tab, label: "Reddit" }, { id: "settings" as Tab, label: "Settings" }] : []),
   ];
 
   const body = (
@@ -689,6 +690,10 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         </div>
       )}
 
+      {tab === "reddit" && !readOnly && (
+        <RedditPanel authedFetch={authedFetch} />
+      )}
+
       {tab === "settings" && !readOnly && (
         <div className="grid gap-6 md:grid-cols-[200px_1fr]">
           <nav className="flex gap-1 overflow-x-auto md:flex-col">
@@ -918,6 +923,11 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
   runs: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" /><path d="M13.5 2.5v2.6h-2.6" />
+    </svg>
+  ),
+  reddit: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6.5" /><circle cx="5.8" cy="7.2" r="0.6" fill="currentColor" /><circle cx="10.2" cy="7.2" r="0.6" fill="currentColor" /><path d="M5.6 10.2c.7.7 1.5 1 2.4 1s1.7-.3 2.4-1" />
     </svg>
   ),
   settings: (
