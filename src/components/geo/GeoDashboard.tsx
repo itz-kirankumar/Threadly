@@ -53,6 +53,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [showTour, setShowTour] = useState(false);
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<"brand" | "keys">("brand");
 
   const authedFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -422,16 +423,42 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       )}
 
       {tab === "settings" && !readOnly && (
-        <div className="space-y-6">
-          <SetupWizard busy={busy} error={error} onSave={saveBrand} initial={state.brand} />
-          <ProviderKeysPanel
-            providers={state.providers}
-            keyEncryption={keyEncryption}
-            busy={busy}
-            onSaveBuiltin={saveBuiltinKey}
-            onAddCustom={addCustomProvider}
-            onRemove={removeKey}
-          />
+        <div className="grid gap-6 md:grid-cols-[200px_1fr]">
+          <nav className="flex gap-1 overflow-x-auto md:flex-col">
+            {(
+              [
+                { id: "brand", label: "Brand profile", hint: "Name, domain, logo, competitors" },
+                { id: "keys", label: "AI provider keys", hint: "Your own keys, custom providers" },
+              ] as const
+            ).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSettingsSection(item.id)}
+                className={`rounded-lg px-3.5 py-2.5 text-left transition md:w-full ${
+                  settingsSection === item.id ? "bg-violet-500/10 text-white" : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
+                }`}
+              >
+                <span className="block whitespace-nowrap text-sm font-medium">{item.label}</span>
+                <span className="mt-0.5 hidden text-[11px] text-zinc-600 md:block">{item.hint}</span>
+              </button>
+            ))}
+          </nav>
+          <div>
+            {settingsSection === "brand" && (
+              <SetupWizard busy={busy} error={error} onSave={saveBrand} initial={state.brand} />
+            )}
+            {settingsSection === "keys" && (
+              <ProviderKeysPanel
+                providers={state.providers}
+                keyEncryption={keyEncryption}
+                busy={busy}
+                onSaveBuiltin={saveBuiltinKey}
+                onAddCustom={addCustomProvider}
+                onRemove={removeKey}
+              />
+            )}
+          </div>
         </div>
       )}
 

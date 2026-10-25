@@ -19,18 +19,29 @@ const BUILTIN_HINTS: Record<string, string> = {
   gemini: "aistudio.google.com/apikey",
 };
 
-function SourceChip({ source, lastFour }: { source: ProviderKeyStatus["source"]; lastFour?: string }) {
+function StatusBadge({ source, lastFour }: { source: ProviderKeyStatus["source"]; lastFour?: string }) {
   if (source === "user") {
     return (
-      <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-300">
-        Your key ····{lastFour}
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-medium text-violet-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+        Connected ····{lastFour}
       </span>
     );
   }
   if (source === "platform") {
-    return <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-zinc-400">Platform default</span>;
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        Platform default
+      </span>
+    );
   }
-  return <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-zinc-500">Not configured</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.02] px-2.5 py-0.5 text-[11px] font-medium text-zinc-500">
+      <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+      Not configured
+    </span>
+  );
 }
 
 export default function ProviderKeysPanel({ providers, keyEncryption, busy, onSaveBuiltin, onAddCustom, onRemove }: Props) {
@@ -47,96 +58,100 @@ export default function ProviderKeysPanel({ providers, keyEncryption, busy, onSa
     "w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-violet-400 focus:outline-none";
 
   return (
-    <section className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
-      <h3 className="text-base font-semibold text-white">AI provider keys</h3>
-      <p className="mt-1 text-sm leading-relaxed text-zinc-500">
-        Scans use the platform's default keys. Add your own keys to scan on your accounts, use different models, or
-        track providers beyond the defaults. Keys are encrypted at rest and never shown again after saving.
-      </p>
-      {!keyEncryption && (
-        <p className="mt-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-          Key storage is not enabled on this deployment, so only platform default keys are available.
-        </p>
-      )}
-
-      <div className="mt-5 space-y-3">
-        {builtins.map((provider) => (
-          <div key={provider.id} className="rounded-xl border border-white/10 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <span className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${colorForProvider(provider.id)}`}>
-                  {provider.label}
-                </span>
-                <SourceChip source={provider.source} lastFour={provider.lastFour} />
-              </div>
-              {keyEncryption && (
-                <div className="flex gap-2">
-                  {provider.source === "user" && (
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-xl border border-white/10">
+        <div className="border-b border-white/10 bg-white/[0.03] px-5 py-4">
+          <h3 className="text-sm font-semibold text-white">Built-in providers</h3>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            Scans use the platform's default keys unless you connect your own. Keys are encrypted at rest (AES-256-GCM)
+            and shown only as a masked last-four.
+          </p>
+        </div>
+        {!keyEncryption && (
+          <p className="border-b border-amber-400/20 bg-amber-500/10 px-5 py-2.5 text-sm text-amber-200">
+            Key storage is not enabled on this deployment, so only platform default keys are available.
+          </p>
+        )}
+        <div className="divide-y divide-white/[0.06]">
+          {builtins.map((provider) => (
+            <div key={provider.id} className="px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className={`w-20 rounded-md border px-2 py-1 text-center text-xs font-semibold ${colorForProvider(provider.id)}`}>
+                    {provider.label}
+                  </span>
+                  <StatusBadge source={provider.source} lastFour={provider.lastFour} />
+                  {provider.model && <span className="font-mono text-[11px] text-zinc-500">{provider.model}</span>}
+                </div>
+                {keyEncryption && (
+                  <div className="flex items-center gap-2">
+                    {provider.source === "user" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void onRemove({ provider: provider.id })}
+                        className="rounded-md border border-white/10 px-2.5 py-1 text-xs text-zinc-500 transition hover:border-rose-400/40 hover:text-rose-300"
+                      >
+                        Disconnect
+                      </button>
+                    )}
                     <button
                       type="button"
-                      disabled={busy}
-                      onClick={() => void onRemove({ provider: provider.id })}
-                      className="text-xs text-zinc-500 transition hover:text-rose-300"
+                      onClick={() => {
+                        setOpenKey(openKey === provider.id ? null : provider.id);
+                        setKeyValue("");
+                        setModelValue("");
+                      }}
+                      className="rounded-md border border-violet-400/40 px-2.5 py-1 text-xs font-medium text-violet-300 transition hover:bg-violet-500/10"
                     >
-                      Remove
+                      {provider.source === "user" ? "Replace key" : "Connect key"}
                     </button>
-                  )}
+                  </div>
+                )}
+              </div>
+              {openKey === provider.id && (
+                <form
+                  className="mt-3 flex flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 sm:flex-row"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void onSaveBuiltin(provider.id, keyValue, modelValue || undefined).then(() => setOpenKey(null));
+                  }}
+                >
+                  <input
+                    className={input}
+                    type="password"
+                    required
+                    minLength={8}
+                    value={keyValue}
+                    onChange={(e) => setKeyValue(e.target.value)}
+                    placeholder={`API key from ${BUILTIN_HINTS[provider.id] ?? "your provider"}`}
+                    autoComplete="off"
+                  />
+                  <input
+                    className={`${input} sm:max-w-[180px]`}
+                    value={modelValue}
+                    onChange={(e) => setModelValue(e.target.value)}
+                    placeholder="Model (optional)"
+                    autoComplete="off"
+                  />
                   <button
-                    type="button"
-                    onClick={() => {
-                      setOpenKey(openKey === provider.id ? null : provider.id);
-                      setKeyValue("");
-                      setModelValue("");
-                    }}
-                    className="text-xs font-medium text-violet-300 transition hover:text-violet-200"
+                    type="submit"
+                    disabled={busy}
+                    className="whitespace-nowrap rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
                   >
-                    {provider.source === "user" ? "Replace key" : "Use my own key"}
+                    Save key
                   </button>
-                </div>
+                </form>
               )}
             </div>
-            {openKey === provider.id && (
-              <form
-                className="mt-3 flex flex-col gap-2 sm:flex-row"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void onSaveBuiltin(provider.id, keyValue, modelValue || undefined).then(() => setOpenKey(null));
-                }}
-              >
-                <input
-                  className={input}
-                  type="password"
-                  required
-                  minLength={8}
-                  value={keyValue}
-                  onChange={(e) => setKeyValue(e.target.value)}
-                  placeholder={`API key from ${BUILTIN_HINTS[provider.id] ?? "your provider"}`}
-                  autoComplete="off"
-                />
-                <input
-                  className={`${input} sm:max-w-[180px]`}
-                  value={modelValue}
-                  onChange={(e) => setModelValue(e.target.value)}
-                  placeholder="Model (optional)"
-                  autoComplete="off"
-                />
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
-                >
-                  Save
-                </button>
-              </form>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </section>
 
-      <div className="mt-6 border-t border-white/10 pt-5">
-        <div className="flex items-center justify-between">
+      <section className="overflow-hidden rounded-xl border border-white/10">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.03] px-5 py-4">
           <div>
-            <h4 className="text-sm font-semibold text-white">Custom providers</h4>
+            <h3 className="text-sm font-semibold text-white">Custom providers</h3>
             <p className="mt-0.5 text-xs text-zinc-500">
               Any OpenAI-compatible endpoint (Groq, Together, Mistral, your own gateway). Answers may not include live
               web search.
@@ -153,31 +168,39 @@ export default function ProviderKeysPanel({ providers, keyEncryption, busy, onSa
           )}
         </div>
 
-        {customs.map((provider) => (
-          <div key={provider.id} className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 p-4">
-            <div className="flex items-center gap-3">
-              <span className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${colorForProvider(provider.id)}`}>
-                {provider.label}
-              </span>
-              <span className="font-mono text-[11px] text-zinc-500">
-                {provider.model} · {provider.baseUrl}
-              </span>
-              <SourceChip source="user" lastFour={provider.lastFour} />
-            </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void onRemove({ customId: provider.id })}
-              className="text-xs text-zinc-500 transition hover:text-rose-300"
-            >
-              Remove
-            </button>
+        {customs.length > 0 && (
+          <div className="divide-y divide-white/[0.06]">
+            {customs.map((provider) => (
+              <div key={provider.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${colorForProvider(provider.id)}`}>
+                    {provider.label}
+                  </span>
+                  <span className="font-mono text-[11px] text-zinc-500">
+                    {provider.model} · {provider.baseUrl}
+                  </span>
+                  <StatusBadge source="user" lastFour={provider.lastFour} />
+                </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onRemove({ customId: provider.id })}
+                  className="rounded-md border border-white/10 px-2.5 py-1 text-xs text-zinc-500 transition hover:border-rose-400/40 hover:text-rose-300"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
+
+        {!customs.length && !showCustom && (
+          <p className="px-5 py-6 text-sm text-zinc-600">No custom providers yet.</p>
+        )}
 
         {showCustom && (
           <form
-            className="mt-3 grid gap-2 rounded-xl border border-white/10 p-4 sm:grid-cols-2"
+            className="grid gap-2 border-t border-white/[0.06] bg-white/[0.02] p-5 sm:grid-cols-2"
             onSubmit={(event) => {
               event.preventDefault();
               void onAddCustom(custom).then(() => {
@@ -227,7 +250,7 @@ export default function ProviderKeysPanel({ providers, keyEncryption, busy, onSa
             </button>
           </form>
         )}
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
