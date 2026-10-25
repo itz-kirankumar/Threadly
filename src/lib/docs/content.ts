@@ -194,6 +194,36 @@ export const DOC_PAGES: DocPage[] = [
     ],
   },
   {
+    slug: "activity-and-audit",
+    section: "Using Threadly",
+    title: "Activity log",
+    description: "Every workspace change, recorded.",
+    blocks: [
+      { type: "p", text: "Settings > Activity log is the audit trail for your workspace. It records scans, question changes, brand profile updates, provider key saves and removals, invite links, membership changes and API key events - each with the actor's email, the time and a short detail." },
+      { type: "p", text: "The log keeps the last 100 events per workspace and shows the 50 most recent. Audit writes are fail-safe: they never block the action they record." },
+    ],
+  },
+  {
+    slug: "public-api",
+    section: "Reference",
+    title: "Public API",
+    description: "Pull your latest visibility metrics into any tool.",
+    blocks: [
+      { type: "p", text: "Threadly's public API exposes your workspace's latest visibility summary for reporting scripts, dashboards and automations. Create a key in Settings > API access." },
+      { type: "h2", text: "Authentication" },
+      { type: "p", text: "Keys start with thly_ and are shown exactly once at creation - Threadly stores only their SHA-256 hash. Send the key as a bearer token:" },
+      { type: "code", title: "Request", text: "curl -H \"Authorization: Bearer thly_...\" https://www.gothreadly.live/api/v1/summary" },
+      { type: "h2", text: "GET /api/v1/summary" },
+      { type: "p", text: "Returns your brand, tracked competitors, the latest scan run, and the headline metrics: mention rate, citation share, share of voice, average position, and per-provider breakdown." },
+      { type: "code", title: "Response shape", text: "{\n  \"brand\": { \"name\", \"domain\", \"competitors\": [{ \"name\", \"domain\" }] },\n  \"latestRun\": { \"id\", \"startedAt\", \"finishedAt\", \"queryCount\", \"providerStatus\" },\n  \"metrics\": { \"mentionRate\", \"citationShare\", \"shareOfVoice\", \"avgPosition\", \"perProvider\" }\n}" },
+      { type: "list", items: [
+        "Rate limit: 120 requests per hour per workspace.",
+        "Revoke a key anytime in Settings > API access - it stops working immediately.",
+        "Key creation and revocation are recorded in the Activity log.",
+      ] },
+    ],
+  },
+  {
     slug: "faq",
     section: "Reference",
     title: "FAQ and troubleshooting",
