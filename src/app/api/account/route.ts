@@ -2,6 +2,7 @@ import { errorResponse } from "@/lib/api-request";
 import { getFirebaseIdentity } from "@/lib/portal-db";
 import { getAdminDatabase } from "@/lib/geo/admin-store";
 import { adminGetMembership, loadTeam } from "@/lib/geo/team";
+import { executeDeletion } from "@/lib/geo/pending-deletions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,56 +64,31 @@ export async function DELETE(request: Request) {
       await db.ref(`invites/${invite.token}`).set(null);
     }
 
-    // Destructive steps happen only after every guard above has passed.
-    // The Auth user goes FIRST: it is the only step that can fail for
-    // recency, and once it is gone no active session can outlive deleted
-    // data. Data deletion via Admin SDK cannot fail for recency.
-    const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${encodeURIComponent(apiKey ?? "")}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: identity.idToken }),
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      return Response.json(
-        { error: "For security, account deletion needs a recent sign-in. Sign out, sign back in, and try again." },
-        { status: 403 },
-      );
+    const outcome = await executeDeletion(db, uid, identity.idToken);
+    switch (outcome.kind) {
+      case "intent-failed":
+        return Response.json(
+          { error: "Could not start account deletion safely. Nothing was changed - please try again." },
+          { status: 503 },
+        );
+      case "auth-rejected":
+        return Response.json(
+          { error: "For security, account deletion needs a recent sign-in. Sign out, sign back in, and try again." },
+          { status: 403 },
+        );
+      case "wipe-failed":
+        return Response.json(
+          {
+            error: "Your sign-in was removed, but clearing your stored data failed. It is queued and will be removed automatically by the next scheduled cleanup.",
+            authDeleted: true,
+            dataRemoved: false,
+            cleanupQueued: true,
+          },
+          { status: 502 },
+        );
+      case "deleted":
+        return Response.json({ deleted: true });
     }
-
-    // Data wipe via Admin SDK. If it fails AFTER the Auth user is gone,
-    // queue a tombstone so the daily cron sweeps it (no user exists to retry
-    // from the client). Never report success here on partial removal.
-    try {
-      await db.ref(`users/${uid}`).set(null);
-      await db.ref(`memberships/${uid}`).set(null);
-    } catch (wipeError) {
-      let queued = false;
-      try {
-        await db.ref(`pendingDeletions/${uid}`).set({
-          uid,
-          queuedAt: new Date().toISOString(),
-          lastError: wipeError instanceof Error ? wipeError.message : "data wipe failed",
-        });
-        queued = true;
-      } catch (queueError) {
-        console.error("Account deletion: auth removed but data wipe AND tombstone write failed", uid, queueError);
-      }
-      return Response.json(
-        {
-          error: queued
-            ? "Your sign-in was removed, but clearing your stored data failed. It is queued and will be removed automatically by the next scheduled cleanup."
-            : "Your sign-in was removed, but clearing your stored data failed and we could not queue the cleanup. Contact support with this email address so we can finish it manually.",
-          authDeleted: true,
-          dataRemoved: false,
-          cleanupQueued: queued,
-        },
-        { status: 502 },
-      );
-    }
-
-    return Response.json({ deleted: true });
   } catch (error) {
     return errorResponse(error, "Delete account");
   }

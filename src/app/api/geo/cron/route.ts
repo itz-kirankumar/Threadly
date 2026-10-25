@@ -24,27 +24,22 @@ export async function GET(request: Request) {
     );
   }
 
-  // Finish any account deletions whose data wipe failed after the Auth
-  // user was removed. Tombstones live at pendingDeletions/<uid>.
-  let swept = 0;
+  // Reconcile account-deletion tombstones first (see pending-deletions.ts).
+  const { getAdminDatabase } = await import("@/lib/geo/admin-store");
+  const { reconcilePendingDeletions } = await import("@/lib/geo/pending-deletions");
+  const db = await getAdminDatabase();
+  let sweep = { swept: [] as string[], clearedStale: [] as string[], skipped: [] as string[] };
   try {
-    const { getAdminDatabase } = await import("@/lib/geo/admin-store");
-    const db = await getAdminDatabase();
-    const snapshot = await db.ref("pendingDeletions").get();
-    const tombstones: Array<{ uid?: string }> = Object.values(snapshot.val() || {});
-    for (const tombstone of tombstones) {
-      if (!tombstone?.uid) continue;
-      try {
-        await db.ref(`users/${tombstone.uid}`).set(null);
-        await db.ref(`memberships/${tombstone.uid}`).set(null);
-        await db.ref(`pendingDeletions/${tombstone.uid}`).set(null);
-        swept++;
-      } catch (retryError) {
-        console.error("Cron: pending deletion retry failed for", tombstone.uid, retryError);
-      }
-    }
+    sweep = await reconcilePendingDeletions(db);
   } catch (error) {
     console.error("Cron: pending-deletion sweep failed", error);
+  }
+
+  // Ops affordance: ?sweepOnly=1 (same CRON_SECRET auth) runs only the
+  // tombstone reconciliation - used to verify recovery without burning AI
+  // scan credits.
+  if (new URL(request.url).searchParams.get("sweepOnly") === "1") {
+    return Response.json({ ok: true, sweep });
   }
 
   const scanned: Array<{ uid: string; runId?: string; error?: string }> = [];
@@ -64,5 +59,5 @@ export async function GET(request: Request) {
       scanned.push({ uid, error: error instanceof Error ? error.message : "scan failed" });
     }
   }
-  return Response.json({ ok: true, workspaces: scanned.length, scanned, pendingDeletionsSwept: swept });
+  return Response.json({ ok: true, workspaces: scanned.length, scanned, pendingDeletionsSwept: sweep.swept.length });
 }
