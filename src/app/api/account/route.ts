@@ -81,8 +81,36 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await db.ref(`users/${uid}`).set(null);
-    await db.ref(`memberships/${uid}`).set(null);
+    // Data wipe via Admin SDK. If it fails AFTER the Auth user is gone,
+    // queue a tombstone so the daily cron sweeps it (no user exists to retry
+    // from the client). Never report success here on partial removal.
+    try {
+      await db.ref(`users/${uid}`).set(null);
+      await db.ref(`memberships/${uid}`).set(null);
+    } catch (wipeError) {
+      let queued = false;
+      try {
+        await db.ref(`pendingDeletions/${uid}`).set({
+          uid,
+          queuedAt: new Date().toISOString(),
+          lastError: wipeError instanceof Error ? wipeError.message : "data wipe failed",
+        });
+        queued = true;
+      } catch (queueError) {
+        console.error("Account deletion: auth removed but data wipe AND tombstone write failed", uid, queueError);
+      }
+      return Response.json(
+        {
+          error: queued
+            ? "Your sign-in was removed, but clearing your stored data failed. It is queued and will be removed automatically by the next scheduled cleanup."
+            : "Your sign-in was removed, but clearing your stored data failed and we could not queue the cleanup. Contact support with this email address so we can finish it manually.",
+          authDeleted: true,
+          dataRemoved: false,
+          cleanupQueued: queued,
+        },
+        { status: 502 },
+      );
+    }
 
     return Response.json({ deleted: true });
   } catch (error) {

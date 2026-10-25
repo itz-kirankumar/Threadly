@@ -24,6 +24,29 @@ export async function GET(request: Request) {
     );
   }
 
+  // Finish any account deletions whose data wipe failed after the Auth
+  // user was removed. Tombstones live at pendingDeletions/<uid>.
+  let swept = 0;
+  try {
+    const { getAdminDatabase } = await import("@/lib/geo/admin-store");
+    const db = await getAdminDatabase();
+    const snapshot = await db.ref("pendingDeletions").get();
+    const tombstones: Array<{ uid?: string }> = Object.values(snapshot.val() || {});
+    for (const tombstone of tombstones) {
+      if (!tombstone?.uid) continue;
+      try {
+        await db.ref(`users/${tombstone.uid}`).set(null);
+        await db.ref(`memberships/${tombstone.uid}`).set(null);
+        await db.ref(`pendingDeletions/${tombstone.uid}`).set(null);
+        swept++;
+      } catch (retryError) {
+        console.error("Cron: pending deletion retry failed for", tombstone.uid, retryError);
+      }
+    }
+  } catch (error) {
+    console.error("Cron: pending-deletion sweep failed", error);
+  }
+
   const scanned: Array<{ uid: string; runId?: string; error?: string }> = [];
   const uids = await listWorkspaceIds(50);
   for (const uid of uids) {
@@ -41,5 +64,5 @@ export async function GET(request: Request) {
       scanned.push({ uid, error: error instanceof Error ? error.message : "scan failed" });
     }
   }
-  return Response.json({ ok: true, workspaces: scanned.length, scanned });
+  return Response.json({ ok: true, workspaces: scanned.length, scanned, pendingDeletionsSwept: swept });
 }

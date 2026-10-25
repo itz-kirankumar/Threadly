@@ -1,6 +1,6 @@
 // Threadly blog: content model + posts.
-// Rendered by src/app/blog/[slug]/page.tsx. Posts stay unpublished (published: true)
-// until reviewed, then ship by flipping the flag.
+// Rendered by src/app/blog/[slug]/page.tsx. Flip a post's `published` flag
+// to ship it.
 
 import type { DocBlock } from "@/lib/docs/content";
 
@@ -19,14 +19,14 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: "what-is-geo",
     title: "What is generative engine optimization (GEO)?",
     description:
-      "Buyers increasingly ask ChatGPT, Claude and Gemini what to buy instead of searching. GEO is the practice of measuring and improving how those AI answers talk about your brand.",
+      "Buyers can now ask ChatGPT, Claude and Gemini what to buy instead of searching. GEO is the practice of measuring and improving how those AI answers talk about your brand.",
     date: "2026-10-25",
     readingTime: "7 min read",
     published: true,
     blocks: [
       {
         type: "p",
-        text: "For twenty years, the first page of Google decided which brands buyers discovered. That habit is changing. A growing share of buying research now starts with a question typed into an AI assistant: \"What are the best async video tools for a remote sales team?\" or \"Which CRM should a ten-person agency use?\" The assistant answers directly, names a handful of brands, and often cites its sources. There is no page two.",
+        text: "For years, the first page of Google decided which brands buyers discovered. That habit is starting to shift: buying research can now begin with a question typed into an AI assistant: \"What are the best async video tools for a remote sales team?\" or \"Which CRM should a ten-person agency use?\" The assistant answers directly, names a handful of brands, and often cites its sources. There is no page two.",
       },
       {
         type: "p",
@@ -135,9 +135,9 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     slug: "buyers-stopped-searching",
-    title: "Your buyers stopped searching. They started asking.",
+    title: "When buyers stop searching and start asking",
     description:
-      "Buying research is moving from ten blue links to a single synthesized answer. Here is what that shift means for how brands get discovered - and why citations are the new backlinks.",
+      "When buying research moves from ten blue links to a single synthesized answer, the rules of discovery change. Here is what that shift could mean for how brands get discovered - and why citations are the new backlinks.",
     date: "2026-10-25",
     readingTime: "5 min read",
     published: true,
@@ -153,7 +153,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: "p",
-        text: "This cuts across every category - software, services, consumer products. Anywhere a buyer can ask \"what is the best X for Y\", an AI assistant is now part of the path to purchase.",
+        text: "This can cut across categories - software, services, consumer products. Anywhere a buyer might ask \"what is the best X for Y\", an AI assistant can be part of the path to purchase.",
       },
       { type: "h2", text: "Citations are the new backlinks" },
       {
@@ -175,7 +175,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: "p",
-        text: "The buyers who used to search are asking instead. The brands that learn to measure the answers will be the ones in them.",
+        text: "Where buyers used to search, some now ask instead. The brands that learn to measure the answers will be the ones in them.",
       },
     ],
   },
