@@ -10,6 +10,7 @@ interface Tier {
   blurb: string;
   cta: string;
   highlight?: boolean;
+  unitAnchor?: string;
   features: string[];
 }
 
@@ -25,6 +26,7 @@ const TIERS: Tier[] = [
       "ChatGPT, Claude and Gemini",
       "Daily automatic scans",
       "Mention rate, share of voice, citations",
+      "AI crawler access check",
       "30-day scan history",
       "1 workspace seat",
     ],
@@ -34,12 +36,14 @@ const TIERS: Tier[] = [
     monthly: 49,
     annualMonthly: 39,
     blurb: "For marketers building a repeatable GEO motion.",
-    cta: "Get started",
+    cta: "Start free",
     highlight: true,
+    unitAnchor: "78\u00A2 per tracked question",
     features: [
       "50 tracked buyer questions",
       "All providers + custom OpenAI-compatible providers",
       "Bring your own API keys",
+      "Visibility gap recommendations",
       "Daily automatic scans, unlimited history",
       "Citation leaderboard and answer archive",
       "Team workspace - up to 5 seats",
@@ -50,11 +54,14 @@ const TIERS: Tier[] = [
     monthly: 149,
     annualMonthly: 119,
     blurb: "For teams and agencies managing serious coverage.",
-    cta: "Get started",
+    cta: "Start free",
+    unitAnchor: "79\u00A2 per tracked question",
     features: [
       "150 tracked buyer questions",
       "Everything in Pro",
       "Team workspace - up to 25 seats with roles",
+      "Activity log (audit trail)",
+      "Public API access",
       "Unlimited custom providers",
       "Priority scan queue",
       "Priority support",
@@ -71,17 +78,45 @@ const TIERS: Tier[] = [
       "Everything in Growth",
       "Unlimited seats with role hierarchy",
       "Custom scan frequency and providers",
+      "Custom API rate limits and data exports",
       "Dedicated onboarding and success manager",
       "Custom terms and invoicing",
     ],
   },
 ];
 
+const COMPARISON: { label: string; values: (string | boolean)[] }[] = [
+  { label: "Tracked buyer questions", values: ["10", "50", "150", "Unlimited"] },
+  { label: "ChatGPT, Claude and Gemini", values: [true, true, true, true] },
+  { label: "Custom OpenAI-compatible providers", values: [false, true, true, true] },
+  { label: "Bring your own API keys", values: [false, true, true, true] },
+  { label: "Visibility gap recommendations", values: [false, true, true, true] },
+  { label: "AI crawler access check", values: [true, true, true, true] },
+  { label: "Scan history", values: ["30 days", "Unlimited", "Unlimited", "Unlimited"] },
+  { label: "Workspace seats", values: ["1", "5", "25", "Unlimited"] },
+  { label: "Roles and invite links", values: [false, true, true, true] },
+  { label: "Activity log (audit trail)", values: [false, false, true, true] },
+  { label: "Public API access", values: [false, false, true, true] },
+  { label: "Support", values: ["Community", "Standard", "Priority", "Dedicated manager"] },
+];
+
+function Check() {
+  return (
+    <svg viewBox="0 0 24 24" className="mx-auto h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2.5">
+      <path d="m5 13 4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function Pricing({ compact = false }: { compact?: boolean }) {
   const [annual, setAnnual] = useState(true);
   return (
     <div>
-      <div className="flex items-center justify-center gap-3 text-sm">
+      <p className="mx-auto w-fit rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-center text-sm font-medium text-emerald-200">
+        Early access: every plan is free right now - pick any plan, no card needed.
+      </p>
+
+      <div className="mt-6 flex items-center justify-center gap-3 text-sm">
         <span className={annual ? "text-zinc-500" : "text-zinc-200"}>Monthly</span>
         <button
           type="button"
@@ -124,7 +159,10 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
               )}
             </div>
             {tier.monthly !== null && tier.monthly > 0 && (
-              <p className="mt-1 text-xs text-zinc-500">{annual ? "Billed annually" : "Billed monthly"}</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {annual ? "Billed annually" : "Billed monthly"}
+                {annual && tier.unitAnchor ? ` · ${tier.unitAnchor}` : ""}
+              </p>
             )}
             {tier.monthly === 0 && <p className="mt-1 text-xs text-zinc-500">Free forever</p>}
             <p className="mt-3 text-sm leading-relaxed text-zinc-400">{tier.blurb}</p>
@@ -154,10 +192,40 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
         ))}
       </div>
 
-      <p className="mt-8 text-center text-xs text-zinc-500">
-        Early access: every plan is free while Threadly is in beta. Paid plans switch on when billing launches -
-        no card collected today.
+      <p className="mt-6 text-center text-xs text-zinc-500">
+        No credit card required · Cancel anytime · Early users keep their workspaces and history.
       </p>
+
+      {!compact && (
+        <div className="mt-14 overflow-x-auto rounded-2xl border border-white/10">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">
+                <th className="px-5 py-3.5 font-medium">Compare plans</th>
+                {TIERS.map((tier) => (
+                  <th key={tier.name} className={`px-4 py-3.5 text-center font-medium ${tier.highlight ? "text-violet-300" : ""}`}>
+                    {tier.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARISON.map((row) => (
+                <tr key={row.label} className="border-b border-white/5">
+                  <td className="px-5 py-3 text-zinc-300">{row.label}</td>
+                  {row.values.map((value, i) => (
+                    <td key={TIERS[i].name} className={`px-4 py-3 text-center ${TIERS[i].highlight ? "bg-violet-500/[0.05]" : ""}`}>
+                      {typeof value === "boolean" ? (value ? <Check /> : <span className="text-zinc-700">—</span>) : (
+                        <span className="text-zinc-300">{value}</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
