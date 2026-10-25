@@ -29,7 +29,7 @@ export default function TermsPage() {
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">1. Acceptance of Terms</h2>
               <p>
-                By accessing or using Threadly, submitting our waitlist application, or joining our Discord collective, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our services.
+                By accessing or using Threadly, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our services.
               </p>
             </section>
 
@@ -55,7 +55,7 @@ export default function TermsPage() {
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">4. Limitation of Liability</h2>
               <p>
-                Threadly provides guidance, intent signals, and early adopter testing tools on an &quot;as is&quot; basis. While we strive to maximize your distribution outcomes, we do not guarantee specific revenue figures or investor commitments.
+                Threadly provides AI-answer monitoring and GEO analytics on an &quot;as is&quot; basis. Answers from third-party AI providers vary between runs; while we strive for accurate measurement, we do not guarantee specific visibility, traffic, or revenue outcomes.
               </p>
             </section>
           </div>

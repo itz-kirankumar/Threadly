@@ -29,12 +29,12 @@ export default function PrivacyPage() {
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">1. Information We Collect</h2>
               <p className="mb-4">
-                When you sign up for Threadly, join our waitlist, or participate in the Beta Collective, we may collect:
+                When you sign up for Threadly and use the GEO workspace, we may collect:
               </p>
               <ul className="list-disc pl-6 space-y-2 text-sm">
-                <li>Contact details such as your full name, email address, and Discord handle.</li>
+                <li>Account details from your Google sign-in, such as your name and email address.</li>
                 <li>Startup information including product name, industry category, URL, and growth goals.</li>
-                <li>Usage data such as interaction with our platform features, signal matching results, and qualitative feedback logs.</li>
+                <li>Workspace data you create: your brand profile, competitors, tracked questions and scan results.</li>
               </ul>
             </section>
 
@@ -45,7 +45,7 @@ export default function PrivacyPage() {
               </p>
               <ul className="list-disc pl-6 space-y-2 text-sm">
                 <li>Match your startup with relevant consumer discussions and early adopter cohorts.</li>
-                <li>Provide personalized signal alerts, product feedback reports, and onboarding support.</li>
+                <li>Run scans across AI providers and present your mention, citation and share-of-voice metrics.</li>
                 <li>Maintain community trust and prevent abusive, fraudulent, or automated spam activities.</li>
               </ul>
             </section>
@@ -60,7 +60,7 @@ export default function PrivacyPage() {
             <section className="p-8 rounded-3xl bg-white border-2 border-gray-200 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-3">4. Your Privacy Rights</h2>
               <p className="mb-4">
-                Depending on your location (including under GDPR and CCPA), you have the right to access, update, export, or delete your personal data at any time. To exercise these rights, please contact us at privacy@threadly.com.
+                Depending on your location (including under GDPR and CCPA), you have the right to access, update, export, or delete your personal data at any time. To exercise these rights, please open an issue on the Threadly GitHub repository or contact the maintainer listed there.
               </p>
             </section>
           </div>
