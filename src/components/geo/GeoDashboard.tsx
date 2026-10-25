@@ -13,6 +13,7 @@ import RecommendationsPanel from "./RecommendationsPanel";
 import SocialPanel from "./SocialPanel";
 import ProviderKeysPanel from "./ProviderKeysPanel";
 import TeamPanel from "./TeamPanel";
+import BillingPanel from "./BillingPanel";
 import ActivityPanel from "./ActivityPanel";
 import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
@@ -79,7 +80,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   const [showTour, setShowTour] = useState(false);
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"brand" | "keys" | "team" | "activity" | "api">("brand");
+  const [settingsSection, setSettingsSection] = useState<"brand" | "keys" | "team" | "activity" | "api" | "billing">("brand");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const PANEL_TOGGLE_ICON = (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
@@ -787,6 +788,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
                 { id: "team", label: "Team", hint: "Members, roles, invite links" },
                 { id: "activity", label: "Activity log", hint: "Audit trail of workspace events" },
                 { id: "api", label: "API access", hint: "Programmatic access keys" },
+                { id: "billing", label: "Billing", hint: "Plan and subscription" },
               ] as const
             ).map((item) => (
               <button
@@ -814,6 +816,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
             )}
             {settingsSection === "api" && (
               <ApiKeysPanel authedFetch={authedFetch} />
+            )}
+            {settingsSection === "billing" && user && (
+              <BillingPanel authedFetch={authedFetch} />
             )}
             {settingsSection === "keys" && (
               <ProviderKeysPanel

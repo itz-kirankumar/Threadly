@@ -1,0 +1,167 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+interface BillingStatus {
+  plan: "trial" | "pro" | "growth" | "enterprise";
+  planLabel: string;
+  billing: {
+    plan: string;
+    interval: string | null;
+    status: string;
+    mode: "test" | "live";
+    updatedAt: string;
+  } | null;
+  billingAvailable: boolean;
+  testMode: boolean;
+  isOwner: boolean;
+}
+
+const PLANS = [
+  { id: "pro" as const, name: "Pro", monthly: 49, annualMonthly: 39, blurb: "50 tracked questions, unlimited scans, 5 seats." },
+  { id: "growth" as const, name: "Growth", monthly: 149, annualMonthly: 119, blurb: "150 tracked questions, 25 seats, audit log, API access." },
+];
+
+export default function BillingPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
+  const [status, setStatus] = useState<BillingStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [annual, setAnnual] = useState(true);
+  const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setStatus((await authedFetch("/api/billing/status")) as BillingStatus);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load billing.");
+    }
+  }, [authedFetch]);
+
+  useEffect(() => {
+    load();
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("billing") === "success") {
+      setNotice("Checkout complete - your plan updates as soon as the payment provider confirms it (usually a few seconds).");
+      // Poll a few times for the webhook to land.
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts += 1;
+        load();
+        if (attempts >= 6) clearInterval(timer);
+      }, 5000);
+      return () => clearInterval(timer);
+    }
+  }, [load]);
+
+  const checkout = async (plan: "pro" | "growth") => {
+    setBusyPlan(plan);
+    setError(null);
+    try {
+      const payload = (await authedFetch("/api/billing/checkout", {
+        method: "POST",
+        body: JSON.stringify({ plan, interval: annual ? "annual" : "monthly" }),
+      })) as { checkoutUrl?: string };
+      if (!payload.checkoutUrl) throw new Error("No checkout link returned.");
+      window.location.href = payload.checkoutUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start checkout.");
+      setBusyPlan(null);
+    }
+  };
+
+  if (!status && !error) return <p className="text-sm text-zinc-500">Loading billing…</p>;
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold text-white">Billing</h3>
+        <p className="mt-1 text-xs text-zinc-500">Plan and subscription for this workspace.</p>
+      </div>
+
+      {notice && (
+        <p className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-200">{notice}</p>
+      )}
+      {error && (
+        <p className="rounded-lg border border-red-400/30 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-200">{error}</p>
+      )}
+
+      {status && (
+        <>
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="text-sm font-medium text-white">Current plan: {status.planLabel}</span>
+              {status.billing?.mode === "test" && (
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+                  Test mode - no real charges
+                </span>
+              )}
+            </div>
+            {status.billing && (
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Subscription {status.billing.status}
+                {status.billing.interval ? ` · billed ${status.billing.interval}` : ""}
+                {` · updated ${new Date(status.billing.updatedAt).toLocaleString()}`}
+              </p>
+            )}
+            {status.plan === "trial" && (
+              <p className="mt-1.5 text-xs text-zinc-500">Free trial: 1 full scan, 10 tracked questions, 7-day history.</p>
+            )}
+          </div>
+
+          {status.billingAvailable && status.isOwner && (
+            <>
+              <div className="flex items-center gap-3 text-sm">
+                <span className={annual ? "text-zinc-500" : "text-zinc-200"}>Monthly</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={annual}
+                  onClick={() => setAnnual(!annual)}
+                  className={`relative h-6 w-11 rounded-full transition ${annual ? "bg-violet-500" : "bg-zinc-700"}`}
+                >
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${annual ? "left-[22px]" : "left-0.5"}`} />
+                </button>
+                <span className={annual ? "text-zinc-200" : "text-zinc-500"}>
+                  Annual <span className="ml-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300">Save 20%</span>
+                </span>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {PLANS.map((plan) => (
+                  <div key={plan.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                    <div className="flex items-baseline justify-between">
+                      <h4 className="text-sm font-semibold text-white">{plan.name}</h4>
+                      <p className="text-sm text-zinc-300">
+                        <span className="text-lg font-bold text-white">${annual ? plan.annualMonthly : plan.monthly}</span>/mo
+                      </p>
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-500">{plan.blurb}</p>
+                    <p className="mt-0.5 text-[11px] text-zinc-600">{annual ? "Billed annually" : "Billed monthly"}</p>
+                    <button
+                      type="button"
+                      disabled={busyPlan !== null || status.plan === plan.id}
+                      onClick={() => checkout(plan.id)}
+                      className="mt-3.5 w-full rounded-lg border border-white/15 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {status.plan === plan.id ? "Current plan" : busyPlan === plan.id ? "Opening checkout…" : `Upgrade to ${plan.name}`}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {status.testMode && (
+                <p className="text-[11px] leading-relaxed text-zinc-600">
+                  Billing is in test mode while launch is prepared - checkouts run against the payment sandbox and no real card is charged.
+                </p>
+              )}
+            </>
+          )}
+
+          {status.billingAvailable && !status.isOwner && (
+            <p className="text-xs text-zinc-500">Only the workspace owner can change the plan.</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
