@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { deleteQuery, loadQueries, saveQuery } from "@/lib/geo/store";
 import { classifyIntent } from "@/lib/geo/engine";
 import type { TrackedQuery } from "@/lib/geo/types";
@@ -12,13 +12,13 @@ const MAX_QUERIES = 24;
 
 export async function POST(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
+    const access = await resolveWorkspaceAccess(request, "editQuestions");
     const body = (await readJsonBody(request, 8 * 1024)) as { text?: unknown };
     if (typeof body.text !== "string" || body.text.trim().length < 8) {
       throw new RequestError("Enter the full buyer question to track.", 400);
     }
     const text = body.text.trim().slice(0, 200);
-    return await withWorkspace(user!.uid, user!.idToken, async () => {
+    return await inWorkspace(access, async () => {
       const queries = await loadQueries();
       if (queries.length >= MAX_QUERIES) throw new RequestError(`Track up to ${MAX_QUERIES} questions.`, 400);
       if (queries.some((q) => q.text.toLowerCase() === text.toLowerCase())) {
@@ -40,10 +40,10 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
+    const access = await resolveWorkspaceAccess(request, "deleteQuestions");
     const body = (await readJsonBody(request, 4 * 1024)) as { queryId?: unknown };
     if (typeof body.queryId !== "string" || !body.queryId) throw new RequestError("Missing query id.", 400);
-    return await withWorkspace(user!.uid, user!.idToken, async () => {
+    return await inWorkspace(access, async () => {
       await deleteQuery(body.queryId as string);
       return Response.json({ ok: true });
     });

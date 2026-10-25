@@ -1,5 +1,5 @@
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadBrand, saveBrand } from "@/lib/geo/store";
 import type { BrandProfile, Competitor } from "@/lib/geo/types";
 
@@ -25,7 +25,7 @@ function cleanAliases(value: unknown): string[] {
 
 export async function PUT(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
+    const access = await resolveWorkspaceAccess(request, "manageBrand");
     const body = (await readJsonBody(request, 512 * 1024)) as Record<string, unknown>;
     const competitors: Competitor[] = Array.isArray(body.competitors)
       ? (body.competitors as Array<Record<string, unknown>>)
@@ -36,7 +36,7 @@ export async function PUT(request: Request) {
             aliases: cleanAliases(item.aliases),
           }))
       : [];
-    const existing = await withWorkspace(user!.uid, user!.idToken, () => loadBrand());
+    const existing = await inWorkspace(access, () => loadBrand());
     let logoDataUrl = existing?.logoDataUrl;
     if (typeof body.logoDataUrl === "string") {
       if (!body.logoDataUrl) {
@@ -57,7 +57,7 @@ export async function PUT(request: Request) {
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    await withWorkspace(user!.uid, user!.idToken, () => saveBrand(brand));
+    await inWorkspace(access, () => saveBrand(brand));
     return Response.json({ brand });
   } catch (error) {
     return errorResponse(error, "Save brand");

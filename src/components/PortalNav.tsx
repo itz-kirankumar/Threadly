@@ -30,7 +30,7 @@ function ProfileMenu({ user }: { user: User }) {
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  function openSettings(section: "profile" | "brand" | "keys") {
+  function openSettings(section: "profile" | "brand" | "keys" | "team") {
     setOpen(false);
     window.dispatchEvent(new CustomEvent("threadly:open-settings", { detail: { section } }));
   }
@@ -67,6 +67,9 @@ function ProfileMenu({ user }: { user: User }) {
             </button>
             <button type="button" className={item} onClick={() => openSettings("keys")}>
               AI provider keys
+            </button>
+            <button type="button" className={item} onClick={() => openSettings("team")}>
+              Team
             </button>
           </div>
           <div className="border-t border-white/[0.06] py-1">

@@ -13,6 +13,9 @@ export default function Navbar() {
           <Link href="/demo" className="hidden text-zinc-400 transition hover:text-white sm:inline">
             Live demo
           </Link>
+          <Link href="/pricing" className="hidden text-zinc-400 transition hover:text-white sm:inline">
+            Pricing
+          </Link>
           <Link href="/docs" className="hidden text-zinc-400 transition hover:text-white sm:inline">
             Docs
           </Link>

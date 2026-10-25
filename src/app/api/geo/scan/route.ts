@@ -1,6 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { runScan } from "@/lib/geo/engine";
 import { loadBrand, loadKeySettings, loadQueries, saveRun } from "@/lib/geo/store";
 
@@ -10,19 +10,19 @@ export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
+    const access = await resolveWorkspaceAccess(request, "runScans");
     const body = (await readJsonBody(request, 8 * 1024).catch(() => ({}))) as { queryIds?: unknown };
     const queryIds = Array.isArray(body.queryIds)
       ? (body.queryIds as unknown[]).filter((id): id is string => typeof id === "string")
       : undefined;
-    if (user!.idToken === "demo-token") {
+    if (access.identity.idToken === "demo-token") {
       return Response.json(
         { error: "The local demo identity cannot run live scans. Sign in with Google to scan." },
         { status: 403, headers: { "Cache-Control": "no-store" } },
       );
     }
-    return await withWorkspace(user!.uid, user!.idToken, async () => {
-      const limit = await checkRateLimit("geo-scan", 6, 3600, { uid: user!.uid, idToken: user!.idToken });
+    return await inWorkspace(access, async () => {
+      const limit = await checkRateLimit("geo-scan", 6, 3600, { uid: access.identity.uid, idToken: access.identity.idToken });
       if (limit && !limit.allowed) {
         return Response.json(
           { error: `Scan limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` },

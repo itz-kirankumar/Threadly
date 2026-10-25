@@ -6,6 +6,7 @@ export default function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-zinc-500 sm:flex-row">
         <p>© {new Date().getFullYear()} Threadly. Measure how AI answers talk about your brand.</p>
         <div className="flex gap-5">
+          <Link href="/pricing" className="transition hover:text-zinc-300">Pricing</Link>
           <Link href="/docs" className="transition hover:text-zinc-300">Docs</Link>
           <Link href="/terms" className="transition hover:text-zinc-300">Terms</Link>
           <Link href="/privacy" className="transition hover:text-zinc-300">Privacy</Link>

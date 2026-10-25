@@ -31,11 +31,15 @@ export function adminConfigured(): boolean {
   );
 }
 
-async function db() {
+export async function getAdminDatabase() {
   const app = await getAdminApp();
   if (!app) throw new Error("Firebase Admin is not configured.");
   const { getDatabase } = await import("firebase-admin/database");
   return getDatabase(app);
+}
+
+async function db() {
+  return getAdminDatabase();
 }
 
 function toArray<T>(value: unknown): T[] {

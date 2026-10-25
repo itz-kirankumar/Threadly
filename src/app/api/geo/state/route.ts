@@ -1,5 +1,5 @@
 import { errorResponse } from "@/lib/api-request";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadKeySettings, loadWorkspace } from "@/lib/geo/store";
 import { providerKeyStatuses } from "@/lib/geo/keys";
 
@@ -8,11 +8,19 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
-    return await withWorkspace(user!.uid, user!.idToken, async () => {
+    const access = await resolveWorkspaceAccess(request, "view");
+    return await inWorkspace(access, async () => {
       const [state, keySettings] = await Promise.all([loadWorkspace(), loadKeySettings()]);
       state.providers = providerKeyStatuses(keySettings);
-      return Response.json(state);
+      return Response.json({
+        ...state,
+        team: {
+          role: access.role,
+          shared: access.shared,
+          teamsEnabled: access.teamsEnabled,
+          workspaceOwner: access.shared ? undefined : access.identity.name,
+        },
+      });
     });
   } catch (error) {
     return errorResponse(error, "GEO state");

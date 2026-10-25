@@ -8,6 +8,7 @@ import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
 import TrendChart from "./TrendChart";
 import ProviderKeysPanel from "./ProviderKeysPanel";
+import TeamPanel from "./TeamPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import {
   buildCitationLeaderboard,
@@ -97,7 +98,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [showTour, setShowTour] = useState(false);
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys">("brand");
+  const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team">("brand");
 
   const authedFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -156,7 +157,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   useEffect(() => {
     if (readOnly) return;
     const handler = (event: Event) => {
-      const section = (event as CustomEvent<{ section?: "profile" | "brand" | "keys" }>).detail?.section;
+      const section = (event as CustomEvent<{ section?: "profile" | "brand" | "keys" | "team" }>).detail?.section;
       setTab("settings");
       if (section) setSettingsSection(section);
     };
@@ -415,7 +416,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
           readOnly={readOnly}
           busy={busy}
           onAdd={addQuery}
-          onDelete={removeQuery}
+          onDelete={state.team?.role === "member" ? undefined : removeQuery}
           onSuggest={suggestQueries}
           suggestions={suggestions}
           suggestBusy={suggestBusy}
@@ -499,8 +500,13 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             {(
               [
                 { id: "profile", label: "Profile", hint: "Your name and account" },
-                { id: "brand", label: "Brand profile", hint: "Name, domain, logo, competitors" },
-                { id: "keys", label: "AI provider keys", hint: "Your own keys, custom providers" },
+                ...(state.team?.role !== "member"
+                  ? ([
+                      { id: "brand", label: "Brand profile", hint: "Name, domain, logo, competitors" },
+                      { id: "keys", label: "AI provider keys", hint: "Your own keys, custom providers" },
+                    ] as const)
+                  : []),
+                { id: "team", label: "Team", hint: "Members, roles, invite links" },
               ] as const
             ).map((item) => (
               <button
@@ -522,6 +528,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             )}
             {settingsSection === "brand" && (
               <SetupWizard busy={busy} error={error} onSave={saveBrand} initial={state.brand} />
+            )}
+            {settingsSection === "team" && user && (
+              <TeamPanel authedFetch={authedFetch} currentUid={user.uid} />
             )}
             {settingsSection === "keys" && (
               <ProviderKeysPanel

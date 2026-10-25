@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { errorResponse, readJsonBody } from "@/lib/api-request";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { encryptSecret, keyEncryptionReady, lastFour } from "@/lib/geo/crypto";
 import { providerKeyStatuses } from "@/lib/geo/keys";
 import {
@@ -20,8 +20,8 @@ const BUILTIN_IDS = new Set(GEO_PROVIDERS.map((p) => p.id));
 // GET: masked view of this workspace's provider key configuration.
 export async function GET(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
-    return await withWorkspace(user!.uid, user!.idToken, async () => {
+    const access = await resolveWorkspaceAccess(request, "view");
+    return await inWorkspace(access, async () => {
       const settings = await loadKeySettings();
       return Response.json({ providers: providerKeyStatuses(settings), keyEncryption: keyEncryptionReady() });
     });
@@ -33,8 +33,8 @@ export async function GET(request: Request) {
 // PUT: save a built-in provider key or a custom OpenAI-compatible provider.
 export async function PUT(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
-    if (user!.idToken === "demo-token") {
+    const access = await resolveWorkspaceAccess(request, "manageKeys");
+    if (access.identity.idToken === "demo-token") {
       return Response.json({ error: "The demo identity cannot store keys. Sign in with Google." }, { status: 403 });
     }
     if (!keyEncryptionReady()) {
@@ -46,7 +46,7 @@ export async function PUT(request: Request) {
       model?: unknown;
       custom?: { name?: unknown; baseUrl?: unknown; model?: unknown; apiKey?: unknown };
     };
-    return await withWorkspace(user!.uid, user!.idToken, async () => {
+    return await inWorkspace(access, async () => {
       if (body.custom && typeof body.custom === "object") {
         const { name, baseUrl, model, apiKey } = body.custom;
         if (typeof name !== "string" || !name.trim()) throw new Error("Name the provider.");
@@ -86,9 +86,9 @@ export async function PUT(request: Request) {
 // DELETE: remove a built-in override or a custom provider.
 export async function DELETE(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
+    const access = await resolveWorkspaceAccess(request, "manageKeys");
     const body = (await readJsonBody(request, 4 * 1024)) as { provider?: unknown; customId?: unknown };
-    return await withWorkspace(user!.uid, user!.idToken, async () => {
+    return await inWorkspace(access, async () => {
       if (typeof body.customId === "string") {
         await deleteCustomProvider(body.customId);
       } else if (typeof body.provider === "string" && BUILTIN_IDS.has(body.provider)) {

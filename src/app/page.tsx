@@ -5,6 +5,7 @@ import ScanSimulation from "@/components/landing/ScanSimulation";
 import LenisProvider from "@/components/landing/LenisProvider";
 import Reveal from "@/components/landing/Reveal";
 import HeroGlow from "@/components/landing/HeroGlow";
+import Pricing from "@/components/landing/Pricing";
 
 const PROVIDERS = [
   { name: "ChatGPT", note: "Responses API with live web search" },
@@ -150,6 +151,26 @@ export default function LandingPage() {
             <p className="mt-8 text-center font-mono text-xs text-zinc-600">
               every number in your workspace comes from your own scans - no illustrative dashboards
             </p>
+          </div>
+        </section>
+
+        {/* pricing */}
+        <section className="border-t border-white/[0.06]">
+          <div className="mx-auto max-w-6xl px-6 py-24">
+            <Reveal>
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">Pricing</p>
+              <h2 className="mt-3 font-display text-4xl tracking-tight text-white sm:text-5xl">
+                Free during early access
+              </h2>
+              <p className="mx-auto mt-4 max-w-xl text-zinc-400">
+                Competitive tiers for when billing launches - every plan is free today, no card collected.
+              </p>
+            </div>
+            </Reveal>
+            <div className="mt-12">
+              <Pricing compact />
+            </div>
           </div>
         </section>
 

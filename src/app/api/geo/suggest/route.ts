@@ -1,5 +1,5 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadBrand, loadQueries } from "@/lib/geo/store";
 import { classifyIntent, starterQueries } from "@/lib/geo/engine";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -11,16 +11,17 @@ export const dynamic = "force-dynamic";
 // provider; falls back to category templates when no provider is set up.
 export async function POST(request: Request) {
   try {
-    const user = await getFirebaseIdentity(request);
+    const access = await resolveWorkspaceAccess(request, "editQuestions");
+    const user = access.identity;
     await readJsonBody(request, 2 * 1024).catch(() => ({}));
     // Suggest can call a paid provider, so keep a per-user hourly quota.
-    if (user!.idToken !== "demo-token") {
-      const limit = await checkRateLimit(`suggest:${user!.uid}`, 10, 3600, user!);
+    if (user.idToken !== "demo-token") {
+      const limit = await checkRateLimit(`suggest:${user.uid}`, 10, 3600, user);
       if (limit && !limit.allowed) {
         return Response.json({ error: "Too many requests. Try again shortly." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
       }
     }
-    return await withWorkspace(user!.uid, user!.idToken, async () => {
+    return await inWorkspace(access, async () => {
       const [brand, existing] = await Promise.all([loadBrand(), loadQueries()]);
       if (!brand) throw new Error("Set up your brand profile first.");
       const existingTexts = new Set(existing.map((q) => q.text.toLowerCase()));

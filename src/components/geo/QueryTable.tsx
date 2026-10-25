@@ -9,7 +9,7 @@ interface Props {
   readOnly: boolean;
   busy: boolean;
   onAdd: (text: string) => Promise<void>;
-  onDelete: (queryId: string) => Promise<void>;
+  onDelete?: (queryId: string) => Promise<void>;
   onSuggest: () => Promise<void>;
   suggestions: string[];
   suggestBusy: boolean;
@@ -97,6 +97,7 @@ function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryRes
 }
 
 export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onSuggest, suggestions, suggestBusy, providerOrder, providerLabels }: Props) {
+  const canDelete = !readOnly && Boolean(onDelete);
   const [newQuery, setNewQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const resultsByQuery = new Map(state.results.map((r) => [r.queryId, r]));
@@ -168,7 +169,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
               {providerOrder.map((id) => (
                 <th key={id} className="px-2 py-3 text-center font-medium">{labelForProvider(id, providerLabels)}</th>
               ))}
-              {!readOnly && <th className="w-10" />}
+              {canDelete && <th className="w-10" />}
             </tr>
           </thead>
           <tbody>
@@ -189,14 +190,14 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
                         <Cell result={queryResult?.results.find((r) => r.provider === id)} />
                       </td>
                     ))}
-                    {!readOnly && (
+                    {canDelete && (
                       <td className="px-2 py-3 text-center">
                         <button
                           type="button"
                           aria-label="Delete question"
                           onClick={(e) => {
                             e.stopPropagation();
-                            void onDelete(query.id);
+                            if (onDelete) void onDelete(query.id);
                           }}
                           className="text-zinc-600 hover:text-rose-400"
                         >
@@ -207,7 +208,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
                   </tr>
                   {open === query.id && queryResult && (
                     <tr key={`${query.id}-drawer`}>
-                      <td colSpan={readOnly ? providerOrder.length + 1 : providerOrder.length + 2} className="p-0">
+                      <td colSpan={!canDelete ? providerOrder.length + 1 : providerOrder.length + 2} className="p-0">
                         <AnswerDrawer queryResult={queryResult} providerOrder={providerOrder} providerLabels={providerLabels} />
                       </td>
                     </tr>
@@ -217,7 +218,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
             })}
             {!state.queries.length && (
               <tr>
-                <td colSpan={readOnly ? providerOrder.length + 1 : providerOrder.length + 2} className="px-4 py-10 text-center text-sm text-zinc-500">
+                <td colSpan={!canDelete ? providerOrder.length + 1 : providerOrder.length + 2} className="px-4 py-10 text-center text-sm text-zinc-500">
                   No questions tracked yet. Add the questions your buyers ask AI assistants.
                 </td>
               </tr>

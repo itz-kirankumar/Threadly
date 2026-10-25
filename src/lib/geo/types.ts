@@ -99,6 +99,12 @@ export interface ProviderKeyStatus {
   lastFour?: string;
 }
 
+export interface WorkspaceTeamInfo {
+  role: "owner" | "admin" | "member";
+  shared: boolean;
+  teamsEnabled: boolean;
+}
+
 export interface WorkspaceState {
   brand: BrandProfile | null;
   queries: TrackedQuery[];
@@ -107,4 +113,5 @@ export interface WorkspaceState {
   snapshots: MetricsSnapshot[];
   runs: ScanRun[];
   providers: ProviderKeyStatus[];
+  team?: WorkspaceTeamInfo;
 }

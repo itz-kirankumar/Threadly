@@ -184,6 +184,8 @@ export const DOC_PAGES: DocPage[] = [
       { type: "p", text: "Yes. AI answers are non-deterministic, so treat single scans as samples and trends over multiple scans as signal." },
       { type: "h3", text: "Is my data private?" },
       { type: "p", text: "Your workspace - brand, questions, scan history and keys - is visible only to your Google account. Keys you add are encrypted at rest and never shown again after saving." },
+      { type: "h3", text: "What does Threadly cost?" },
+      { type: "p", text: "Every plan is free during early access - no card collected. Planned tiers are Starter (free, 10 questions, 1 seat), Pro ($49/mo, 50 questions, 5 seats, own keys and custom providers), Growth ($149/mo, 150 questions, 25 seats) and Enterprise (custom). See the pricing page for the full comparison." },
       { type: "h3", text: "What does the demo show?" },
       { type: "p", text: "The public demo uses clearly labelled sample data for a fictional brand. It never calls paid AI APIs." },
     ],

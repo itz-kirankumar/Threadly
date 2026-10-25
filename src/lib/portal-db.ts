@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 type FirebaseIdentity = { uid: string; email: string; name: string; idToken: string };
-type WorkspaceAuth = { uid: string; idToken: string };
+type WorkspaceAuth = { uid: string; idToken: string; useAdmin?: boolean };
 const workspaceAuth = new AsyncLocalStorage<WorkspaceAuth>();
 
 // In-memory store for demo mode. It mirrors the Realtime Database's data
@@ -105,8 +105,16 @@ export async function getFirebaseIdentity(request: Request, optional = false): P
   return { uid: user.localId, email: user.email || "", name: user.displayName || "Founder", idToken };
 }
 
-export async function withWorkspace<T>(uid: string, idToken: string, operation: () => Promise<T>): Promise<T> {
-  return workspaceAuth.run({ uid, idToken }, operation);
+export async function withWorkspace<T>(uid: string, idToken: string, operation: () => Promise<T>, options?: { useAdmin?: boolean }): Promise<T> {
+  return workspaceAuth.run({ uid, idToken, useAdmin: options?.useAdmin }, operation);
+}
+
+// Admin access: team workspaces are shared across users, so cross-user
+// reads and writes go through the Firebase Admin SDK (server-side,
+// role-checked by the API layer) instead of the caller's database token.
+async function adminDb() {
+  const { getAdminDatabase } = await import("@/lib/geo/admin-store");
+  return getAdminDatabase();
 }
 
 function firebasePath(path: string) {
@@ -124,6 +132,11 @@ export async function readData<T>(path: string): Promise<T | null> {
     return demoRead(context.uid, path) as T | null;
   }
 
+  if (context.useAdmin) {
+    const snapshot = await (await adminDb()).ref(`users/${context.uid}/${path}`).get();
+    return snapshot.val() as T | null;
+  }
+
   const response = await fetch(firebasePath(path), { cache: "no-store" });
   if (!response.ok) throw new Error(response.status === 401 || response.status === 403
     ? "Firebase denied access. Check the Realtime Database rules and sign in again."
@@ -137,6 +150,11 @@ export async function writeData(path: string, value: unknown): Promise<void> {
 
   if (context.idToken === "demo-token") {
     demoWrite(context.uid, path, value);
+    return;
+  }
+
+  if (context.useAdmin) {
+    await (await adminDb()).ref(`users/${context.uid}/${path}`).set(firebaseValue(value));
     return;
   }
 
@@ -158,6 +176,13 @@ export async function patchData(path: string, value: Record<string, unknown>): P
   if (context.idToken === "demo-token") {
     // PATCH semantics: each key is a child path; null deletes it.
     for (const [key, item] of Object.entries(value)) demoWrite(context.uid, `${path}/${key}`, item);
+    return;
+  }
+
+  if (context.useAdmin) {
+    const updates: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) updates[`users/${context.uid}/${path}/${key}`] = firebaseValue(item);
+    await (await adminDb()).ref().update(updates);
     return;
   }
 
