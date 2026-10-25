@@ -80,7 +80,10 @@ export default function PortalLogin() {
           await signInWithRedirect(auth, provider);
           return;
         }
-        if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return;
+        if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+          setBusy(false);
+          return;
+        }
         throw popupError;
       }
     } catch {
