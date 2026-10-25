@@ -35,6 +35,7 @@ export default function PortalLogin() {
   const [phone, setPhone] = useState("+91");
   const [otp, setOtp] = useState("");
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
+  const [recaptchaKey, setRecaptchaKey] = useState(0);
   const recaptchaContainer = useRef<HTMLDivElement>(null);
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
@@ -125,6 +126,9 @@ export default function PortalLogin() {
       else setError(caught instanceof Error ? caught.message : "Could not send the code.");
       recaptchaVerifier.current?.clear();
       recaptchaVerifier.current = null;
+      // grecaptcha keeps the old widget bound to the container node even after
+      // clear(); remount a fresh node so a retry can render again.
+      setRecaptchaKey((k) => k + 1);
     } finally {
       setBusy(false);
     }
@@ -259,7 +263,7 @@ export default function PortalLogin() {
             </form>
           )}
 
-          <div ref={recaptchaContainer} />
+          <div key={recaptchaKey} ref={recaptchaContainer} />
 
           {notice && (
             <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">

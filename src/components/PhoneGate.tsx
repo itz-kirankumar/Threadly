@@ -17,6 +17,7 @@ export default function PhoneGate({ user }: { user: User }) {
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [recaptchaKey, setRecaptchaKey] = useState(0);
   const recaptchaContainer = useRef<HTMLDivElement>(null);
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
@@ -46,6 +47,9 @@ export default function PhoneGate({ user }: { user: User }) {
       else setError(caught instanceof Error ? caught.message : "Could not send the code.");
       recaptchaVerifier.current?.clear();
       recaptchaVerifier.current = null;
+      // grecaptcha keeps the old widget bound to the container node even after
+      // clear(); remount a fresh node so the retry can render again.
+      setRecaptchaKey((k) => k + 1);
     } finally {
       setBusy(false);
     }
@@ -119,7 +123,7 @@ export default function PhoneGate({ user }: { user: User }) {
           </form>
         )}
 
-        <div ref={recaptchaContainer} />
+        <div key={recaptchaKey} ref={recaptchaContainer} />
 
         {error && (
           <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2">
