@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { EmailAuthProvider, GoogleAuthProvider, getRedirectResult, linkWithCredential, linkWithPopup, linkWithRedirect, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
-export function ProfileSettings({ user, busy, onSave }: { user: User; busy: boolean; onSave: (name: string) => Promise<void> }) {
+export function ProfileSettings({ user, busy, onSave, hideHeading = false }: { user: User; busy: boolean; onSave: (name: string) => Promise<void>; hideHeading?: boolean }) {
   const [name, setName] = useState(user.displayName ?? "");
   const [saved, setSaved] = useState(false);
   const input =
@@ -20,10 +20,12 @@ export function ProfileSettings({ user, busy, onSave }: { user: User; busy: bool
         setSaved(true);
       }}
     >
-      <div>
-        <h2 className="text-xl font-semibold text-white">Profile</h2>
-        <p className="mt-1 text-sm text-zinc-400">How you appear inside your workspace.</p>
-      </div>
+      {!hideHeading && (
+        <div>
+          <h2 className="text-xl font-semibold text-white">Profile</h2>
+          <p className="mt-1 text-sm text-zinc-400">How you appear inside your workspace.</p>
+        </div>
+      )}
       <div>
         <label className={label} htmlFor="profile-name">Your name</label>
         <input id="profile-name" className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" required />

@@ -121,7 +121,7 @@ export default function AccountSettings({ user }: { user: User }) {
         </div>
         {error && <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-200">{error}</p>}
         <Section title="Profile" hint="How you appear inside your workspace.">
-          <ProfileSettings user={user} busy={busy} onSave={saveDisplayName} />
+          <ProfileSettings user={user} busy={busy} onSave={saveDisplayName} hideHeading />
         </Section>
         <Section title="Session" hint="Sign out of Threadly on this device.">
           <button
