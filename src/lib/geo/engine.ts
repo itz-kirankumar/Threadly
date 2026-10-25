@@ -95,7 +95,7 @@ export function computeSnapshot(
     ? Math.round((positions.reduce((a, b) => a + b, 0) / positions.length) * 10) / 10
     : null;
 
-  const providerIds = Object.keys(providerStatus);
+  const providerIds = Object.keys(providerStatus).filter((id) => providerStatus[id as GeoProviderId] === "scanned");
   const perProvider = Object.fromEntries(
     providerIds.map((id) => {
       const cells = results.flatMap((r) => r.results).filter((r) => r.provider === id && r.status === "scanned");
@@ -131,43 +131,53 @@ export async function runScan(
     throw new Error("No AI provider keys yet. Add your own keys in Settings, or ask the platform admin to configure default keys.");
   }
 
+  // Dynamic provider set: only providers reachable during this live run appear
+  // anywhere in the output. Unreachable providers are dropped entirely - the UI
+  // never shows failed / not-configured states for them.
   const run: ScanRun = {
     id: `run-${randomUUID()}`,
     startedAt: new Date().toISOString(),
     finishedAt: "",
     queryCount: targets.length,
-    providerStatus: Object.fromEntries(
-      providers.map(({ id }) => [id, active.some((p) => p.id === id) ? "scanned" : "not_configured"]),
-    ) as Record<GeoProviderId, ProviderStatus>,
+    providerStatus: {} as Record<GeoProviderId, ProviderStatus>,
   };
 
-  const jobs = targets.flatMap((query) => providers.map((provider) => ({ query, provider })));
+  const jobs = targets.flatMap((query) => active.map((provider) => ({ query, provider })));
+  const successCount = new Map<string, number>();
+  const firstError = new Map<string, string>();
   const cells = await mapWithConcurrency(jobs, CONCURRENCY, async ({ query, provider }) => {
-    if (!provider.apiKey) {
-      return { queryId: query.id, result: analyzeAnswer(provider.id, "not_configured", null, brand) };
-    }
     try {
       const raw = provider.kind === "custom"
-        ? await scanCustomProvider(query.text, { apiKey: provider.apiKey, model: provider.model!, baseUrl: provider.baseUrl! })
-        : await PROVIDER_SCANNERS[provider.id](query.text, { apiKey: provider.apiKey, model: provider.model });
+        ? await scanCustomProvider(query.text, { apiKey: provider.apiKey!, model: provider.model!, baseUrl: provider.baseUrl! })
+        : await PROVIDER_SCANNERS[provider.id](query.text, { apiKey: provider.apiKey!, model: provider.model });
+      successCount.set(provider.id, (successCount.get(provider.id) ?? 0) + 1);
       return { queryId: query.id, result: analyzeAnswer(provider.id, "scanned", raw, brand) };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Provider request failed.";
-      const failed = analyzeAnswer(provider.id, "failed", null, brand, message);
-      run.providerStatus[provider.id] = "failed";
-      return { queryId: query.id, result: failed };
+      if (!firstError.has(provider.id)) firstError.set(provider.id, message);
+      return null;
     }
   });
 
+  const reachable = active.filter((provider) => (successCount.get(provider.id) ?? 0) > 0);
+  if (!reachable.length) {
+    const detail = firstError.values().next().value ?? "unknown error";
+    throw new Error(`No AI providers were reachable this run (${detail}). Try again shortly.`);
+  }
+  for (const provider of reachable) run.providerStatus[provider.id] = "scanned";
+
   const byQuery = new Map<string, ProviderResult[]>();
   for (const cell of cells) {
+    if (!cell) continue;
     const list = byQuery.get(cell.queryId) ?? [];
     list.push(cell.result);
     byQuery.set(cell.queryId, list);
   }
   const results: QueryResult[] = targets.map((query) => ({
     queryId: query.id,
-    results: providers.map(({ id }) => byQuery.get(query.id)!.find((r) => r.provider === id)!),
+    results: reachable
+      .map(({ id }) => byQuery.get(query.id)?.find((r) => r.provider === id))
+      .filter((r): r is ProviderResult => Boolean(r)),
   }));
 
   if (tavilyConfigured()) {

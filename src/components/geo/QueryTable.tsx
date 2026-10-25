@@ -22,7 +22,7 @@ function Cell({ result }: { result?: ProviderResult }) {
     return <span className="text-xs text-zinc-600" title="API key not configured">—</span>;
   }
   if (result.status === "failed") {
-    return <span className="text-xs text-rose-400" title={result.error ?? "Scan failed"}>failed</span>;
+    return <span className="text-xs text-zinc-600">—</span>;
   }
   return (
     <div className="flex items-center justify-center gap-1.5 text-xs">
@@ -38,17 +38,22 @@ function Cell({ result }: { result?: ProviderResult }) {
 }
 
 function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryResult: QueryResult; providerOrder: GeoProviderId[]; providerLabels: Record<string, string> }) {
-  const [provider, setProvider] = useState(providerOrder[0]);
-  const result = queryResult.results.find((r) => r.provider === provider);
+  const answered = providerOrder.filter((id) =>
+    queryResult.results.some((r) => r.provider === id && r.status === "scanned"),
+  );
+  const chips = answered.length ? answered : providerOrder;
+  const [provider, setProvider] = useState(chips[0]);
+  const active = chips.includes(provider) ? provider : chips[0];
+  const result = queryResult.results.find((r) => r.provider === active);
   return (
     <div className="border-t border-white/5 bg-white/[0.02] px-4 py-4">
       <div className="mb-3 flex flex-wrap gap-2">
-        {providerOrder.map((id) => (
+        {chips.map((id) => (
           <button
             key={id}
             type="button"
             onClick={() => setProvider(id)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${colorForProvider(id)} ${provider === id ? "" : "opacity-50 hover:opacity-90"}`}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${colorForProvider(id)} ${active === id ? "" : "opacity-50 hover:opacity-90"}`}
           >
             {labelForProvider(id, providerLabels)}
           </button>
@@ -118,6 +123,10 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
   const [newQuery, setNewQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const resultsByQuery = new Map(state.results.map((r) => [r.queryId, r]));
+  const scannedProviders = providerOrder.filter((id) =>
+    state.results.some((r) => r.results.some((cell) => cell.provider === id && cell.status === "scanned")),
+  );
+  const columns = scannedProviders.length ? scannedProviders : providerOrder;
 
   return (
     <div className="space-y-4">
@@ -183,7 +192,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">
               <th className="px-4 py-3 font-medium">Buyer question</th>
-              {providerOrder.map((id) => (
+              {columns.map((id) => (
                 <th key={id} className="px-2 py-3 text-center font-medium">{labelForProvider(id, providerLabels)}</th>
               ))}
               {canDelete && <th className="w-10" />}
@@ -202,7 +211,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
                       <p className="text-zinc-200">{query.text}</p>
                       <p className="mt-0.5 text-xs text-zinc-600">{query.intent}</p>
                     </td>
-                    {providerOrder.map((id) => (
+                    {columns.map((id) => (
                       <td key={id} className="px-2 py-3 text-center">
                         <Cell result={queryResult?.results.find((r) => r.provider === id)} />
                       </td>

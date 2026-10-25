@@ -144,6 +144,20 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     () => (state?.providers?.length ? state.providers.map((provider) => provider.id) : []),
     [state],
   );
+  // Dynamic provider visibility: once a scan exists, only providers that
+  // actually responded in the latest run show up. Before the first scan,
+  // providers with a configured key show as ready. Unreachable providers
+  // never render.
+  const visibleProviders = useMemo(() => {
+    if (latest) {
+      return providerOrder.filter((id) => latest.perProvider[id]?.status === "scanned");
+    }
+    return providerOrder.filter((id) => {
+      const keyStatus = state?.providers.find((provider) => provider.id === id);
+      return keyStatus && keyStatus.source !== "none";
+    });
+  }, [latest, providerOrder, state?.providers]);
+
   const providerLabels = useMemo(() => {
     const labels: Record<string, string> = {};
     for (const provider of state?.providers ?? []) labels[provider.id] = provider.label;
@@ -339,7 +353,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             disabled={scanning || !state.queries.length}
             className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
           >
-            {scanning ? `Scanning ${providerOrder.length || 4} AI providers…` : "Run scan now"}
+            {scanning ? "Scanning AI providers…" : "Run scan now"}
           </button>
         )}
       </div>
@@ -371,8 +385,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             <MetricCard label="Avg. position" value={latest?.avgPosition ? `#${latest.avgPosition}` : "—"} change={null} />
           </div>
 
+          {visibleProviders.length > 0 && (
           <div data-tour="providers" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {providerOrder.map((id) => {
+            {visibleProviders.map((id) => {
               const metrics = latest?.perProvider[id];
               const keyStatus = state.providers.find((provider) => provider.id === id);
               return (
@@ -385,19 +400,14 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
                     <p className="mt-1 text-xs opacity-80">
                       Mentioned in {metrics.mentionRate}% · cited {metrics.citationShare}%
                     </p>
-                  ) : metrics?.status === "failed" ? (
-                    <p className="mt-1 text-xs text-rose-300">
-                      Last scan failed{keyStatus?.source !== "none" ? " - will retry" : ""}
-                    </p>
-                  ) : keyStatus && keyStatus.source !== "none" ? (
-                    <p className="mt-1 text-xs opacity-80">Ready - included in next scan</p>
                   ) : (
-                    <p className="mt-1 text-xs opacity-60">API key not configured</p>
+                    <p className="mt-1 text-xs opacity-80">Ready - included in next scan</p>
                   )}
                 </div>
               );
             })}
           </div>
+          )}
 
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <p className="mb-2 text-sm font-medium text-zinc-300">Trend across scans</p>
@@ -547,12 +557,12 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             <div key={run.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <div>
                 <p className="text-sm text-zinc-200">{formatDateTime(run.startedAt)}</p>
-                <p className="text-xs text-zinc-500">{run.queryCount} questions × {Object.keys(run.providerStatus).length || providerOrder.length} providers</p>
+                <p className="text-xs text-zinc-500">{run.queryCount} questions × {Object.values(run.providerStatus).filter((status) => status === "scanned").length || providerOrder.length} providers</p>
               </div>
               <div className="flex gap-1.5">
-                {Object.keys(run.providerStatus).map((id) => (
-                  <span key={id} className={`rounded-full border px-2 py-0.5 text-xs ${colorForProvider(id)} ${run.providerStatus[id] === "scanned" ? "" : "opacity-40"}`}>
-                    {labelForProvider(id, providerLabels)} {run.providerStatus[id] === "scanned" ? "✓" : run.providerStatus[id] === "failed" ? "✗" : "—"}
+                {Object.keys(run.providerStatus).filter((id) => run.providerStatus[id] === "scanned").map((id) => (
+                  <span key={id} className={`rounded-full border px-2 py-0.5 text-xs ${colorForProvider(id)}`}>
+                    {labelForProvider(id, providerLabels)} ✓
                   </span>
                 ))}
               </div>
