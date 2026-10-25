@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       let text = "";
       try {
         if (process.env.GEMINI_API_KEY) {
-          const model = process.env.GEO_GEMINI_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+          const model = process.env.GEO_GEMINI_MODEL || process.env.GEMINI_MODEL || "gemini-3.8-flash";
           const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
             {

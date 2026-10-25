@@ -111,10 +111,9 @@ async function scanClaude(query: string): Promise<ProviderAnswer> {
 }
 
 async function scanGemini(query: string): Promise<ProviderAnswer> {
-  const model = process.env.GEO_GEMINI_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
+  const model = process.env.GEO_GEMINI_MODEL || process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const request = () =>
+    fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY! },
       body: JSON.stringify({
@@ -123,8 +122,13 @@ async function scanGemini(query: string): Promise<ProviderAnswer> {
         generationConfig: { temperature: 0.2 },
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
-    },
-  );
+    });
+  let response = await request();
+  // One short retry for transient quota/demand errors on shared tiers.
+  if (response.status === 429 || response.status === 503) {
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    response = await request();
+  }
   if (!response.ok) throw new Error(`Gemini returned HTTP ${response.status}.`);
   const payload = await response.json();
   const candidate = payload.candidates?.[0];
