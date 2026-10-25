@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { updateProfile, type User } from "firebase/auth";
+import Image from "next/image";
+import { signOut, updateProfile, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 import type { MetricsSnapshot, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
 import SetupWizard from "./SetupWizard";
@@ -31,6 +32,17 @@ interface Props {
   user: User | null;
   readOnly?: boolean;
   initialState?: WorkspaceState;
+}
+
+function displayNameOf(user: User): string {
+  if (user.displayName?.trim()) return user.displayName.trim();
+  return (user.email ?? "Account").split("@")[0];
+}
+
+function initialsOf(user: User): string {
+  const name = displayNameOf(user);
+  const parts = name.split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : name.slice(0, 2)).toUpperCase();
 }
 
 function MetricCard({ label, value, suffix, change }: { label: string; value: string; suffix?: string; change: number | null }) {
@@ -108,6 +120,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team" | "activity" | "api">("brand");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [runDetails, setRunDetails] = useState<Record<string, { queries: TrackedQuery[]; results: QueryResult[] } | "loading" | "error">>({});
 
   const authedFetch = useCallback(
@@ -371,8 +384,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     ...(!readOnly ? [{ id: "settings" as Tab, label: "Settings" }] : []),
   ];
 
-  return (
-    <div className="space-y-6">
+  const body = (
+    <>
       {readOnly && (
         <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           Sample data for a fictional brand (“Loomify”). Sign in to track your own brand across ChatGPT, Claude and Gemini.
@@ -408,6 +421,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
       {error && <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</p>}
 
       <div className="flex items-start gap-6">
+        {readOnly && (
         <nav
           aria-label="Workspace sections"
           className={`sticky top-20 flex shrink-0 flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-2 transition-all ${
@@ -439,6 +453,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             <span className={sidebarCollapsed ? "hidden" : ""}>Collapse</span>
           </button>
         </nav>
+        )}
         <div className="min-w-0 flex-1 space-y-6">
 
       {tab === "overview" && (
@@ -737,7 +752,148 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         </div>
       </div>
 
-      {showTour && !readOnly && <Tour onNavigate={(next) => setTab(next)} onDone={() => setShowTour(false)} />}
+    </>
+  );
+
+  if (readOnly) {
+    return <div className="space-y-6">{body}</div>;
+  }
+
+  const monitorTabs = tabs.filter((item) => item.id !== "settings");
+  const workspaceTabs = tabs.filter((item) => item.id === "settings");
+  const railLabel = sidebarCollapsed ? "hidden" : "hidden md:block";
+  const railName = sidebarCollapsed ? "hidden" : "hidden md:inline";
+
+  const navButton = (item: { id: Tab; label: string }) => (
+    <button
+      key={item.id}
+      type="button"
+      data-tour={`tab-${item.id}`}
+      onClick={() => setTab(item.id)}
+      title={item.label}
+      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition ${
+        tab === item.id ? "bg-violet-500/15 text-white" : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
+      }`}
+    >
+      <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
+      <span className={`whitespace-nowrap ${railName}`}>{item.label}</span>
+    </button>
+  );
+
+  return (
+    <div className="flex min-h-screen bg-zinc-950">
+      <aside
+        aria-label="Workspace navigation"
+        className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-white/[0.06] transition-all ${sidebarCollapsed ? "w-14" : "w-14 md:w-60"}`}
+      >
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-3">
+          <Image src="/threadly-mark.svg" alt="Threadly" width={24} height={24} className="shrink-0" />
+          <div className={railLabel}>
+            <p className="text-[15px] font-semibold leading-tight tracking-tight text-white">Threadly</p>
+            <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-violet-300">Workspace</p>
+          </div>
+        </div>
+
+        <div className="shrink-0 border-b border-white/[0.06] px-3 py-3">
+          <div className="flex items-center gap-2.5">
+            {state.brand.logoDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={state.brand.logoDataUrl} alt="" className="h-8 w-8 shrink-0 rounded-md border border-white/10 object-cover" />
+            ) : (
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-xs font-semibold text-violet-300">
+                {state.brand.name.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <div className={`min-w-0 ${railLabel}`}>
+              <p className="truncate text-sm font-medium text-white">{state.brand.name}</p>
+              <p className="truncate text-xs text-zinc-500">{state.brand.domain}</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+          <p className={`px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 ${railLabel}`}>Monitor</p>
+          <div className="space-y-0.5">{monitorTabs.map(navButton)}</div>
+          {workspaceTabs.length > 0 && (
+            <>
+              <p className={`px-2.5 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 ${railLabel}`}>Workspace</p>
+              <div className="space-y-0.5">{workspaceTabs.map(navButton)}</div>
+            </>
+          )}
+        </nav>
+
+        <div className="shrink-0 border-t border-white/[0.06] p-2">
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="hidden w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-zinc-600 transition hover:bg-white/[0.04] hover:text-zinc-300 md:flex"
+          >
+            <span aria-hidden className="shrink-0">{sidebarCollapsed ? "»" : "«"}</span>
+            <span className={sidebarCollapsed ? "hidden" : ""}>Collapse</span>
+          </button>
+          {user && (
+            <div className="relative mt-1">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((open) => !open)}
+                title={user.email ?? "Account"}
+                className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 transition hover:bg-white/[0.04]"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-[11px] font-semibold text-violet-300">
+                  {initialsOf(user)}
+                </span>
+                <span className={`min-w-0 flex-1 text-left ${railLabel}`}>
+                  <span className="block truncate text-[13px] font-medium text-zinc-200">{displayNameOf(user)}</span>
+                  <span className="block truncate text-[11px] text-zinc-500">{user.email}</span>
+                </span>
+                <svg width="10" height="6" viewBox="0 0 10 6" className={`shrink-0 text-zinc-500 transition ${railName} ${userMenuOpen ? "rotate-180" : ""}`}>
+                  <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                </svg>
+              </button>
+              {userMenuOpen && (
+                <div className="absolute bottom-full left-0 z-50 mb-2 w-60 rounded-xl border border-white/10 bg-zinc-900 p-1.5 shadow-2xl">
+                  <div className="border-b border-white/[0.06] px-3 py-2.5">
+                    <p className="truncate text-[13px] font-medium text-white">{displayNameOf(user)}</p>
+                    <p className="truncate text-xs text-zinc-500">{user.email}</p>
+                  </div>
+                  <div className="py-1">
+                    {(["profile", "brand", "keys", "team"] as const).map((section) => (
+                      <button
+                        key={section}
+                        type="button"
+                        className="block w-full rounded-md px-3 py-2 text-left text-[13px] text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          setTab("settings");
+                          setSettingsSection(section);
+                        }}
+                      >
+                        {section === "profile" ? "Profile settings" : section === "brand" ? "Brand profile" : section === "keys" ? "AI provider keys" : "Team"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="border-t border-white/[0.06] py-1">
+                    <button
+                      type="button"
+                      className="block w-full rounded-md px-3 py-2 text-left text-[13px] text-zinc-500 transition hover:bg-white/[0.06] hover:text-rose-300"
+                      onClick={() => void signOut(getFirebaseAuth())}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </aside>
+
+      <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
+        <div className="mx-auto max-w-6xl space-y-6">{body}</div>
+      </main>
+
+      {showTour && <Tour onNavigate={(next) => setTab(next)} onDone={() => setShowTour(false)} />}
     </div>
   );
 }
