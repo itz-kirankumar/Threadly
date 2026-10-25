@@ -250,6 +250,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         {!readOnly && (
           <button
             type="button"
+            data-tour="run-scan"
             onClick={runScan}
             disabled={scanning || !state.queries.length}
             className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
@@ -266,6 +267,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
           <button
             key={item.id}
             type="button"
+            data-tour={`tab-${item.id}`}
             onClick={() => setTab(item.id)}
             className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${
               tab === item.id ? "border-violet-400 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
@@ -278,14 +280,14 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
 
       {tab === "overview" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div data-tour="metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricCard label="Mention rate" value={latest ? String(latest.mentionRate) : "—"} suffix="%" change={latest ? delta(latest.mentionRate, state.snapshots, "mentionRate") : null} />
             <MetricCard label="Citation share" value={latest ? String(latest.citationShare) : "—"} suffix="%" change={latest ? delta(latest.citationShare, state.snapshots, "citationShare") : null} />
             <MetricCard label="Share of voice" value={latest ? String(latest.shareOfVoice) : "—"} suffix="%" change={latest ? delta(latest.shareOfVoice, state.snapshots, "shareOfVoice") : null} />
             <MetricCard label="Avg. position" value={latest?.avgPosition ? `#${latest.avgPosition}` : "—"} change={null} />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div data-tour="providers" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {providerOrder.map((id) => {
               const metrics = latest?.perProvider[id];
               const keyStatus = state.providers.find((provider) => provider.id === id);
@@ -424,21 +426,10 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             onAddCustom={addCustomProvider}
             onRemove={removeKey}
           />
-          <section className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
-            <h3 className="text-base font-semibold text-white">Product tour</h3>
-            <p className="mt-1 text-sm text-zinc-500">A quick walkthrough of the workspace, for you or a teammate.</p>
-            <button
-              type="button"
-              onClick={() => setShowTour(true)}
-              className="mt-3 rounded-lg border border-violet-400/40 px-4 py-2 text-sm font-medium text-violet-300 transition hover:bg-violet-500/10"
-            >
-              Replay the tour
-            </button>
-          </section>
         </div>
       )}
 
-      {showTour && !readOnly && <Tour onDone={() => setShowTour(false)} />}
+      {showTour && !readOnly && <Tour onNavigate={(next) => setTab(next)} onDone={() => setShowTour(false)} />}
     </div>
   );
 }
