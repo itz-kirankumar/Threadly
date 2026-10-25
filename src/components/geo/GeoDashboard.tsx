@@ -960,10 +960,12 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="group relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"
           >
-            <Image src="/threadly-mark.svg" alt="Threadly" width={24} height={24} className="shrink-0 transition group-hover:opacity-0" />
-            <span aria-hidden className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
-              {PANEL_TOGGLE_ICON}
-            </span>
+            <Image src="/threadly-mark.svg" alt="Threadly" width={24} height={24} className={`shrink-0 transition ${sidebarCollapsed ? "group-hover:opacity-0" : ""}`} />
+            {sidebarCollapsed && (
+              <span aria-hidden className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
+                {PANEL_TOGGLE_ICON}
+              </span>
+            )}
           </button>
           <div className={railLabel}>
             <p className="text-[15px] font-semibold leading-tight tracking-tight text-white">Threadly</p>
