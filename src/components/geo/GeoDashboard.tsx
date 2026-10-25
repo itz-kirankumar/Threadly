@@ -386,7 +386,11 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
                       Mentioned in {metrics.mentionRate}% · cited {metrics.citationShare}%
                     </p>
                   ) : metrics?.status === "failed" ? (
-                    <p className="mt-1 text-xs text-rose-300">Last scan failed</p>
+                    <p className="mt-1 text-xs text-rose-300">
+                      Last scan failed{keyStatus?.source !== "none" ? " - will retry" : ""}
+                    </p>
+                  ) : keyStatus && keyStatus.source !== "none" ? (
+                    <p className="mt-1 text-xs opacity-80">Ready - included in next scan</p>
                   ) : (
                     <p className="mt-1 text-xs opacity-60">API key not configured</p>
                   )}
