@@ -58,9 +58,17 @@ export interface ProviderResult {
   scannedAt: string;
 }
 
+export interface WebResult {
+  url: string;
+  domain: string;
+  title: string;
+}
+
 export interface QueryResult {
   queryId: string;
   results: ProviderResult[];
+  /** Organic web results for this question via Tavily (when configured). */
+  webResults?: WebResult[];
 }
 
 export interface ScanRun {

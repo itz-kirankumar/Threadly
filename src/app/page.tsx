@@ -6,6 +6,7 @@ import LenisProvider from "@/components/landing/LenisProvider";
 import Reveal from "@/components/landing/Reveal";
 import HeroGlow from "@/components/landing/HeroGlow";
 import Pricing from "@/components/landing/Pricing";
+import Faq from "@/components/landing/Faq";
 
 const PROVIDERS = [
   { name: "ChatGPT", note: "Responses API with live web search" },
@@ -169,7 +170,24 @@ export default function LandingPage() {
             </div>
             </Reveal>
             <div className="mt-12">
-              <Pricing compact />
+              <Pricing />
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section className="border-t border-white/[0.06]">
+          <div className="mx-auto max-w-6xl px-6 py-24">
+            <Reveal>
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">FAQ</p>
+              <h2 className="mt-3 font-display text-4xl tracking-tight text-white sm:text-5xl">
+                Questions, answered
+              </h2>
+            </div>
+            </Reveal>
+            <div className="mt-12">
+              <Faq />
             </div>
           </div>
         </section>

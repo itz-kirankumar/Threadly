@@ -35,7 +35,10 @@ export function analyzeAnswer(
     return {
       provider,
       status,
-      answer: status === "not_configured" ? "Add this provider's API key to enable scans." : "Provider scan failed.",
+      answer:
+        status === "not_configured"
+          ? "Add this provider's API key to enable scans."
+          : `Scan failed${error ? `: ${error}` : "."}`,
       citations: [],
       brandMentioned: false,
       brandCited: false,

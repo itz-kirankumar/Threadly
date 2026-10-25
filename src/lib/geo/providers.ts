@@ -54,7 +54,11 @@ async function scanChatGPT(query: string, creds?: ProviderCredentials): Promise<
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`OpenAI returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    const message = detail?.error?.message;
+    throw new Error(`ChatGPT: ${typeof message === "string" ? message : `HTTP ${response.status}`}`);
+  }
   const payload = await response.json();
   const blocks = Array.isArray(payload.output) ? payload.output : [];
   const answer = blocks
@@ -90,14 +94,18 @@ async function scanClaude(query: string, creds?: ProviderCredentials): Promise<P
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: creds?.model || process.env.GEO_ANTHROPIC_MODEL || "claude-sonnet-4-5",
+      model: creds?.model || process.env.GEO_ANTHROPIC_MODEL || "claude-haiku-5-5",
       max_tokens: 1500,
       tools: [{ type: "web_search_20250305", name: "web_search" }],
       messages: [{ role: "user", content: BUYER_FRAMING + `"${query}"` }],
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`Claude returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    const message = detail?.error?.message;
+    throw new Error(`Claude: ${typeof message === "string" ? message : `HTTP ${response.status}`}`);
+  }
   const payload = await response.json();
   const blocks = Array.isArray(payload.content) ? payload.content : [];
   const answer = blocks
@@ -136,7 +144,11 @@ async function scanGemini(query: string, creds?: ProviderCredentials): Promise<P
     await new Promise((resolve) => setTimeout(resolve, 4000));
     response = await request();
   }
-  if (!response.ok) throw new Error(`Gemini returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    const message = detail?.error?.message;
+    throw new Error(`Gemini: ${typeof message === "string" ? message : `HTTP ${response.status}`}`);
+  }
   const payload = await response.json();
   const candidate = payload.candidates?.[0];
   const answer = (candidate?.content?.parts ?? [])
@@ -179,7 +191,7 @@ export async function scanCustomProvider(query: string, creds: Required<Pick<Pro
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`Custom provider returned HTTP ${response.status}.`);
+  if (!response.ok) throw new Error(`Custom provider: HTTP ${response.status}.`);
   const payload = await response.json();
   const answer = (payload.choices?.[0]?.message?.content ?? "").trim();
   if (!answer) throw new Error("Custom provider returned no answer.");

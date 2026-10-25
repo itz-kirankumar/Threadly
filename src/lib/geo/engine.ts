@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PROVIDER_SCANNERS, scanCustomProvider } from "./providers";
+import { searchWeb, tavilyConfigured } from "./tavily";
 import { decryptSecret } from "./crypto";
 import type { KeySettings } from "./store";
 import { analyzeAnswer } from "./extract";
@@ -168,6 +169,16 @@ export async function runScan(
     queryId: query.id,
     results: providers.map(({ id }) => byQuery.get(query.id)!.find((r) => r.provider === id)!),
   }));
+
+  if (tavilyConfigured()) {
+    await mapWithConcurrency(targets, 4, async (query) => {
+      const webResults = await searchWeb(query.text);
+      if (webResults.length) {
+        const target = results.find((r) => r.queryId === query.id);
+        if (target) target.webResults = webResults;
+      }
+    });
+  }
 
   run.finishedAt = new Date().toISOString();
   const snapshot = computeSnapshot(run.id, results, run.providerStatus);
