@@ -105,6 +105,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [justOnboarded, setJustOnboarded] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team">("brand");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [runDetails, setRunDetails] = useState<Record<string, { queries: TrackedQuery[]; results: QueryResult[] } | "loading" | "error">>({});
 
   const authedFetch = useCallback(
@@ -160,6 +161,25 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   useEffect(() => {
     if (!readOnly) void refresh();
   }, [refresh, readOnly]);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("threadly_sidebar_collapsed") === "1") setSidebarCollapsed(true);
+    } catch {
+      // storage unavailable
+    }
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      try {
+        window.localStorage.setItem("threadly_sidebar_collapsed", prev ? "0" : "1");
+      } catch {
+        // storage unavailable
+      }
+      return !prev;
+    });
+  }, []);
 
   const latest = state?.snapshots.length ? state.snapshots[state.snapshots.length - 1] : null;
   const citations = useMemo(() => (state ? buildCitationLeaderboard(state) : []), [state]);
@@ -385,21 +405,39 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
 
       {error && <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</p>}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-white/10">
-        {tabs.map((item) => (
+      <div className="flex items-start gap-6">
+        <nav
+          aria-label="Workspace sections"
+          className={`sticky top-20 flex shrink-0 flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-2 transition-all ${
+            sidebarCollapsed ? "w-12" : "w-12 md:w-48"
+          }`}
+        >
+          {tabs.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              data-tour={`tab-${item.id}`}
+              onClick={() => setTab(item.id)}
+              title={item.label}
+              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition ${
+                tab === item.id ? "bg-violet-500/15 text-white" : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
+              }`}
+            >
+              <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
+              <span className={`whitespace-nowrap ${sidebarCollapsed ? "hidden" : "hidden md:inline"}`}>{item.label}</span>
+            </button>
+          ))}
           <button
-            key={item.id}
             type="button"
-            data-tour={`tab-${item.id}`}
-            onClick={() => setTab(item.id)}
-            className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${
-              tab === item.id ? "border-violet-400 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="mt-1 hidden items-center gap-2.5 rounded-lg border-t border-white/5 px-2.5 py-2 text-xs text-zinc-600 transition hover:text-zinc-300 md:flex"
           >
-            {item.label}
+            <span aria-hidden className="shrink-0">{sidebarCollapsed ? "»" : "«"}</span>
+            <span className={sidebarCollapsed ? "hidden" : ""}>Collapse</span>
           </button>
-        ))}
-      </div>
+        </nav>
+        <div className="min-w-0 flex-1 space-y-6">
 
       {tab === "overview" && (
         <div className="space-y-6">
@@ -686,8 +724,41 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         </div>
       )}
 
+        </div>
+      </div>
+
       {showTour && !readOnly && <Tour onNavigate={(next) => setTab(next)} onDone={() => setShowTour(false)} />}
     </div>
   );
 }
+
+const TAB_ICONS: Record<Tab, React.ReactNode> = {
+  overview: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" /><rect x="9" y="1.5" width="5.5" height="5.5" rx="1" />
+      <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" /><rect x="9" y="9" width="5.5" height="5.5" rx="1" />
+    </svg>
+  ),
+  queries: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <circle cx="8" cy="8" r="6" /><path d="M6.2 6.2c.3-1 1-1.6 1.9-1.6 1 0 1.8.7 1.8 1.6 0 1.2-1.4 1.5-1.8 2.4" /><circle cx="8" cy="11.2" r="0.4" fill="currentColor" />
+    </svg>
+  ),
+  citations: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.1-2.1a3 3 0 1 0-4.2-4.2l-1 1" /><path d="M9.5 6.5a3 3 0 0 0-4.2 0l-2.1 2.1a3 3 0 1 0 4.2 4.2l1-1" />
+    </svg>
+  ),
+  runs: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" /><path d="M13.5 2.5v2.6h-2.6" />
+    </svg>
+  ),
+  settings: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <circle cx="8" cy="8" r="2" />
+      <path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M12.4 3.6l-1.2 1.2M4.8 11.2l-1.2 1.2" />
+    </svg>
+  ),
+};
 
