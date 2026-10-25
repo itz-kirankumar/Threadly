@@ -12,6 +12,7 @@ interface Props {
     aliases: string[];
     category: string;
     competitors: Competitor[];
+    logoDataUrl?: string;
   }) => Promise<void>;
   initial?: BrandProfile | null;
   onCancel?: () => void;
@@ -27,6 +28,41 @@ export default function SetupWizard({ busy, error, onSave, initial, onCancel }: 
   const [competitors, setCompetitors] = useState<Competitor[]>(
     initial?.competitors.length ? initial.competitors : [{ ...emptyCompetitor }, { ...emptyCompetitor }],
   );
+  const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(initial?.logoDataUrl);
+  const [logoError, setLogoError] = useState("");
+
+  function pickLogo(file: File | undefined) {
+    setLogoError("");
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      setLogoError("Logo must be a PNG, JPEG or WebP image.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError("Logo must be under 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        const size = 128;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        setLogoDataUrl(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => setLogoError("Could not read that image file.");
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
 
   function updateCompetitor(index: number, patch: Partial<Competitor>) {
     setCompetitors((list) => list.map((item, i) => (i === index ? { ...item, ...patch } : item)));
@@ -40,6 +76,7 @@ export default function SetupWizard({ busy, error, onSave, initial, onCancel }: 
       aliases: aliases.split(",").map((a) => a.trim()).filter(Boolean),
       category,
       competitors: competitors.filter((c) => c.name.trim() && c.domain.trim()),
+      logoDataUrl,
     });
   }
 
@@ -69,6 +106,35 @@ export default function SetupWizard({ busy, error, onSave, initial, onCancel }: 
       <div>
         <label className={label} htmlFor="brand-aliases">Aliases (comma-separated, optional)</label>
         <input id="brand-aliases" className={input} value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Acme, Acme AI" />
+      </div>
+      <div>
+        <span className={label}>Company logo (optional)</span>
+        <div className="flex items-center gap-3">
+          {logoDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoDataUrl} alt="Company logo" className="h-12 w-12 rounded-lg border border-white/10 object-cover" />
+          ) : (
+            <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-white/15 text-lg text-zinc-600">
+              {name.trim() ? name.trim()[0].toUpperCase() : "?"}
+            </span>
+          )}
+          <label className="cursor-pointer rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:bg-white/5">
+            {logoDataUrl ? "Replace logo" : "Upload logo"}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => pickLogo(e.target.files?.[0])}
+            />
+          </label>
+          {logoDataUrl && (
+            <button type="button" onClick={() => setLogoDataUrl(undefined)} className="text-xs text-zinc-500 transition hover:text-rose-300">
+              Remove
+            </button>
+          )}
+        </div>
+        {logoError && <p className="mt-1 text-xs text-rose-400">{logoError}</p>}
+        <p className="mt-1 text-xs text-zinc-600">Shown across your workspace. Resized to 128px, stored with your brand profile.</p>
       </div>
       <div>
         <label className={label} htmlFor="brand-category">What do you sell? (one phrase)</label>

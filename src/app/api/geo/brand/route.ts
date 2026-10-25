@@ -26,7 +26,7 @@ function cleanAliases(value: unknown): string[] {
 export async function PUT(request: Request) {
   try {
     const user = await getFirebaseIdentity(request);
-    const body = (await readJsonBody(request, 16 * 1024)) as Record<string, unknown>;
+    const body = (await readJsonBody(request, 512 * 1024)) as Record<string, unknown>;
     const competitors: Competitor[] = Array.isArray(body.competitors)
       ? (body.competitors as Array<Record<string, unknown>>)
           .slice(0, 8)
@@ -37,12 +37,23 @@ export async function PUT(request: Request) {
           }))
       : [];
     const existing = await withWorkspace(user!.uid, user!.idToken, () => loadBrand());
+    let logoDataUrl = existing?.logoDataUrl;
+    if (typeof body.logoDataUrl === "string") {
+      if (!body.logoDataUrl) {
+        logoDataUrl = undefined;
+      } else if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(body.logoDataUrl) && body.logoDataUrl.length <= 400_000) {
+        logoDataUrl = body.logoDataUrl;
+      } else {
+        throw new RequestError("Logo must be a PNG, JPEG or WebP image under 300 KB.", 400);
+      }
+    }
     const brand: BrandProfile = {
       name: cleanName(body.name, "your brand name"),
       domain: cleanDomain(body.domain),
       aliases: cleanAliases(body.aliases),
       category: typeof body.category === "string" ? body.category.trim().slice(0, 120) : "",
       competitors,
+      ...(logoDataUrl ? { logoDataUrl } : {}),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

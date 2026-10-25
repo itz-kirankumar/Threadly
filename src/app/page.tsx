@@ -2,6 +2,9 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScanSimulation from "@/components/landing/ScanSimulation";
+import LenisProvider from "@/components/landing/LenisProvider";
+import Reveal from "@/components/landing/Reveal";
+import HeroGlow from "@/components/landing/HeroGlow";
 
 const PROVIDERS = [
   { name: "ChatGPT", note: "Responses API with live web search" },
@@ -34,11 +37,13 @@ const METRICS = [
 export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
+      <LenisProvider />
       <Navbar />
       <main className="flex-grow">
         {/* hero */}
         <section className="relative overflow-hidden">
           <div className="hero-grid absolute inset-0" />
+          <HeroGlow />
           <div className="pointer-events-none absolute -top-40 right-[-10%] h-[480px] w-[480px] rounded-full bg-violet-600/20 blur-[140px]" />
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-16 sm:pt-24">
             <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_1fr]">
@@ -82,20 +87,21 @@ export default function LandingPage() {
         {/* providers */}
         <section className="border-t border-white/[0.06]">
           <div className="mx-auto max-w-6xl px-6 py-16">
+            <Reveal>
             <h2 className="mb-10 text-center font-mono text-xs uppercase tracking-[0.25em] text-zinc-500">
               Measured across the AI assistants your buyers use
             </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {PROVIDERS.map((provider) => (
-                <div
-                  key={provider.name}
-                  className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 transition hover:border-white/20"
-                >
-                  <p className="font-semibold text-white">{provider.name}</p>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{provider.note}</p>
-                </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {PROVIDERS.map((provider, index) => (
+                <Reveal key={provider.name} delay={index * 90}>
+                  <div className="h-full rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 transition hover:border-violet-400/40 hover:bg-violet-500/[0.06]">
+                    <p className="font-semibold text-white">{provider.name}</p>
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{provider.note}</p>
+                  </div>
+                </Reveal>
               ))}
             </div>
+            </Reveal>
           </div>
         </section>
 
@@ -110,11 +116,13 @@ export default function LandingPage() {
             </p>
             <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.06] md:grid-cols-3">
               {STEPS.map((step, index) => (
-                <div key={step.title} className="bg-zinc-950 p-8">
-                  <p className="font-mono text-sm text-violet-400">0{index + 1}</p>
-                  <h3 className="mt-4 text-lg font-semibold text-white">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">{step.body}</p>
-                </div>
+                <Reveal key={step.title} delay={index * 110} className="bg-zinc-950">
+                  <div className="p-8">
+                    <p className="font-mono text-sm text-violet-400">0{index + 1}</p>
+                    <h3 className="mt-4 text-lg font-semibold text-white">{step.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-zinc-400">{step.body}</p>
+                  </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -130,11 +138,13 @@ export default function LandingPage() {
               </span>
             </h2>
             <div className="mt-12 grid gap-3 sm:grid-cols-2">
-              {METRICS.map((metric) => (
-                <div key={metric.name} className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6">
-                  <h3 className="font-semibold text-violet-300">{metric.name}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">{metric.body}</p>
-                </div>
+              {METRICS.map((metric, index) => (
+                <Reveal key={metric.name} delay={index * 80}>
+                  <div className="h-full rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 transition hover:border-fuchsia-400/30">
+                    <h3 className="font-semibold text-violet-300">{metric.name}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-zinc-400">{metric.body}</p>
+                  </div>
+                </Reveal>
               ))}
             </div>
             <p className="mt-8 text-center font-mono text-xs text-zinc-600">
@@ -146,6 +156,7 @@ export default function LandingPage() {
         {/* final CTA */}
         <section className="border-t border-white/[0.06]">
           <div className="mx-auto max-w-4xl px-6 py-24 text-center">
+            <Reveal>
             <h2 className="font-display text-5xl tracking-tight text-white sm:text-6xl">
               AI is the new first page of search.
             </h2>
@@ -159,6 +170,7 @@ export default function LandingPage() {
             >
               Open your workspace
             </Link>
+            </Reveal>
           </div>
         </section>
       </main>

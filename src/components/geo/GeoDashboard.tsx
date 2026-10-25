@@ -133,7 +133,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     }
   }
 
-  async function saveBrand(input: { name: string; domain: string; aliases: string[]; category: string; competitors: { name: string; domain: string; aliases: string[] }[] }) {
+  async function saveBrand(input: { name: string; domain: string; aliases: string[]; category: string; competitors: { name: string; domain: string; aliases: string[] }[]; logoDataUrl?: string }) {
     setBusy(true);
     setError("");
     try {
@@ -242,7 +242,13 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-white">{state.brand.name}</h1>
+          <h1 className="flex items-center gap-2.5 text-xl font-semibold text-white">
+            {state.brand.logoDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={state.brand.logoDataUrl} alt="" className="h-7 w-7 rounded-md border border-white/10 object-cover" />
+            ) : null}
+            {state.brand.name}
+          </h1>
           <p className="text-sm text-zinc-500">
             {state.brand.domain} · vs {state.brand.competitors.map((c) => c.name).join(", ") || "no competitors set"}
           </p>

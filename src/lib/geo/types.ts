@@ -17,6 +17,8 @@ export interface Competitor {
 export interface BrandProfile {
   name: string;
   domain: string;
+  /** Optional company logo as a small data URL (resized client-side to 128px). */
+  logoDataUrl?: string;
   aliases: string[];
   category: string;
   competitors: Competitor[];

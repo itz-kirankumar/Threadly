@@ -33,14 +33,6 @@ export default function PortalNav() {
           <Link href="/demo" className="hidden text-zinc-400 transition hover:text-white sm:inline">
             Live demo
           </Link>
-          <a
-            href="https://github.com/itz-kirankumar/Threadly"
-            target="_blank"
-            rel="noreferrer"
-            className="hidden text-zinc-400 transition hover:text-white sm:inline"
-          >
-            GitHub
-          </a>
           {user ? (
             <div className="flex items-center gap-3">
               <span className="hidden max-w-[200px] truncate text-xs text-zinc-500 md:inline">{user.email}</span>

@@ -13,14 +13,6 @@ export default function Navbar() {
           <Link href="/demo" className="hidden text-zinc-400 transition hover:text-white sm:inline">
             Live demo
           </Link>
-          <a
-            href="https://github.com/itz-kirankumar/Threadly"
-            target="_blank"
-            rel="noreferrer"
-            className="hidden text-zinc-400 transition hover:text-white sm:inline"
-          >
-            GitHub
-          </a>
           <Link href="/portal" className="hidden text-zinc-400 transition hover:text-white sm:inline">
             Log in
           </Link>
