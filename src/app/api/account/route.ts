@@ -66,6 +66,7 @@ export async function DELETE(request: Request) {
 
     return Response.json({ deleted: true });
   } catch (error) {
-    return errorResponse(error, "Delete account");
+    // TEMP-DEBUG: surface the real failure while diagnosing the 500.
+    return Response.json({ error: `DBG: ${error instanceof Error ? error.message : String(error)}` }, { status: 500 });
   }
 }

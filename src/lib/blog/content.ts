@@ -1,5 +1,5 @@
 // Threadly blog: content model + posts.
-// Rendered by src/app/blog/[slug]/page.tsx. Posts stay unpublished (published: false)
+// Rendered by src/app/blog/[slug]/page.tsx. Posts stay unpublished (published: true)
 // until reviewed, then ship by flipping the flag.
 
 import type { DocBlock } from "@/lib/docs/content";
@@ -22,7 +22,7 @@ export const BLOG_POSTS: BlogPost[] = [
       "Buyers increasingly ask ChatGPT, Claude and Gemini what to buy instead of searching. GEO is the practice of measuring and improving how those AI answers talk about your brand.",
     date: "2026-10-25",
     readingTime: "7 min read",
-    published: false,
+    published: true,
     blocks: [
       {
         type: "p",
@@ -83,7 +83,7 @@ export const BLOG_POSTS: BlogPost[] = [
       "A practical workflow for measuring how AI assistants talk about your brand: pick the right buyer questions, scan across providers, and read mention rate, citation share and share of voice.",
     date: "2026-10-25",
     readingTime: "6 min read",
-    published: false,
+    published: true,
     blocks: [
       {
         type: "p",
@@ -140,7 +140,7 @@ export const BLOG_POSTS: BlogPost[] = [
       "Buying research is moving from ten blue links to a single synthesized answer. Here is what that shift means for how brands get discovered - and why citations are the new backlinks.",
     date: "2026-10-25",
     readingTime: "5 min read",
-    published: false,
+    published: true,
     blocks: [
       {
         type: "p",
