@@ -226,6 +226,13 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
   const [justOnboarded, setJustOnboarded] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"profile" | "brand" | "keys" | "team" | "activity" | "api">("brand");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const PANEL_TOGGLE_ICON = (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="3.5" />
+      <path d="M9.75 4.5v15" />
+    </svg>
+  );
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [runDetails, setRunDetails] = useState<Record<string, { queries: TrackedQuery[]; results: QueryResult[] } | "loading" | "error">>({});
@@ -563,7 +570,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
             title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="mt-1 hidden items-center gap-2.5 rounded-lg border-t border-white/5 px-2.5 py-2 text-xs text-zinc-600 transition hover:text-zinc-300 md:flex"
           >
-            <span aria-hidden className="shrink-0">{sidebarCollapsed ? "»" : "«"}</span>
+            <span aria-hidden className="shrink-0">{PANEL_TOGGLE_ICON}</span>
             <span className={sidebarCollapsed ? "hidden" : ""}>Collapse</span>
           </button>
         </nav>
@@ -905,11 +912,31 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-white/[0.06] transition-all ${sidebarCollapsed ? "w-14" : "w-14 md:w-60"}`}
       >
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-3">
-          <Image src="/threadly-mark.svg" alt="Threadly" width={24} height={24} className="shrink-0" />
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="group relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"
+          >
+            <Image src="/threadly-mark.svg" alt="Threadly" width={24} height={24} className="shrink-0 transition group-hover:opacity-0" />
+            <span aria-hidden className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
+              {PANEL_TOGGLE_ICON}
+            </span>
+          </button>
           <div className={railLabel}>
             <p className="text-[15px] font-semibold leading-tight tracking-tight text-white">Threadly</p>
             <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-violet-300">Workspace</p>
           </div>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+            className={`ml-auto hidden h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white/[0.06] hover:text-white ${sidebarCollapsed ? "" : "md:flex"}`}
+          >
+            {PANEL_TOGGLE_ICON}
+          </button>
         </div>
 
         <div className="shrink-0 border-b border-white/[0.06] px-3 py-3">
@@ -941,15 +968,6 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         </nav>
 
         <div className="shrink-0 border-t border-white/[0.06] p-2">
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="hidden w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-zinc-600 transition hover:bg-white/[0.04] hover:text-zinc-300 md:flex"
-          >
-            <span aria-hidden className="shrink-0">{sidebarCollapsed ? "»" : "«"}</span>
-            <span className={sidebarCollapsed ? "hidden" : ""}>Collapse</span>
-          </button>
           {user && (
             <div className="relative mt-1">
               <button
