@@ -31,6 +31,13 @@ export function adminConfigured(): boolean {
   );
 }
 
+export async function getAdminAuth() {
+  const app = await getAdminApp();
+  if (!app) throw new Error("Firebase Admin is not configured.");
+  const { getAuth } = await import("firebase-admin/auth");
+  return getAuth(app);
+}
+
 export async function getAdminDatabase() {
   const app = await getAdminApp();
   if (!app) throw new Error("Firebase Admin is not configured.");

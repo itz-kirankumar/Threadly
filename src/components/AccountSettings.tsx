@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { deleteUser, signOut, updateProfile, type User } from "firebase/auth";
+import { signOut, updateProfile, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 import { ProfileSettings } from "@/components/geo/ProfileSettings";
 
@@ -36,17 +36,11 @@ function DeleteAccount({ user }: { user: User }) {
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error || "Could not delete your account data.");
+        throw new Error(payload?.error || "Could not delete your account.");
       }
-      try {
-        await deleteUser(current);
-      } catch (caught) {
-        const code = (caught as { code?: string })?.code;
-        if (code === "auth/requires-recent-login") {
-          throw new Error("Your workspace data is deleted. For security, sign in again and repeat this step to remove the sign-in itself.");
-        }
-        throw caught;
-      }
+      // The server deleted both the data and the Firebase user; drop the
+      // local session and leave.
+      await signOut(getFirebaseAuth()).catch(() => undefined);
       router.replace("/");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not delete your account.");
