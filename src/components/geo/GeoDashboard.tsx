@@ -925,7 +925,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
     <div className="flex min-h-screen bg-zinc-950">
       <aside
         aria-label="Workspace navigation"
-        className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-white/[0.06] transition-all ${sidebarCollapsed ? "w-14" : "w-14 md:w-60"}`}
+        className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-white/[0.06] transition-all md:flex ${sidebarCollapsed ? "md:w-14" : "md:w-60"}`}
       >
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-3">
           <button
@@ -1041,9 +1041,32 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
+      <main className="min-w-0 flex-1 px-4 pb-24 pt-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-6xl space-y-6">{body}</div>
       </main>
+
+      {/* Mobile tab bar: the desktop rail is hidden below md, so navigation
+          moves to a fixed bottom bar (same tabs, same icons). */}
+      <nav
+        aria-label="Workspace navigation"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around gap-0.5 border-t border-white/[0.08] bg-zinc-950/95 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden"
+      >
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setTab(item.id)}
+            aria-label={item.label}
+            aria-current={tab === item.id ? "page" : undefined}
+            className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1 text-[9px] font-medium transition ${
+              tab === item.id ? "bg-violet-500/15 text-violet-200" : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
+            <span className="max-w-full truncate">{item.label}</span>
+          </button>
+        ))}
+      </nav>
 
       {showTour && <Tour onNavigate={(next) => setTab(next)} onDone={() => setShowTour(false)} />}
     </div>
