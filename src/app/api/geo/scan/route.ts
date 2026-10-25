@@ -15,6 +15,12 @@ export async function POST(request: Request) {
     const queryIds = Array.isArray(body.queryIds)
       ? (body.queryIds as unknown[]).filter((id): id is string => typeof id === "string")
       : undefined;
+    if (user!.idToken === "demo-token") {
+      return Response.json(
+        { error: "The local demo identity cannot run live scans. Sign in with Google to scan." },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     return await withWorkspace(user!.uid, user!.idToken, async () => {
       const limit = await checkRateLimit("geo-scan", 6, 3600, { uid: user!.uid, idToken: user!.idToken });
       if (limit && !limit.allowed) {
