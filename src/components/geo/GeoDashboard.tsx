@@ -641,24 +641,24 @@ export default function GeoDashboard({ user, readOnly = false, initialState }: P
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-zinc-500">
-                    <th className="px-4 py-2.5 font-medium">Brand</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Visibility</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Mentioned in</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Domain cited in</th>
+                    <th className="px-2.5 py-2.5 font-medium md:px-4">Brand</th>
+                    <th className="px-2.5 py-2.5 text-right font-medium md:px-4">Visibility</th>
+                    <th className="px-2.5 py-2.5 text-right font-medium md:px-4">Mentioned in</th>
+                    <th className="hidden px-4 py-2.5 text-right font-medium md:table-cell">Domain cited in</th>
                   </tr>
                 </thead>
                 <tbody>
                   {competitorRows.map((row) => (
                     <tr key={row.domain} className={`border-b border-white/5 ${row.isBrand ? "bg-violet-500/[0.06]" : ""}`}>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2.5 py-2.5 md:px-4">
                         <span className={row.isBrand ? "font-medium text-violet-200" : "text-zinc-200"}>{row.name}</span>
-                        <span className="ml-2 text-xs text-zinc-600">{row.domain}</span>
+                        <span className="ml-2 hidden text-xs text-zinc-600 sm:inline">{row.domain}</span>
                       </td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-2.5 py-2.5 text-right md:px-4">
                         <span className={row.isBrand ? "font-semibold text-violet-200" : "text-zinc-300"}>{row.visibility}%</span>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-zinc-400">{row.mentioned} of {row.total} answers</td>
-                      <td className="px-4 py-2.5 text-right text-zinc-400">{row.citationCount} of {row.total} answers</td>
+                      <td className="whitespace-nowrap px-2.5 py-2.5 text-right text-zinc-400 md:px-4">{row.mentioned} of {row.total} answers</td>
+                      <td className="hidden px-4 py-2.5 text-right text-zinc-400 md:table-cell">{row.citationCount} of {row.total} answers</td>
                     </tr>
                   ))}
                 </tbody>
