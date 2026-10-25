@@ -17,7 +17,23 @@ const nextConfig = {
     if (process.env.NODE_ENV === "production") {
       securityHeaders.push({ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" });
     }
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Firebase auth handler lives on our domain via the rewrites below;
+      // its iframe helper must be framable by our own pages.
+      {
+        source: "/__/auth/:path*",
+        headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }],
+      },
+    ];
+  },
+  async rewrites() {
+    // Custom Firebase authDomain: serve the auth handler same-origin so
+    // popup and redirect sign-in survive third-party storage blocking.
+    return [
+      { source: "/__/auth/:path*", destination: "https://wisentry-510811.firebaseapp.com/__/auth/:path*" },
+      { source: "/__/firebase/:path*", destination: "https://wisentry-510811.firebaseapp.com/__/firebase/:path*" },
+    ];
   },
   images: {
     remotePatterns: [
