@@ -1,5 +1,6 @@
 import { errorResponse } from "@/lib/api-request";
-import { getAdminAuth, getAdminDatabase } from "@/lib/geo/admin-store";
+import { getFirebaseIdentity } from "@/lib/portal-db";
+import { getAdminDatabase } from "@/lib/geo/admin-store";
 import { adminGetMembership, loadTeam } from "@/lib/geo/team";
 
 export const runtime = "nodejs";
@@ -9,31 +10,33 @@ export const dynamic = "force-dynamic";
 // sign-in. Enforced server-side from the token's auth_time BEFORE any
 // destructive write, so a stale-session failure leaves both the account
 // and its data untouched.
-const MAX_SIGN_IN_AGE_SECONDS = 15 * 60;
+const MAX_SIGN_IN_AGE_SECONDS = 5 * 60;
+
+// auth_time from the token's own claims. The token has already been
+// validated by Google's accounts:lookup in getFirebaseIdentity, so the
+// payload of this exact token string is trustworthy without re-verifying
+// the signature (which pulls ESM-only deps that break in the bundle).
+function tokenAuthTime(idToken: string): number | null {
+  try {
+    const part = idToken.split(".")[1];
+    const payload = JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as { auth_time?: number };
+    return typeof payload.auth_time === "number" ? payload.auth_time : null;
+  } catch {
+    return null;
+  }
+}
 
 // Permanently delete the caller's account: data trees via Admin SDK, then
-// the Firebase Auth user itself (Admin deletion cannot fail for recency).
-// The client only calls this; it never deletes the user itself.
+// the Firebase Auth user via accounts:delete with the caller's own (fresh)
+// token. Every guard runs before the first destructive write.
 export async function DELETE(request: Request) {
   try {
-    const authorization = request.headers.get("authorization") || "";
-    const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
-    if (!idToken) return Response.json({ error: "Sign in to continue." }, { status: 401 });
-    if (idToken === "demo-token") return Response.json({ error: "Demo sessions cannot be deleted." }, { status: 400 });
+    const identity = await getFirebaseIdentity(request);
+    if (!identity) return Response.json({ error: "Sign in to continue." }, { status: 401 });
+    if (identity.idToken === "demo-token") return Response.json({ error: "Demo sessions cannot be deleted." }, { status: 400 });
 
-    const auth = await getAdminAuth();
-    let uid: string;
-    let authTime: number;
-    try {
-      const decoded = await auth.verifyIdToken(idToken);
-      uid = decoded.uid;
-      authTime = decoded.auth_time;
-    } catch {
-      return Response.json({ error: "Your sign-in could not be verified. Sign in again." }, { status: 401 });
-    }
-
-    const ageSeconds = Math.floor(Date.now() / 1000) - authTime;
-    if (ageSeconds > MAX_SIGN_IN_AGE_SECONDS) {
+    const authTime = tokenAuthTime(identity.idToken);
+    if (!authTime || Math.floor(Date.now() / 1000) - authTime > MAX_SIGN_IN_AGE_SECONDS) {
       return Response.json(
         { error: "For security, account deletion needs a recent sign-in. Sign out, sign back in, and try again." },
         { status: 403 },
@@ -41,6 +44,7 @@ export async function DELETE(request: Request) {
     }
 
     const db = await getAdminDatabase();
+    const uid = identity.uid;
     const membership = await adminGetMembership(uid);
     if (membership && membership.ownerUid !== uid) {
       // Guest in someone else's workspace: leave it cleanly.
@@ -59,14 +63,29 @@ export async function DELETE(request: Request) {
       await db.ref(`invites/${invite.token}`).set(null);
     }
 
-    // Destructive writes happen only after every guard above has passed.
+    // Destructive steps happen only after every guard above has passed.
+    // The Auth user goes FIRST: it is the only step that can fail for
+    // recency, and once it is gone no active session can outlive deleted
+    // data. Data deletion via Admin SDK cannot fail for recency.
+    const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${encodeURIComponent(apiKey ?? "")}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: identity.idToken }),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return Response.json(
+        { error: "For security, account deletion needs a recent sign-in. Sign out, sign back in, and try again." },
+        { status: 403 },
+      );
+    }
+
     await db.ref(`users/${uid}`).set(null);
     await db.ref(`memberships/${uid}`).set(null);
-    await auth.deleteUser(uid);
 
     return Response.json({ deleted: true });
   } catch (error) {
-    // TEMP-DEBUG: surface the real failure while diagnosing the 500.
-    return Response.json({ error: `DBG: ${error instanceof Error ? error.message : String(error)}` }, { status: 500 });
+    return errorResponse(error, "Delete account");
   }
 }

@@ -5,7 +5,7 @@ const nextConfig = {
   devIndicators: false,
   eslint: { ignoreDuringBuilds: true },
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  serverExternalPackages: ["better-sqlite3", "firebase-admin", "jwks-rsa", "jose"],
+  serverExternalPackages: ["better-sqlite3"],
   async headers() {
     const securityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
