@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import GeoDashboard from "@/components/geo/GeoDashboard";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
 
@@ -41,19 +41,5 @@ export default function PortalGate() {
     return <div className="py-24 text-center text-sm text-zinc-500">Loading…</div>;
   }
 
-  return (
-    <div>
-      <div className="mb-6 flex items-center justify-between border-b border-white/10 pb-4">
-        <p className="text-sm text-zinc-400">{user.email}</p>
-        <button
-          type="button"
-          onClick={() => void signOut(getFirebaseAuth())}
-          className="text-sm text-zinc-500 hover:text-zinc-300"
-        >
-          Sign out
-        </button>
-      </div>
-      <GeoDashboard user={user} />
-    </div>
-  );
+  return <GeoDashboard user={user} />;
 }
