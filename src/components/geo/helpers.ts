@@ -51,7 +51,7 @@ export function buildCitationLeaderboard(state: WorkspaceState): CitationRow[] {
     for (const result of queryResult.results) {
       if (result.status !== "scanned") continue;
       const seenInCell = new Set<string>();
-      for (const citation of result.citations) {
+      for (const citation of result.citations ?? []) {
         if (seenInCell.has(citation.domain)) continue;
         seenInCell.add(citation.domain);
         const kind = citation.domain === brandDomain || citation.domain.endsWith(`.${brandDomain}`)
@@ -140,7 +140,7 @@ export function buildCompetitorComparison(state: WorkspaceState): CompetitorRow[
 
   const countCitations = (domain: string) =>
     scanned.reduce(
-      (acc, result) => acc + (result.citations.some((c) => c.domain === domain || c.domain.endsWith(`.${domain}`)) ? 1 : 0),
+      (acc, result) => acc + ((result.citations ?? []).some((c) => c.domain === domain || c.domain.endsWith(`.${domain}`)) ? 1 : 0),
       0,
     );
 
@@ -159,10 +159,11 @@ export function buildCompetitorComparison(state: WorkspaceState): CompetitorRow[
 
   for (const competitor of state.brand.competitors) {
     const aliases = [competitor.name, ...(competitor.aliases ?? [])].map((n) => n.toLowerCase());
-    const mentioned = scanned.filter((result) =>
-      result.competitorsMentioned.some((name) => aliases.includes(name.toLowerCase())) ||
-      aliases.some((alias) => result.competitorsMentioned.some((m) => m.toLowerCase().includes(alias) || alias.includes(m.toLowerCase()))),
-    ).length;
+    const mentioned = scanned.filter((result) => {
+      const names = (result.competitorsMentioned ?? []).map((m) => m.toLowerCase());
+      return names.some((name) => aliases.includes(name)) ||
+        aliases.some((alias) => names.some((m) => m.includes(alias) || alias.includes(m)));
+    }).length;
     rows.push({
       name: competitor.name,
       domain: competitor.domain,

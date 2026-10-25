@@ -64,10 +64,10 @@ function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryRes
           </div>
           <div>
             <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Citations ({result.citations.length})
+              Citations ({(result.citations ?? []).length})
             </p>
             <ul className="space-y-1.5">
-              {result.citations.map((citation) => (
+              {(result.citations ?? []).map((citation) => (
                 <li key={citation.url} className="truncate text-sm">
                   <a
                     href={citation.url}
@@ -80,11 +80,11 @@ function AnswerDrawer({ queryResult, providerOrder, providerLabels }: { queryRes
                   <span className="ml-2 text-xs text-zinc-500">{citation.title}</span>
                 </li>
               ))}
-              {!result.citations.length && <li className="text-sm text-zinc-600">No citations returned.</li>}
+              {!(result.citations ?? []).length && <li className="text-sm text-zinc-600">No citations returned.</li>}
             </ul>
-            {result.competitorsMentioned.length > 0 && (
+            {(result.competitorsMentioned ?? []).length > 0 && (
               <p className="mt-3 text-xs text-zinc-500">
-                Also mentioned: {result.competitorsMentioned.join(", ")}
+                Also mentioned: {(result.competitorsMentioned ?? []).join(", ")}
               </p>
             )}
           </div>
