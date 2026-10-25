@@ -6,7 +6,7 @@ import LenisProvider from "@/components/landing/LenisProvider";
 import Reveal from "@/components/landing/Reveal";
 import HeroGlow from "@/components/landing/HeroGlow";
 import Pricing from "@/components/landing/Pricing";
-import Faq from "@/components/landing/Faq";
+import Faq, { FAQ_ITEMS } from "@/components/landing/Faq";
 
 const PROVIDERS = [
   { name: "ChatGPT", note: "Responses API with live web search" },
@@ -37,6 +37,15 @@ const METRICS = [
 ];
 
 export default function LandingPage() {
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQ_ITEMS.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  };
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
       <LenisProvider />
@@ -175,6 +184,7 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
         {/* FAQ */}
         <section className="border-t border-white/[0.06]">
           <div className="mx-auto max-w-6xl px-6 py-24">

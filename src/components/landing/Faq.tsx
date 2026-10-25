@@ -1,4 +1,4 @@
-const FAQ_ITEMS = [
+export const FAQ_ITEMS = [
   {
     q: "What counts as a tracked question?",
     a: "A buyer question Threadly asks every configured AI provider on each scan - for example \"best CRM for small teams\". Your plan's limit is the number of questions tracked at once, and you can swap them anytime.",
@@ -27,12 +27,15 @@ const FAQ_ITEMS = [
 
 export default function Faq() {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="divide-y divide-white/10 rounded-xl border border-white/10 bg-white/[0.02]">
       {FAQ_ITEMS.map((item) => (
-        <div key={item.q} className="rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4">
-          <p className="text-sm font-semibold text-white">{item.q}</p>
-          <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{item.a}</p>
-        </div>
+        <details key={item.q} className="group px-5 py-4">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-white marker:hidden [&::-webkit-details-marker]:hidden">
+            {item.q}
+            <span className="shrink-0 text-zinc-500 transition-transform group-open:rotate-45">+</span>
+          </summary>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">{item.a}</p>
+        </details>
       ))}
     </div>
   );

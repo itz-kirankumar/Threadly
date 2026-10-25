@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Pricing from "@/components/landing/Pricing";
-import Faq from "@/components/landing/Faq";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -25,13 +24,6 @@ export default function PricingPage() {
         </div>
         <div className="mt-12">
           <Pricing />
-        </div>
-
-        <div className="mx-auto mt-16 max-w-5xl">
-          <h2 className="text-center text-xl font-semibold text-white">Questions</h2>
-          <div className="mt-6">
-            <Faq />
-          </div>
         </div>
       </main>
       <Footer />
