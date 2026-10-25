@@ -114,7 +114,7 @@ export default function ScanSimulation() {
         <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
         <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
         <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
-        <span className="ml-2 font-mono text-[11px] text-zinc-500">threadly · scan #128 · 4 providers</span>
+        <span className="ml-2 font-mono text-[11px] text-zinc-500">threadly · scan #128 · 3 providers</span>
         <span className="ml-auto flex items-center gap-1.5 font-mono text-[11px] text-emerald-400">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
           live
