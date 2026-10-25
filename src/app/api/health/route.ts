@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
-import { getDecisionModelStatus } from "@/lib/decision-models";
+import { GEO_PROVIDERS } from "@/lib/geo/types";
+import { adminConfigured } from "@/lib/geo/admin-store";
 
 export function GET() {
   const firebase = Boolean(
@@ -9,16 +10,17 @@ export function GET() {
     && (process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL)
     && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   );
-  const resend = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
+  const providers = Object.fromEntries(
+    GEO_PROVIDERS.map(({ id, envKey }) => [id, Boolean(process.env[envKey])]),
+  );
   const checks = {
     firebase,
-    firebaseWaitlistStorage: firebase,
-    authenticatedRateLimiting: firebase,
-    betaEmailDelivery: resend,
+    providers,
+    providerCount: Object.values(providers).filter(Boolean).length,
     anonymousRateLimitStore: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
-    prospectQualification: getDecisionModelStatus(),
+    scheduledScans: adminConfigured() && Boolean(process.env.CRON_SECRET),
   };
-  const ready = checks.firebase && checks.firebaseWaitlistStorage && checks.authenticatedRateLimiting && checks.betaEmailDelivery;
+  const ready = checks.firebase && checks.providerCount > 0;
   return Response.json({ status: ready ? "ready" : "not_ready", checks }, {
     status: ready ? 200 : 503,
     headers: { "Cache-Control": "no-store" },
