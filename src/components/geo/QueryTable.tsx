@@ -158,7 +158,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
         <span>Click a row to read the answers</span>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-white/10">
+      <div className="overflow-x-auto rounded-xl border border-white/10">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">

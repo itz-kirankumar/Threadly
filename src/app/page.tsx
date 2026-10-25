@@ -1,9 +1,10 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import ScanSimulation from "@/components/landing/ScanSimulation";
 
 const PROVIDERS = [
-  { name: "ChatGPT", note: "OpenAI responses with live web search" },
+  { name: "ChatGPT", note: "Responses API with live web search" },
   { name: "Claude", note: "Anthropic answers with web search" },
   { name: "Gemini", note: "Google AI with Search grounding" },
   { name: "Perplexity", note: "Sonar answers with native citations" },
@@ -20,7 +21,7 @@ const STEPS = [
   },
   {
     title: "See what AI says about you",
-    body: "Every scan asks all four providers each question and measures whether answers mention you, cite your site, and where you rank against competitors.",
+    body: "Every scan asks all four providers each question and measures whether answers mention you, cite your site, and where you rank.",
   },
 ];
 
@@ -33,101 +34,133 @@ const METRICS = [
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950">
+    <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
       <Navbar />
       <main className="flex-grow">
-        <section className="mx-auto max-w-4xl px-6 pb-20 pt-24 text-center">
-          <p className="mb-4 inline-block rounded-full border border-violet-400/40 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-300">
-            Enterprise GEO Intelligence
-          </p>
-          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
-            When buyers ask AI,
-            <br />
-            <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
-              does it mention you?
-            </span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400">
-            Threadly monitors how ChatGPT, Claude, Gemini and Perplexity answer the questions your buyers ask —
-            tracking brand mentions, citation share and share of voice against your competitors, scan after scan.
-          </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/portal"
-              className="rounded-lg bg-violet-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-violet-400"
-            >
-              Start tracking your brand
-            </Link>
-            <Link
-              href="/demo"
-              className="rounded-lg border border-white/15 px-6 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/5"
-            >
-              See a live demo
-            </Link>
+        {/* hero */}
+        <section className="relative overflow-hidden">
+          <div className="hero-grid absolute inset-0" />
+          <div className="pointer-events-none absolute -top-40 right-[-10%] h-[480px] w-[480px] rounded-full bg-violet-600/20 blur-[140px]" />
+          <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-16 sm:pt-24">
+            <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_1fr]">
+              <div>
+                <Link
+                  href="/demo"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-violet-400/40 hover:text-white"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                  Enterprise GEO Intelligence
+                  <span className="text-zinc-500">→</span>
+                </Link>
+                <h1 className="mt-7 font-display text-6xl leading-[1.02] tracking-tight text-white sm:text-7xl">
+                  When buyers ask AI, does it{" "}
+                  <span className="bg-gradient-to-r from-violet-300 via-fuchsia-300 to-orange-200 bg-clip-text pr-2 italic text-transparent">
+                    mention you?
+                  </span>
+                </h1>
+                <p className="mt-6 max-w-xl text-lg leading-relaxed text-zinc-400">
+                  Threadly monitors how ChatGPT, Claude, Gemini and Perplexity answer the questions your buyers ask -
+                  tracking mentions, citation share and share of voice against your competitors, scan after scan.
+                </p>
+                <div className="mt-9 flex flex-wrap items-center gap-4">
+                  <Link
+                    href="/portal"
+                    className="rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
+                  >
+                    Start tracking your brand
+                  </Link>
+                  <Link href="/demo" className="text-sm font-semibold text-zinc-300 transition hover:text-white">
+                    See the live demo →
+                  </Link>
+                </div>
+                <p className="mt-5 font-mono text-xs text-zinc-600">no credit card · google sign-in · demo uses sample data</p>
+              </div>
+              <ScanSimulation />
+            </div>
           </div>
-          <p className="mt-4 text-xs text-zinc-600">No credit card. Google sign-in. Demo uses sample data.</p>
         </section>
 
-        <section className="border-t border-white/5 bg-white/[0.02]">
+        {/* providers */}
+        <section className="border-t border-white/[0.06]">
           <div className="mx-auto max-w-6xl px-6 py-16">
-            <h2 className="mb-8 text-center text-sm font-semibold uppercase tracking-widest text-zinc-500">
+            <h2 className="mb-10 text-center font-mono text-xs uppercase tracking-[0.25em] text-zinc-500">
               Measured across the four assistants your buyers use
             </h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {PROVIDERS.map((provider) => (
-                <div key={provider.name} className="rounded-xl border border-white/10 bg-zinc-950 p-5">
+                <div
+                  key={provider.name}
+                  className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 transition hover:border-white/20"
+                >
                   <p className="font-semibold text-white">{provider.name}</p>
-                  <p className="mt-1 text-sm text-zinc-500">{provider.note}</p>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{provider.note}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-6 py-16">
-          <h2 className="mb-10 text-center text-2xl font-bold text-white">How it works</h2>
-          <div className="grid gap-6 md:grid-cols-3">
-            {STEPS.map((step, index) => (
-              <div key={step.title} className="rounded-xl border border-white/10 bg-white/[0.03] p-6">
-                <p className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-sm font-bold text-violet-300">
-                  {index + 1}
-                </p>
-                <h3 className="font-semibold text-white">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-400">{step.body}</p>
-              </div>
-            ))}
+        {/* how it works */}
+        <section className="border-t border-white/[0.06]">
+          <div className="mx-auto max-w-6xl px-6 py-20">
+            <h2 className="text-center font-display text-4xl tracking-tight text-white sm:text-5xl">
+              Live in an afternoon
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-center text-zinc-400">
+              No crawlers to configure, no integrations to maintain. Three steps and your first scan is running.
+            </p>
+            <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.06] md:grid-cols-3">
+              {STEPS.map((step, index) => (
+                <div key={step.title} className="bg-zinc-950 p-8">
+                  <p className="font-mono text-sm text-violet-400">0{index + 1}</p>
+                  <h3 className="mt-4 text-lg font-semibold text-white">{step.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">{step.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section className="border-t border-white/5 bg-white/[0.02]">
-          <div className="mx-auto max-w-6xl px-6 py-16">
-            <h2 className="mb-10 text-center text-2xl font-bold text-white">The metrics that matter for GEO</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
+        {/* metrics */}
+        <section className="border-t border-white/[0.06]">
+          <div className="mx-auto max-w-6xl px-6 py-20">
+            <h2 className="text-center font-display text-4xl tracking-tight text-white sm:text-5xl">
+              Know your{" "}
+              <span className="bg-gradient-to-r from-violet-300 to-fuchsia-300 bg-clip-text pr-2 italic text-transparent">
+                share of the answer
+              </span>
+            </h2>
+            <div className="mt-12 grid gap-3 sm:grid-cols-2">
               {METRICS.map((metric) => (
-                <div key={metric.name} className="rounded-xl border border-white/10 bg-zinc-950 p-6">
+                <div key={metric.name} className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6">
                   <h3 className="font-semibold text-violet-300">{metric.name}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-zinc-400">{metric.body}</p>
                 </div>
               ))}
             </div>
-            <p className="mt-8 text-center text-sm text-zinc-500">
-              Every number in your workspace comes from your own scans — no illustrative dashboards.
+            <p className="mt-8 text-center font-mono text-xs text-zinc-600">
+              every number in your workspace comes from your own scans - no illustrative dashboards
             </p>
           </div>
         </section>
 
-        <section className="mx-auto max-w-4xl px-6 py-20 text-center">
-          <h2 className="text-3xl font-bold text-white">AI is the new first page of search.</h2>
-          <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-            Buyers increasingly ask an assistant before they ever open a browser. Threadly tells you what those
-            assistants say — and whether you're in the answer.
-          </p>
-          <Link
-            href="/portal"
-            className="mt-8 inline-block rounded-lg bg-violet-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-violet-400"
-          >
-            Open your workspace
-          </Link>
+        {/* final CTA */}
+        <section className="border-t border-white/[0.06]">
+          <div className="mx-auto max-w-4xl px-6 py-24 text-center">
+            <h2 className="font-display text-5xl tracking-tight text-white sm:text-6xl">
+              AI is the new first page of search.
+            </h2>
+            <p className="mx-auto mt-5 max-w-xl text-lg text-zinc-400">
+              Buyers ask an assistant before they ever open a browser. Threadly tells you what those assistants say -
+              and whether you're in the answer.
+            </p>
+            <Link
+              href="/portal"
+              className="mt-9 inline-block rounded-full bg-white px-7 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
+            >
+              Open your workspace
+            </Link>
+          </div>
         </section>
       </main>
       <Footer />
