@@ -1,8 +1,5 @@
-import "./portal.css";
-import "./threadly-theme.css";
-
 export const metadata = {
-  title: "Threadly Workspace",
+  title: "Enterprise GEO Workspace · Threadly",
   robots: { index: false, follow: false },
 };
 

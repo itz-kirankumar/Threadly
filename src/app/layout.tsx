@@ -8,19 +8,20 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.gothreadly.live"),
   title: {
-    default: "Signal Radar by Threadly — Find High-Intent Buyers on X & Reddit",
-    template: "%s · Threadly",
+    default: "Threadly — Enterprise Generative Engine Optimization (GEO)",
+    template: "%s · Threadly Enterprise",
   },
-  description: "Signal Radar by Threadly finds buyers who are already describing your product's problem on X, Reddit and communities — before your competitors see the thread.",
-  applicationName: "Threadly",
+  description:
+    "Enterprise GEO Platform: Monitor brand recommendations, citation share, and competitor displacement across ChatGPT, Perplexity, Gemini, and Claude.",
+  applicationName: "Threadly Enterprise GEO",
   keywords: [
-    "signal radar",
-    "social listening",
-    "intent discovery",
-    "lead generation",
-    "outreach automation",
-    "reddit leads",
-    "x buying signals",
+    "enterprise geo",
+    "generative engine optimization",
+    "ai answer share",
+    "chatgpt brand tracking",
+    "perplexity citations",
+    "llm answer intelligence",
+    "ai share of voice",
   ],
   icons: {
     icon: [
@@ -30,23 +31,25 @@ export const metadata: Metadata = {
     apple: [{ url: "/icon.jpg", type: "image/jpeg" }],
   },
   openGraph: {
-    title: "Signal Radar by Threadly — Find High-Intent Buyers on X & Reddit",
-    description: "Find buyers who are already describing your product's problem on X, Reddit and communities.",
-    siteName: "Threadly",
+    title: "Threadly — Enterprise Generative Engine Optimization (GEO)",
+    description:
+      "Monitor brand recommendations, citation share, and competitor displacement across ChatGPT, Perplexity, Gemini, and Claude.",
+    siteName: "Threadly Enterprise GEO",
     type: "website",
     images: [
       {
         url: "/logo.png",
         width: 1200,
         height: 630,
-        alt: "Threadly Signal Radar",
+        alt: "Threadly Enterprise GEO",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Signal Radar by Threadly — Find High-Intent Buyers on X & Reddit",
-    description: "Find buyers who are already describing your product's problem on X, Reddit and communities.",
+    title: "Threadly — Enterprise Generative Engine Optimization (GEO)",
+    description:
+      "Monitor brand recommendations, citation share, and competitor displacement across ChatGPT, Perplexity, Gemini, and Claude.",
     images: ["/logo.png"],
   },
 };
@@ -59,15 +62,16 @@ export default function RootLayout({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Threadly Signal Radar",
+    name: "Threadly Enterprise GEO",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     offers: {
       "@type": "Offer",
-      price: "0",
+      price: "1500",
       priceCurrency: "USD",
     },
-    description: "Signal Radar finds buyers who are already describing your product's problem on X, Reddit and communities — before your competitors see the thread.",
+    description:
+      "Enterprise GEO Platform: Monitor brand recommendations, citation share, and competitor displacement across ChatGPT, Perplexity, Gemini, and Claude.",
   };
 
   return (
@@ -80,7 +84,7 @@ export default function RootLayout({
       </head>
       <body
         suppressHydrationWarning
-        className={`${inter.variable} ${mono.variable} font-sans antialiased bg-brand-paper text-brand-black`}
+        className={`${inter.variable} ${mono.variable} font-sans antialiased bg-[#07090e] text-[#f0f3f8]`}
       >
         {children}
       </body>

@@ -7,14 +7,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const routes = [
     "",
     "/demo",
-    "/about",
-    "/mission",
-    "/playbook",
-    "/case-studies",
-    "/careers",
-    "/ai-engine",
-    "/signal-radar",
-    "/beta-collective",
+    "/portal",
     "/security",
     "/privacy",
     "/terms",
@@ -23,7 +16,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return routes.map((route) => ({
     url: `${baseUrl}${route}`,
     lastModified: now,
-    changeFrequency: route === "" || route === "/signal-radar" || route === "/demo" ? "daily" : "weekly",
-    priority: route === "" ? 1.0 : route === "/signal-radar" || route === "/demo" || route === "/ai-engine" ? 0.9 : 0.7,
+    changeFrequency: route === "" || route === "/demo" || route === "/portal" ? "daily" : "weekly",
+    priority: route === "" ? 1.0 : route === "/demo" || route === "/portal" ? 0.9 : 0.6,
   }));
 }
