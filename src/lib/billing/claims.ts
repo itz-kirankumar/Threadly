@@ -169,99 +169,174 @@ export async function listPromoClaims(): Promise<BillingClaim[]> {
   return (await listAllClaims()).filter((c) => c.provider === "promo");
 }
 
-// ---- promo identity reservations (verified identity, transaction-safe) ----
+// ---- promo identity reservations (verified identity, lease + fencing) ----
 // One promo per verified email / verified phone, enforced atomically across
-// accounts: the key is derived from the VERIFIED claimant identity (never
-// from unauthenticated redeem input) and the value binds the claim that owns
-// the reservation, so retries and partial-attach recovery are idempotent.
+// accounts. Keys derive from the VERIFIED claimant identity (never from
+// unauthenticated redeem input). Each reservation is a LEASE with a fencing
+// token:
+//  - an unexpired lease is honored absolutely: no reclaim while the owner
+//    could still be mid-grant (paid_unclaimed is the normal in-flight state);
+//  - reclaim requires an EXPIRED lease plus billing/claim truth showing the
+//    grant never committed, and is a compare-and-swap on claimId + fence;
+//  - the claimant atomically re-validates fence and EXTENDS the lease
+//    immediately before the billing grant, so it never grants on a stale
+//    lease - a reclaimer can only win a truly expired lease, and transactions
+//    on the node serialize, so exactly one side proceeds;
+//  - after the grant commits, the reservation is marked committed: permanent
+//    consumption, unaffected by later term end or billing changes.
 const PROMO_ID_ROOT = "geo/promoIdentities";
+export const PROMO_LEASE_MS = 10 * 60 * 1000;
 
-export type ReservationTransition =
-  | { action: "reserve"; value: { claimId: string; uid: string; at: string } }
-  | { action: "yours" }
-  | { action: "taken" };
+export interface PromoReservation {
+  claimId: string;
+  uid: string;
+  fence: number;
+  leaseUntil: string;
+  committed?: boolean;
+  at: string;
+}
 
-export function reservationTransition(
-  current: { claimId?: string } | null,
+export type ReserveTransition =
+  | { action: "create" | "refresh"; value: PromoReservation }
+  | { action: "yours"; value: PromoReservation }
+  | { action: "taken"; value: PromoReservation };
+
+/** Fresh reservation attempt. Ours => lease refreshed (same fence). */
+export function reserveTransition(
+  current: PromoReservation | null,
   claimId: string,
   uid: string,
-  now: Date = new Date(),
-): ReservationTransition {
-  if (!current) return { action: "reserve", value: { claimId, uid, at: now.toISOString() } };
-  if (current.claimId === claimId) return { action: "yours" };
-  return { action: "taken" };
+  now: Date,
+): ReserveTransition {
+  if (!current) {
+    return { action: "create", value: { claimId, uid, fence: 1, leaseUntil: new Date(now.getTime() + PROMO_LEASE_MS).toISOString(), at: now.toISOString() } };
+  }
+  if (current.claimId === claimId) {
+    return { action: "refresh", value: { ...current, leaseUntil: new Date(now.getTime() + PROMO_LEASE_MS).toISOString() } };
+  }
+  return { action: "yours", value: current };
+}
+
+/** Atomic fence re-check + lease extension immediately before the grant. The
+ * claimant grants only while this succeeds, so it never grants on a lease a
+ * reclaimer could have taken. */
+export function renewTransition(
+  current: PromoReservation | null,
+  claimId: string,
+  fence: number,
+  now: Date,
+): { ok: true; value: PromoReservation } | { ok: false } {
+  if (!current || current.claimId !== claimId || current.fence !== fence || current.committed) return { ok: false };
+  return { ok: true, value: { ...current, leaseUntil: new Date(now.getTime() + PROMO_LEASE_MS).toISOString() } };
+}
+
+/** Truth check on an EXPIRED reservation's owner. Consumed is permanent: a
+ * claimed marker, a committed flag, or a billing record still carrying the
+ * claim's grant. Term end or later billing changes never unconsumes. */
+export function classifyReservationOwner(
+  reservation: PromoReservation,
+  claim: { status?: string } | null,
+  billing: { claimId?: string | null; status?: string } | null,
+): "orphan" | "consumed" {
+  if (reservation.committed) return "consumed";
+  if (claim?.status === "claimed") return "consumed";
+  if (billing && billing.claimId === reservation.claimId && (billing.status === "active" || billing.status === "grace" || billing.status === "ended")) {
+    return "consumed"; // a grant from this claim existed; consumption survives term end
+  }
+  return "orphan";
+}
+
+/** CAS reclaim of an expired orphan lease. All conditions re-checked INSIDE
+ * the transaction on the current value - never trust the earlier read. */
+export function reclaimTransition(
+  current: PromoReservation | null,
+  expected: { claimId: string; fence: number },
+  next: { claimId: string; uid: string },
+  now: Date,
+): { action: "reclaim"; value: PromoReservation } | { action: "busy" } {
+  if (!current) return { action: "busy" };
+  if (current.claimId !== expected.claimId || current.fence !== expected.fence) return { action: "busy" };
+  if (current.committed) return { action: "busy" };
+  if (Date.parse(current.leaseUntil) >= now.getTime()) return { action: "busy" }; // lease still honored
+  return {
+    action: "reclaim",
+    value: { claimId: next.claimId, uid: next.uid, fence: current.fence + 1, leaseUntil: new Date(now.getTime() + PROMO_LEASE_MS).toISOString(), at: now.toISOString() },
+  };
+}
+
+/** Mark a reservation permanently consumed after the grant commits. */
+export function commitTransition(current: PromoReservation | null, claimId: string, fence: number): PromoReservation | undefined {
+  if (!current || current.claimId !== claimId || current.fence !== fence) return undefined; // abort
+  return { ...current, committed: true };
 }
 
 function promoIdentityKey(kind: "email" | "phone", value: string): string {
   return `${kind}_${createHash("sha256").update(`threadly-promo:${kind}:${value}`).digest("hex")}`;
 }
 
-export async function reservePromoIdentity(
-  kind: "email" | "phone",
-  value: string,
-  claimId: string,
-  uid: string,
-): Promise<"reserved" | "yours" | "taken"> {
-  const ref = (await db()).ref(`${PROMO_ID_ROOT}/${promoIdentityKey(kind, value)}`);
-  let outcome: "reserved" | "yours" | "taken" = "taken";
-  await ref.transaction((current) => {
-    const t = reservationTransition(current, claimId, uid);
-    outcome = t.action === "reserve" ? "reserved" : t.action;
-    return t.action === "reserve" ? t.value : undefined;
+async function promoRef(kind: "email" | "phone", value: string) {
+  return (await db()).ref(`${PROMO_ID_ROOT}/${promoIdentityKey(kind, value)}`);
+}
+
+export type ReserveResult = { outcome: "held"; fence: number } | { outcome: "taken" };
+
+/** Reserve (or re-enter) the promo identity lease, reclaiming expired
+ * orphans only after billing/claim truth shows the grant never committed. */
+export async function reservePromoIdentity(kind: "email" | "phone", value: string, claimId: string, uid: string): Promise<ReserveResult> {
+  const ref = await promoRef(kind, value);
+  let held: PromoReservation | null = null;
+  let taken: PromoReservation | null = null;
+  await ref.transaction((current: PromoReservation | null) => {
+    const t = reserveTransition(current, claimId, uid, new Date());
+    if (t.action === "taken") {
+      taken = t.value;
+      return undefined; // abort
+    }
+    held = t.value;
+    return t.value;
   });
-  if (outcome !== "taken") return outcome;
-  // Taken: verify the owner against billing/claim truth before giving up.
-  // An orphaned reservation (claim abandoned, expired, or never committed)
-  // is reclaimed atomically; a genuinely consumed identity stays taken.
-  const snap = await ref.get();
-  const current = snap.val() as { claimId?: string; uid?: string } | null;
-  if (!current?.claimId || !current.uid) return "taken"; // raced: someone else just moved it
+  const heldVal = held as PromoReservation | null;
+  if (heldVal) return { outcome: "held", fence: heldVal.fence };
+  const takenVal = taken as PromoReservation | null;
+  if (!takenVal) return { outcome: "taken" };
+  const owner: PromoReservation = takenVal;
+  if (owner.committed) return { outcome: "taken" };
+  if (Date.parse(owner.leaseUntil) >= Date.now()) return { outcome: "taken" }; // lease honored: owner may be mid-grant
   const [ownerClaim, ownerBilling] = await Promise.all([
-    loadClaim(current.claimId).catch(() => null),
-    (await db()).ref(`users/${current.uid}/geo/billing`).get().then((b) => b.val() as { claimId?: string | null; status?: string } | null).catch(() => null),
+    loadClaim(owner.claimId).catch(() => null),
+    (await db()).ref(`users/${owner.uid}/geo/billing`).get().then((b) => b.val() as { claimId?: string | null; status?: string } | null).catch(() => null),
   ]);
-  if (classifyReservationOwner(ownerClaim, ownerBilling, current.claimId) === "consumed") return "taken";
-  let reclaimed = false;
-  await ref.transaction((latest) => {
-    const d = reclaimDecision(latest, current.claimId as string, { claimId, uid, at: new Date().toISOString() });
-    reclaimed = d.action === "reclaim";
-    return d.action === "reclaim" ? d.value : undefined;
+  if (classifyReservationOwner(owner, ownerClaim, ownerBilling) === "consumed") return { outcome: "taken" };
+  let reclaimed: PromoReservation | null = null;
+  await ref.transaction((current: PromoReservation | null) => {
+    const d = reclaimTransition(current, { claimId: owner.claimId, fence: owner.fence }, { claimId, uid }, new Date());
+    if (d.action === "reclaim") {
+      reclaimed = d.value;
+      return d.value;
+    }
+    return undefined; // abort: value moved under us
   });
-  return reclaimed ? "reserved" : "taken";
+  const reclaimedVal = reclaimed as PromoReservation | null;
+  return reclaimedVal ? { outcome: "held", fence: reclaimedVal.fence } : { outcome: "taken" };
 }
 
-/** Truth check on a reservation's owner: is the identity really consumed?
- * Consumed ONLY when the granting claim is marked claimed or the owner's
- * workspace billing still carries that claim's active grant. An expired,
- * unclaimed, or never-committed reservation is an orphan and may be
- * reclaimed - a committed/consumed identity is never released. */
-export function classifyReservationOwner(
-  claim: { status?: string } | null,
-  billing: { claimId?: string | null; status?: string } | null,
-  ownerClaimId: string,
-): "orphan" | "consumed" {
-  if (claim?.status === "claimed") return "consumed";
-  if (billing && billing.claimId === ownerClaimId && (billing.status === "active" || billing.status === "grace")) {
-    return "consumed";
-  }
-  return "orphan";
+/** Atomic fence + lease re-validation immediately before the billing grant. */
+export async function renewPromoIdentity(kind: "email" | "phone", value: string, claimId: string, fence: number): Promise<boolean> {
+  const ref = await promoRef(kind, value);
+  let ok = false;
+  const tx = await ref.transaction((current: PromoReservation | null) => {
+    const t = renewTransition(current, claimId, fence, new Date());
+    if (t.ok) {
+      ok = true;
+      return t.value;
+    }
+    return undefined;
+  });
+  return tx.committed && ok;
 }
 
-/** Reclaim decision applied inside the reservation transaction: replace the
- * value only if it is still the exact orphan we verified - a concurrent
- * reclaim or a fresh reservation by someone else must not be clobbered. */
-export function reclaimDecision(
-  current: { claimId?: string } | null,
-  expectedOrphanClaimId: string,
-  next: { claimId: string; uid: string; at: string },
-): { action: "reclaim"; value: typeof next } | { action: "busy" } {
-  if (current && current.claimId === expectedOrphanClaimId) return { action: "reclaim", value: next };
-  return { action: "busy" };
-}
-
-/** Best-effort release of OUR reservation only (claimId must match), used
- * when a grant aborts after reserving so eligibility is not leaked. */
-export async function releasePromoIdentity(kind: "email" | "phone", value: string, claimId: string): Promise<void> {
-  const ref = (await db()).ref(`${PROMO_ID_ROOT}/${promoIdentityKey(kind, value)}`);
-  await ref.transaction((current) => (current && current.claimId === claimId ? null : undefined));
+/** Permanent consumption marker, written after the grant commits. */
+export async function commitPromoIdentity(kind: "email" | "phone", value: string, claimId: string, fence: number): Promise<void> {
+  const ref = await promoRef(kind, value);
+  await ref.transaction((current: PromoReservation | null) => commitTransition(current, claimId, fence));
 }

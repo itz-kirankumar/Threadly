@@ -4,7 +4,7 @@ import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 
 import { periodEndFor, razorpayCheckoutAllowed, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
-import { hashClaimSecret, loadClaim, reconcileClaimWithProvider, releasePromoIdentity, reservePromoIdentity, transitionClaim } from "@/lib/billing/claims";
+import { commitPromoIdentity, hashClaimSecret, loadClaim, reconcileClaimWithProvider, renewPromoIdentity, reservePromoIdentity, transitionClaim } from "@/lib/billing/claims";
 import { decideClaimGrant } from "@/lib/billing/entitlement";
 import { getAdminDatabase } from "@/lib/geo/admin-store";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
@@ -102,29 +102,43 @@ export async function POST(request: Request) {
     // active/grace plan is never overwritten, and a lapsed promo blocks a
     // second promo via promoConsumed while still allowing paid purchases.
     // Promo consumption bound to VERIFIED identity, atomically, across
-    // accounts: reserve the claimant's verified email + phone BEFORE granting.
-    // Reservations keyed by this claim are idempotent (a retry continues) and
-    // released if the grant aborts, so nothing leaks eligibility.
-    let reservedEmail = false;
-    let reservedPhone = false;
+    // accounts: lease + fencing on the claimant's verified email + phone.
+    // An unexpired lease is honored absolutely (paid_unclaimed is the normal
+    // in-flight state); only an EXPIRED lease whose grant never committed can
+    // be reclaimed, via CAS on claimId + fence. Abandoned leases self-clean
+    // by expiry - no explicit release, so nothing is ever freed early.
+    let emailFence: number | null = null;
+    let phoneFence: number | null = null;
     if (claim.provider === "promo") {
       const emailRes = await reservePromoIdentity("email", claimantEmail, claim.id, access.workspaceUid);
-      if (emailRes === "taken") {
+      if (emailRes.outcome === "taken") {
         return Response.json(
           { error: "This promotion has already been redeemed with this email address, so this claim has not been linked - your existing plan is unchanged." },
           { status: 409, headers: { "Cache-Control": "no-store" } },
         );
       }
-      reservedEmail = emailRes === "reserved";
+      emailFence = emailRes.fence;
       const phoneRes = await reservePromoIdentity("phone", accountPhone as string, claim.id, access.workspaceUid);
-      if (phoneRes === "taken") {
-        if (reservedEmail) await releasePromoIdentity("email", claimantEmail, claim.id).catch(() => {});
+      if (phoneRes.outcome === "taken") {
         return Response.json(
           { error: "This promotion has already been redeemed with this mobile number, so this claim has not been linked - your existing plan is unchanged." },
           { status: 409, headers: { "Cache-Control": "no-store" } },
         );
       }
-      reservedPhone = phoneRes === "reserved";
+      phoneFence = phoneRes.fence;
+      // Immediately before the grant: atomically re-validate BOTH fences and
+      // extend both leases. If either was reclaimed, this claim must not
+      // grant - its owner is stale.
+      const [emailOk, phoneOk] = await Promise.all([
+        renewPromoIdentity("email", claimantEmail, claim.id, emailFence),
+        renewPromoIdentity("phone", accountPhone as string, claim.id, phoneFence),
+      ]);
+      if (!emailOk || !phoneOk) {
+        return Response.json(
+          { error: "This claim link has been superseded - redeem the code again for a fresh link. No plan was activated." },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
     }
     const database = await getAdminDatabase();
     if (!database) {
@@ -152,8 +166,6 @@ export async function POST(request: Request) {
       return decision.record;
     });
     if (!tx.committed) {
-      if (reservedEmail) await releasePromoIdentity("email", claimantEmail, claim.id).catch(() => {});
-      if (reservedPhone) await releasePromoIdentity("phone", accountPhone as string, claim.id).catch(() => {});
       if (abortReason === "promo_consumed") {
         return Response.json(
           { error: "This promotion has already been redeemed on this account, so this claim has not been linked - your existing plan is unchanged." },
@@ -180,6 +192,13 @@ export async function POST(request: Request) {
       }
     }
     await inWorkspace(access, () => savePlan(claim.plan));
+    if (claim.provider === "promo" && emailFence != null && phoneFence != null) {
+      // Permanent consumption: never reclaimable, even after the term ends.
+      await Promise.all([
+        commitPromoIdentity("email", claimantEmail, claim.id, emailFence),
+        commitPromoIdentity("phone", accountPhone as string, claim.id, phoneFence),
+      ]).catch((err) => console.error(`claim ${claim.id}: commit marker failed`, err));
+    }
     try {
       await appendAudit({
         actor: access.identity.email || access.identity.uid,
