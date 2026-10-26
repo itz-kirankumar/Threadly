@@ -44,16 +44,16 @@ export const PLAN_LABELS: Record<PlanId, string> = {
 
 const PLAN_ROOT = "geo/plan";
 
-/** Pure lapse decision: an expired one-time Razorpay term (trial included)
- * drops to no-plan - a paid term never falls back to free access. Dodo
- * subscriptions renew via webhook and carry no periodEnd. */
+/** Pure lapse decision: an expired one-time Razorpay or promo term (trial
+ * included) drops to no-plan - a paid term never falls back to free access.
+ * Dodo subscriptions renew via webhook and carry no periodEnd. */
 export function lapsedPlan(
   stored: PlanId,
   billing: { provider?: string; status?: string; periodEnd?: string | null } | null,
   now: Date = new Date(),
 ): { plan: PlanId; lapsed: boolean } {
   if (
-    billing?.provider === "razorpay" &&
+    (billing?.provider === "razorpay" || billing?.provider === "promo") &&
     billing.status === "active" &&
     billing.periodEnd &&
     Date.parse(billing.periodEnd) < now.getTime()

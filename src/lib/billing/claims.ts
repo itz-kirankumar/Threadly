@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import type { BillingInterval, RazorpayPlanId } from "./dodo";
+import type { BillingProvider } from "./store";
 async function db() {
   const { getAdminDatabase } = await import("@/lib/geo/admin-store");
   const database = await getAdminDatabase();
@@ -15,7 +16,7 @@ export type ClaimStatus = "pending" | "paid_unclaimed" | "claimed" | "uncertain"
 
 export interface BillingClaim {
   id: string;
-  provider: "razorpay";
+  provider: BillingProvider;
   plan: RazorpayPlanId;
   interval: BillingInterval;
   amount: number;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import PromoBanner from "@/components/PromoBanner";
 import Footer from "@/components/Footer";
 import ScanSimulation from "@/components/landing/ScanSimulation";
 import LenisProvider from "@/components/landing/LenisProvider";
@@ -49,6 +50,7 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
       <LenisProvider />
+      <PromoBanner />
       <Navbar />
       <main className="flex-grow">
         {/* hero */}

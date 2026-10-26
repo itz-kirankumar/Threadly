@@ -24,6 +24,10 @@ export interface CheckoutAttempt {
 export const ATTEMPT_EXPIRY_MS: Record<BillingProvider, number> = {
   dodo: 24 * 60 * 60 * 1000,
   razorpay: 24 * 60 * 60 * 1000,
+  // Promo redemptions create no provider checkout session, so no attempt is
+  // ever recorded against this provider - the value is a type-completeness
+  // placeholder only.
+  promo: 24 * 60 * 60 * 1000,
 };
 
 export type AttemptVerdict =

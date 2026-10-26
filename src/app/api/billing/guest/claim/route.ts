@@ -111,14 +111,14 @@ export async function POST(request: Request) {
     await inWorkspace(access, async () => {
       await savePlan(claim.plan);
       await saveBilling({
-        provider: "razorpay",
+        provider: claim.provider,
         plan: claim.plan,
         interval: claim.interval,
         status: "active",
         subscriptionId: null,
         customerId: null,
         customerEmail: access.identity.email || null,
-        mode: razorpayTestMode() ? "test" : "live",
+        mode: claim.provider === "promo" ? "live" : razorpayTestMode() ? "test" : "live",
         updatedAt: now.toISOString(),
         periodEnd,
         orderId: claim.orderId,

@@ -45,6 +45,10 @@ function CheckoutInner() {
   const [activePlanLabel, setActivePlanLabel] = useState<string | null>(null);
   const [claimRef, setClaimRef] = useState<string | null>(null);
   const [checkingPlan, setCheckingPlan] = useState(true);
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoEmail, setPromoEmail] = useState("");
+  const [promoContact, setPromoContact] = useState("");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // A signed-in visitor who already has a paid plan must not buy a second one
@@ -166,6 +170,34 @@ function CheckoutInner() {
     }
   };
 
+  const redeem = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (currentUser) {
+        try { headers.Authorization = `Bearer ${await currentUser.getIdToken()}`; } catch { /* guest path */ }
+      }
+      const res = await fetch("/api/billing/guest/redeem", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ plan: "trial", interval: "weekly", email: promoEmail, contact: promoContact, promoCode }),
+      });
+      const data = await res.json();
+      if (res.status === 409 && data.code === "active_plan") {
+        setActivePlanLabel((prev) => prev || "paid");
+        setBusy(false);
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || "That code could not be applied.");
+      sessionStorage.setItem("threadly_claim", JSON.stringify({ claimId: data.claimId, claimSecret: data.claimSecret }));
+      window.location.href = `/billing/claim/${data.claimId}`;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That code could not be applied.");
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col">
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
@@ -185,6 +217,54 @@ function CheckoutInner() {
         <div className="mt-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-200">
           <p>{error}</p>
           <SupportLink reference={undefined} />
+        </div>
+      )}
+      {isTrial && !activePlanLabel && (
+        <div className="mt-4">
+          {!promoOpen ? (
+            <button type="button" onClick={() => setPromoOpen(true)} className="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-200">
+              Have a code?
+            </button>
+          ) : (
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <label className="block text-xs text-zinc-400">Promo code</label>
+              <input
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                placeholder="GOTHREADLY100"
+                className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+              />
+              {promoCode.trim() && (
+                <>
+                  <label className="mt-3 block text-xs text-zinc-400">Account email</label>
+                  <input
+                    value={promoEmail}
+                    onChange={(e) => setPromoEmail(e.target.value)}
+                    type="email"
+                    placeholder="you@example.com"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+                  />
+                  <label className="mt-3 block text-xs text-zinc-400">Account mobile (with country code)</label>
+                  <input
+                    value={promoContact}
+                    onChange={(e) => setPromoContact(e.target.value)}
+                    type="tel"
+                    placeholder="+91 98765 43210"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={redeem}
+                    disabled={busy || !promoEmail.trim() || !promoContact.trim()}
+                    className="mt-4 w-full rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:opacity-50"
+                  >
+                    {busy ? "Applying…" : "Claim free trial"}
+                  </button>
+                  <p className="mt-2 text-[11px] text-zinc-500">If the code is valid, the trial is free - no payment is taken. The details above must match your Threadly account.</p>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
       {activePlanLabel ? (
