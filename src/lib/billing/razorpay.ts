@@ -134,6 +134,12 @@ export async function razorpayCreateOrder(params: {
   return payload as unknown as { id: string; amount: number; currency: string };
 }
 
+export async function razorpayFetchOrder(orderId: string): Promise<{ id: string; amount?: number; currency?: string; status?: string }> {
+  const response = await fetch(`https://api.razorpay.com/v1/orders/${orderId}`, { headers: { Authorization: authHeader() }, cache: "no-store" });
+  if (!response.ok) throw new Error(`Razorpay order fetch failed (${response.status})`);
+  return (await response.json()) as { id: string; amount?: number; currency?: string; status?: string };
+}
+
 export async function razorpayFetchPayment(paymentId: string): Promise<{
   id: string;
   order_id?: string;
@@ -173,6 +179,7 @@ export function upgradeQuote(params: {
   interval: BillingInterval;
   purchasedAt: string; // billing record updatedAt when the purchase was applied
   periodEnd: string;
+  paidThisTerm: number; // ACTUAL amount paid toward the current term (subunits)
   now?: Date;
 }): { due: number; currency: string; credit: number; newPlanCost: number; remainingDays: number } | null {
   const now = params.now ?? new Date();
@@ -180,19 +187,36 @@ export function upgradeQuote(params: {
   const start = Date.parse(params.purchasedAt);
   const total = end - start;
   const remaining = end - now.getTime();
-  if (!Number.isFinite(total) || total <= 0 || remaining <= 0) return null;
-  const cur = ORDER_PRICES[params.currentPlan][params.interval];
+  if (!Number.isFinite(total) || total <= 0 || remaining <= 0 || params.paidThisTerm <= 0) return null;
   const nxt = ORDER_PRICES[params.newPlan][params.interval];
-  if (nxt.amount <= cur.amount) return null; // upgrades only, same interval
-  const due = Math.round(((nxt.amount - cur.amount) * remaining) / total);
-  if (due < 100) return null; // Razorpay minimum order amount (subunits)
+  // Credit = unused share of what was ACTUALLY paid this term (purchase
+  // basis preserved across discounts and repeated upgrades). Cost of the new
+  // plan for the remaining term uses the current catalog price.
+  const credit = Math.round((params.paidThisTerm * remaining) / total);
+  const newPlanCost = Math.round((nxt.amount * remaining) / total);
+  const due = newPlanCost - credit;
+  if (due < 100) return null; // not an upgrade, or below Razorpay's minimum
   return {
     due,
     currency: nxt.currency,
-    credit: Math.round((cur.amount * remaining) / total),
-    newPlanCost: Math.round((nxt.amount * remaining) / total),
+    credit,
+    newPlanCost,
     remainingDays: Math.ceil(remaining / 86400000),
   };
+}
+
+// Actual paid basis for the current term: prefer the stored value; for older
+// records, ground it from the provider's own order record instead of
+// assuming the catalog price.
+export async function resolvePaidThisTerm(record: { paidThisTerm?: number | null; orderId?: string | null }): Promise<number | null> {
+  if (typeof record.paidThisTerm === "number" && record.paidThisTerm > 0) return record.paidThisTerm;
+  if (!record.orderId) return null;
+  try {
+    const order = await razorpayFetchOrder(record.orderId);
+    return typeof order.amount === "number" && order.amount > 0 ? order.amount : null;
+  } catch {
+    return null;
+  }
 }
 
 export function periodEndFor(interval: BillingInterval, from: Date): string {

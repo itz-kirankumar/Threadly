@@ -1,7 +1,7 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { razorpayConfigured, upgradeQuote } from "@/lib/billing/razorpay";
+import { razorpayConfigured, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
 import { loadBilling } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
@@ -24,12 +24,17 @@ export async function POST(request: Request) {
     if (!existing || existing.provider !== "razorpay" || existing.status !== "active" || !existing.periodEnd) {
       return Response.json({ quote: null }, { headers: { "Cache-Control": "no-store" } });
     }
+    const paidThisTerm = await resolvePaidThisTerm(existing);
+    if (paidThisTerm === null) {
+      return Response.json({ quote: null, error: "Could not confirm the amount paid for the current term." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    }
     const quote = upgradeQuote({
       currentPlan: existing.plan,
       newPlan: body.plan,
       interval: body.interval,
       purchasedAt: existing.updatedAt,
       periodEnd: existing.periodEnd,
+      paidThisTerm,
     });
     return Response.json({ quote, currentPlan: existing.plan, periodEnd: existing.periodEnd }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

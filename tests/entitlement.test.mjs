@@ -145,7 +145,7 @@ test("razorpay upgrade quote: prorated difference, same term, upgrades only", as
   const purchasedAt = "2026-10-01T00:00:00Z";
   const periodEnd = "2027-10-01T00:00:00Z";
   const now = new Date("2027-04-01T00:00:00Z"); // ~half the term left
-  const q = upgradeQuote({ currentPlan: "pro", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, now });
+  const q = upgradeQuote({ currentPlan: "pro", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, paidThisTerm: 46800, now });
   assert.ok(q, "quote exists for pro -> growth annual");
   assert.equal(q.currency, "USD");
   // difference 142800-46800 = 96000, ~half remaining
@@ -153,8 +153,14 @@ test("razorpay upgrade quote: prorated difference, same term, upgrades only", as
   assert.ok(q.credit > 21000 && q.credit < 25000);
   assert.ok(q.remainingDays >= 180 && q.remainingDays <= 185);
   // not upgrades:
-  assert.equal(upgradeQuote({ currentPlan: "growth", newPlan: "pro", interval: "annual", purchasedAt, periodEnd, now }), null);
-  assert.equal(upgradeQuote({ currentPlan: "pro", newPlan: "pro", interval: "annual", purchasedAt, periodEnd, now }), null);
+  assert.equal(upgradeQuote({ currentPlan: "growth", newPlan: "pro", interval: "annual", purchasedAt, periodEnd, paidThisTerm: 142800, now }), null);
+  assert.equal(upgradeQuote({ currentPlan: "pro", newPlan: "pro", interval: "annual", purchasedAt, periodEnd, paidThisTerm: 46800, now }), null);
+  // discounted actual payment credits the discounted basis, not catalog:
+  const discounted = upgradeQuote({ currentPlan: "pro", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, paidThisTerm: 23400, now });
+  assert.ok(discounted && discounted.credit < q.credit, "credit follows actual paid basis");
+  // repeated upgrade basis: prior 46800 + upgrade top-up 48000 = 94800 credited
+  const topped = upgradeQuote({ currentPlan: "growth", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, paidThisTerm: 94800, now });
+  assert.equal(topped, null); // same plan still not an upgrade even with bigger basis
   // expired term: no quote
-  assert.equal(upgradeQuote({ currentPlan: "pro", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, now: new Date("2027-10-02T00:00:00Z") }), null);
+  assert.equal(upgradeQuote({ currentPlan: "pro", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, paidThisTerm: 46800, now: new Date("2027-10-02T00:00:00Z") }), null);
 });

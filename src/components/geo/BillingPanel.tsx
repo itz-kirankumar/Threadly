@@ -189,9 +189,11 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                 {status.billing.interval ? ` · ${status.billing.interval} term` : ""}
                 {status.billing.provider === "razorpay" && status.billing.periodEnd
                   ? ` · expires ${new Date(status.billing.periodEnd).toLocaleDateString()} (${Math.max(0, Math.ceil((Date.parse(status.billing.periodEnd) - Date.now()) / 86400000))} days left)`
-                  : status.billing.provider === "dodo"
+                  : status.billing.provider === "dodo" && status.billing.status === "active"
                     ? " · renews automatically"
-                    : ""}
+                    : status.billing.provider === "dodo"
+                      ? ` · ${status.billing.status}`
+                      : ""}
                 {` · updated ${new Date(status.billing.updatedAt).toLocaleString()}`}
               </p>
             )}

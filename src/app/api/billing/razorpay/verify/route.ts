@@ -3,7 +3,7 @@ import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, canCheckout, isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { ORDER_PRICES, periodEndFor, razorpayConfigured, razorpayFetchPayment, verifyPaymentSignature } from "@/lib/billing/razorpay";
+import { ORDER_PRICES, periodEndFor, razorpayConfigured, razorpayFetchPayment, resolvePaidThisTerm, verifyPaymentSignature } from "@/lib/billing/razorpay";
 import { loadBilling, loadCheckoutAttempt, saveBilling, saveCheckoutAttempt } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
@@ -80,6 +80,7 @@ export async function POST(request: Request) {
     }
     const isUpgrade = (notes as Record<string, string>).upgrade === "1";
     let periodEnd = periodEndFor(interval, now);
+    let paidThisTerm: number | null = payment.amount ?? null;
     if (isUpgrade) {
       // Upgrade orders must match the server-stored quote on the attempt and
       // keep the original term end - never silently reset the term.
@@ -95,6 +96,11 @@ export async function POST(request: Request) {
         return Response.json({ error: "Upgrade quote mismatch - no change was applied." }, { status: 400, headers: { "Cache-Control": "no-store" } });
       }
       periodEnd = existing.periodEnd;
+      const priorBasis = await resolvePaidThisTerm(existing);
+      if (priorBasis === null) {
+        return Response.json({ error: "Could not confirm the prior payment basis - no change was applied." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+      }
+      paidThisTerm = priorBasis + (payment.amount ?? 0);
     }
     await inWorkspace(access, async () => {
       await savePlan(plan);
@@ -110,6 +116,7 @@ export async function POST(request: Request) {
         updatedAt: now.toISOString(),
         periodEnd,
         orderId: body.orderId as string,
+        paidThisTerm,
       });
     });
     const attempt = await loadCheckoutAttempt(access.workspaceUid);

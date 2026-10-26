@@ -16,6 +16,9 @@ export interface BillingRecord {
   /** One-time (Razorpay order) entitlements: when the paid term ends. */
   periodEnd?: string | null;
   orderId?: string | null;
+  // Total actually paid (subunits) toward the CURRENT term, including upgrade
+  // top-ups. This - never today's catalog price - is the upgrade credit basis.
+  paidThisTerm?: number | null;
 }
 
 const BILLING_ROOT = "geo/billing";

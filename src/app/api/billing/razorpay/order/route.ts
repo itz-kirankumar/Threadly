@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, canCheckout, isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { ORDER_PRICES, razorpayConfigured, razorpayCreateOrder, razorpayKeyId, upgradeQuote } from "@/lib/billing/razorpay";
+import { ORDER_PRICES, razorpayConfigured, razorpayCreateOrder, razorpayKeyId, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, saveCheckoutAttempt } from "@/lib/billing/store";
 
@@ -53,12 +53,20 @@ export async function POST(request: Request) {
           { status: 409, headers: { "Cache-Control": "no-store" } },
         );
       }
+      const paidThisTerm = await resolvePaidThisTerm(existing);
+      if (paidThisTerm === null) {
+        return Response.json(
+          { error: "Could not confirm the amount paid for the current term - no upgrade order was created." },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        );
+      }
       quote = upgradeQuote({
         currentPlan: existing.plan,
         newPlan: body.plan,
         interval: body.interval,
         purchasedAt: existing.updatedAt,
         periodEnd: existing.periodEnd,
+        paidThisTerm,
       });
       if (!quote) {
         return Response.json(
