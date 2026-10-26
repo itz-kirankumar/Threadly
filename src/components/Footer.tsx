@@ -11,6 +11,7 @@ export default function Footer() {
           <Link href="/blog" className="transition hover:text-zinc-300">Blog</Link>
           <Link href="/terms" className="transition hover:text-zinc-300">Terms</Link>
           <Link href="/privacy" className="transition hover:text-zinc-300">Privacy</Link>
+          <Link href="/refund" className="transition hover:text-zinc-300">Refunds</Link>
           <Link href="/security" className="transition hover:text-zinc-300">Security</Link>
           <a href="mailto:hello@gothreadly.live" className="transition hover:text-zinc-300">Contact</a>
         </div>
