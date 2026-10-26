@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess, inWorkspace } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { billingConfigured, billingTestMode, canCheckout, dodoClient, isInterval, isPaidPlan, productFor } from "@/lib/billing/dodo";
-import { razorpayCreateSubscription, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
+import { razorpaySubscriptionsConfigured, razorpayCreateSubscription, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, loadCheckoutAttempt, saveCheckoutAttempt } from "@/lib/billing/store";
 import type { BillingProvider } from "@/lib/billing/store";
@@ -105,6 +105,16 @@ export async function POST(request: Request) {
       if (provider === "razorpay" && !razorpayOperational()) continue;
       const attemptForProvider: CheckoutAttempt = { ...attempt, provider, updatedAt: new Date().toISOString() };
       await saveCheckoutAttempt(access.workspaceUid, attemptForProvider);
+      // Missing local plan ids are a definitive setup failure: nothing reaches
+      // Razorpay, so mark the attempt failed (freeing the slot) instead of
+      // recording false provider "uncertain" state that blocks checkout for 24h.
+      if (provider === "razorpay" && !razorpaySubscriptionsConfigured()) {
+        await saveCheckoutAttempt(access.workspaceUid, { ...attemptForProvider, state: "failed", updatedAt: new Date().toISOString() });
+        return Response.json(
+          { error: "Razorpay subscription plans are not configured on this deployment." },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        );
+      }
       try {
         if (provider === "dodo") {
           const session = await dodoClient().checkoutSessions.create({

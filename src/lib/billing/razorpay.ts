@@ -41,6 +41,13 @@ export function razorpayCheckoutAllowed(email: string | null | undefined): boole
   return Boolean(email) && allowed.includes(email!.toLowerCase());
 }
 
+/** Subscription checkout additionally needs per-plan Razorpay plan ids configured. */
+export function razorpaySubscriptionsConfigured(): boolean {
+  return (["pro", "growth"] as PaidPlanId[]).every((plan) =>
+    (["monthly", "annual"] as BillingInterval[]).every((interval) => Boolean(process.env[PLAN_ENV[plan]?.[interval] ?? ""])),
+  );
+}
+
 function authHeader(): string {
   return `Basic ${Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString("base64")}`;
 }

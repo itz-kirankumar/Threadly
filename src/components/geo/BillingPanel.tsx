@@ -17,7 +17,7 @@ interface BillingStatus {
     cancelAtPeriodEnd?: boolean | null;
   } | null;
   billingAvailable: boolean;
-  providers?: { dodo: boolean; razorpay: boolean };
+  providers?: { dodo: boolean; razorpay: boolean; razorpayTestMode?: boolean };
   testMode: boolean;
   isOwner: boolean;
   canCheckout: boolean;
@@ -59,6 +59,9 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
       const next = (await authedFetch("/api/billing/status")) as BillingStatus;
       setStatus(next);
       setQuote(null);
+      // While Dodo is sandboxed for this user, default to the live one-time
+      // Razorpay path instead of offering a provider that rejects checkout.
+      if (next.testMode && !next.canCheckout && next.providers?.razorpay) setProvider("razorpay");
       if (next.billing?.provider === "razorpay" && next.billing.status === "active" && next.billing.plan === "pro" && next.billing.interval) {
         try {
           const q = (await authedFetch("/api/billing/razorpay/quote", {
@@ -159,6 +162,11 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
       setBusyPlan(null);
     }
   };
+
+  // razorpayOperational() + key mode say whether the Razorpay path charges real cards.
+  const razorpayLive = Boolean(status?.providers?.razorpay) && status?.providers?.razorpayTestMode === false;
+  // In Dodo test mode only allowlisted testers may use Dodo checkout.
+  const dodoSelectable = Boolean(status) && (!status!.testMode || status!.canCheckout);
 
   if (!status && !error) return <p className="text-sm text-zinc-500">Loading billing…</p>;
 
@@ -272,7 +280,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                     Upgrade quote: ${(quote.credit / 100).toFixed(2)} unused Pro time credited against Growth for the remaining {quote.remainingDays} days - you pay only the difference. The term end date does not change.
                   </span>
                 )}
-                {status.providers?.dodo && status.providers?.razorpay ? (
+                {status.providers?.dodo && status.providers?.razorpay && dodoSelectable ? (
                   <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-zinc-700 p-0.5 text-[11px]">
                     <button
                       type="button"
@@ -294,7 +302,12 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                 ) : (
                   "Checkout uses Dodo Payments."
                 )}
-                {status.testMode ? " Billing is in test mode while launch is prepared - checkouts run against the payment sandbox and no real card is charged." : ""}
+                {status.testMode && !razorpayLive
+                  ? " Billing is in test mode while launch is prepared - checkouts run against the payment sandbox and no real card is charged."
+                  : ""}
+                {status.testMode && razorpayLive
+                  ? " Card subscriptions (Dodo) are in sandbox and not open yet. Razorpay one-time checkout is live - your card is charged for the selected term."
+                  : ""}
               </p>
             </>
           )}
