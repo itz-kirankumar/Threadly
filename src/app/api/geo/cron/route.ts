@@ -60,7 +60,9 @@ export async function GET(request: Request) {
   // Ops affordance: ?sweepOnly=1 (same CRON_SECRET auth) runs only the
   // tombstone reconciliation - used to verify recovery without burning AI
   // scan credits.
+  const markerAt = new Date().toISOString();
   if (new URL(request.url).searchParams.get("sweepOnly") === "1") {
+    await db.ref("geo/ops/lastCron").set({ at: markerAt, mode: "sweepOnly", workspaces: 0, runsOk: 0, pendingDeletionsSwept: sweep.swept.length, claimsSweep }).catch((err) => console.error("Cron: marker write failed", err));
     return Response.json({ ok: true, sweep, claimsSweep });
   }
 
@@ -81,5 +83,7 @@ export async function GET(request: Request) {
       scanned.push({ uid, error: error instanceof Error ? error.message : "scan failed" });
     }
   }
+  const runsOk = scanned.filter((entry) => entry.runId).length;
+  await db.ref("geo/ops/lastCron").set({ at: markerAt, mode: "full", workspaces: scanned.length, runsOk, pendingDeletionsSwept: sweep.swept.length, claimsSweep }).catch((err) => console.error("Cron: marker write failed", err));
   return Response.json({ ok: true, workspaces: scanned.length, scanned, pendingDeletionsSwept: sweep.swept.length, claimsSweep });
 }
