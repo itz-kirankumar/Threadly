@@ -45,6 +45,9 @@ function toRecord(event: IncomingEvent, status: string, previous?: BillingRecord
     // omits them, keep the last known values rather than dropping to unknown.
     nextBillingDate: event.nextBillingDate ?? previous?.nextBillingDate ?? null,
     cancelAtPeriodEnd: event.cancelAtPeriodEnd ?? previous?.cancelAtPeriodEnd ?? null,
+    // Promo consumption is a property of the workspace, not the current plan:
+    // renewals and switches must not reset it.
+    promoConsumed: previous?.promoConsumed || undefined,
   };
 }
 
@@ -87,4 +90,56 @@ export function decideTransition(current: BillingRecord | null, event: IncomingE
     };
   }
   return { action: "ignore", reason: `unhandled status ${event.status}` };
+}
+
+export type ClaimGrantDecision =
+  | { ok: true; record: BillingRecord }
+  | { ok: false; reason: "active_plan" | "promo_consumed" };
+
+/** Atomic guest-claim grant decision, applied inside an RTDB transaction on
+ * the workspace billing node: any live entitlement (active/grace) aborts -
+ * an existing paid plan can never be overwritten or extended by a claim, and
+ * concurrent claims for one workspace have exactly one winner. A lapsed promo
+ * leaves status "ended" with promoConsumed set, blocking a second promo while
+ * still allowing a paid purchase to attach. Retrying the SAME claim after a
+ * successful grant is stopped earlier by the claim record's own status, so a
+ * retry can never reset or extend the term. */
+export function decideClaimGrant(
+  current: BillingRecord | null,
+  grant: {
+    provider: BillingRecord["provider"];
+    plan: BillingRecord["plan"];
+    interval: BillingRecord["interval"];
+    amount: number;
+    orderId: string;
+    customerEmail: string | null;
+    mode: "test" | "live";
+    periodEnd: string | null;
+    now: Date;
+  },
+): ClaimGrantDecision {
+  if (current && (current.status === "active" || current.status === "grace")) {
+    return { ok: false, reason: "active_plan" };
+  }
+  if (grant.provider === "promo" && current?.promoConsumed) {
+    return { ok: false, reason: "promo_consumed" };
+  }
+  return {
+    ok: true,
+    record: {
+      provider: grant.provider,
+      plan: grant.plan,
+      interval: grant.interval,
+      status: "active",
+      subscriptionId: null,
+      customerId: null,
+      customerEmail: grant.customerEmail,
+      mode: grant.mode,
+      updatedAt: grant.now.toISOString(),
+      periodEnd: grant.periodEnd,
+      orderId: grant.orderId,
+      paidThisTerm: grant.amount,
+      promoConsumed: grant.provider === "promo" ? true : current?.promoConsumed || undefined,
+    },
+  };
 }

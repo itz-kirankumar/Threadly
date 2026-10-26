@@ -4,8 +4,9 @@ import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 
 import { periodEndFor, razorpayCheckoutAllowed, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
-import { hashClaimSecret, listPromoClaims, loadClaim, reconcileClaimWithProvider, transitionClaim } from "@/lib/billing/claims";
-import { loadBilling, saveBilling } from "@/lib/billing/store";
+import { hashClaimSecret, loadClaim, reconcileClaimWithProvider, transitionClaim } from "@/lib/billing/claims";
+import { decideClaimGrant } from "@/lib/billing/entitlement";
+import { getAdminDatabase } from "@/lib/geo/admin-store";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 
 export const runtime = "nodejs";
@@ -92,8 +93,45 @@ export async function POST(request: Request) {
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
-    const existing = await inWorkspace(access, () => loadBilling());
-    if (existing && (existing.status === "active" || existing.status === "grace")) {
+    const now = new Date();
+    const periodEnd = periodEndFor(claim.interval, now);
+    // ATOMIC GRANT: the guard and the entitlement write happen in one RTDB
+    // transaction on the workspace billing node. Concurrent claims for this
+    // workspace have exactly one winner; a loser aborts with its claim left
+    // untouched (still claimable after the winner's term ends). An existing
+    // active/grace plan is never overwritten, and a lapsed promo blocks a
+    // second promo via promoConsumed while still allowing paid purchases.
+    const database = await getAdminDatabase();
+    if (!database) {
+      return Response.json({ error: "Account status is temporarily unavailable - nothing was claimed. Try again shortly.", code: "status_unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    }
+    const billingRef = database.ref(`users/${access.workspaceUid}/geo/billing`);
+    let abortReason: "active_plan" | "promo_consumed" | null = null;
+    const tx = await billingRef.transaction((current) => {
+      const decision = decideClaimGrant(current, {
+        provider: claim.provider,
+        plan: claim.plan,
+        interval: claim.interval,
+        amount: claim.amount,
+        orderId: claim.orderId,
+        customerEmail: access.identity.email || null,
+        mode: claim.provider === "promo" ? "live" : razorpayTestMode() ? "test" : "live",
+        periodEnd,
+        now,
+      });
+      if (!decision.ok) {
+        abortReason = decision.reason;
+        return undefined; // abort: leave the existing record untouched
+      }
+      return decision.record;
+    });
+    if (!tx.committed) {
+      if (abortReason === "promo_consumed") {
+        return Response.json(
+          { error: "This promotion has already been redeemed on this account, so this claim has not been linked - your existing plan is unchanged." },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
       // Paid but not attachable: fail closed, keep the claim untouched, and
       // give a safe reference (claim ID alone grants nothing) for support
       // reconciliation. No promise of outcome - it is pending review.
@@ -102,49 +140,18 @@ export async function POST(request: Request) {
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
-    // Promo consumption is enforced HERE, on verified identity: one promo
-    // trial per account / verified email / verified phone. The new claim is
-    // not consumed by this check - it pauses for review instead of attaching.
-    if (claim.provider === "promo") {
-      const used = (await listPromoClaims()).find(
-        (c) =>
-          c.status === "claimed" &&
-          c.id !== claim.id &&
-          (c.claimedBy === access.workspaceUid ||
-            (c.checkoutEmail || "").toLowerCase() === claimantEmail ||
-            (c.checkoutContact && normalizeE164(c.checkoutContact) === accountPhone)),
-      );
-      if (used) {
-        await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
-        return Response.json(
-          { error: `This promotion has already been redeemed with this account or these details, so this claim is paused for review - your plan has not been activated. Reference ${claim.id} at hello@gothreadly.live.` },
-          { status: 409, headers: { "Cache-Control": "no-store" } },
-        );
-      }
-    }
-    const now = new Date();
-    const periodEnd = periodEndFor(claim.interval, now);
     const t = await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "claimed", claimedBy: access.workspaceUid, claimedAt: now.toISOString() }));
     if (!t.applied) {
-      return Response.json({ error: "This purchase was already claimed." }, { status: 409, headers: { "Cache-Control": "no-store" } });
+      // The grant is committed; the claim marker must converge. A concurrent
+      // claimer of THIS claim is impossible (single secret holder), so an
+      // abort means a prior attempt already marked it after granting - reload
+      // and confirm the consistent state instead of failing.
+      const after = await loadClaim(claim.id);
+      if (!after || after.status !== "claimed") {
+        console.error(`claim ${claim.id}: billing granted but claim marker not applied`);
+      }
     }
-    await inWorkspace(access, async () => {
-      await savePlan(claim.plan);
-      await saveBilling({
-        provider: claim.provider,
-        plan: claim.plan,
-        interval: claim.interval,
-        status: "active",
-        subscriptionId: null,
-        customerId: null,
-        customerEmail: access.identity.email || null,
-        mode: claim.provider === "promo" ? "live" : razorpayTestMode() ? "test" : "live",
-        updatedAt: now.toISOString(),
-        periodEnd,
-        orderId: claim.orderId,
-        paidThisTerm: claim.amount,
-      });
-    });
+    await inWorkspace(access, () => savePlan(claim.plan));
     try {
       await appendAudit({
         actor: access.identity.email || access.identity.uid,

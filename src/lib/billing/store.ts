@@ -15,6 +15,9 @@ export interface BillingRecord {
   updatedAt: string;
   /** One-time (Razorpay order) entitlements: when the paid term ends. */
   periodEnd?: string | null;
+  /** Set when a promotional trial was granted to this workspace: one promo,
+   * ever, even after the promo term ends. Carried across later plan changes. */
+  promoConsumed?: boolean;
   /** Dodo subscriptions: provider-reported next charge and scheduled cancel. */
   nextBillingDate?: string | null;
   cancelAtPeriodEnd?: boolean | null;

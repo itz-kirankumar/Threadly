@@ -349,3 +349,45 @@ test("planAtLeast enforces the tier ordering used by feature gates", async () =>
   assert.equal(planAtLeast("enterprise", "growth"), true);
   assert.equal(planAtLeast("none", "trial"), false);
 });
+
+test("decideClaimGrant: concurrent promo claims for one workspace have exactly one winner", async () => {
+  const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
+  const promoGrant = (orderId) => ({ provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId, customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
+  // Two claims race on an empty workspace; the transaction applies them in some order.
+  const first = decideClaimGrant(null, promoGrant("promo_A"));
+  assert.equal(first.ok, true);
+  const second = decideClaimGrant(first.record, promoGrant("promo_B"));
+  assert.equal(second.ok, false);
+  assert.equal(second.reason, "active_plan");
+  // Loser retry after the winner's term: winner still active -> still blocked, term untouched.
+  assert.equal(first.record.periodEnd, "2026-11-02T00:00:00.000Z");
+});
+
+test("decideClaimGrant: promo can never overwrite or extend a paid plan", async () => {
+  const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
+  const paid = { provider: "razorpay", plan: "pro", interval: "monthly", status: "active", subscriptionId: null, customerId: null, customerEmail: "a@b.co", mode: "live", updatedAt: "2026-10-01T00:00:00Z", periodEnd: "2026-11-01T00:00:00Z", orderId: "order_paid", paidThisTerm: 4900 };
+  const res = decideClaimGrant(paid, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, "active_plan");
+  // Grace also blocks (dunning customer keeps their plan).
+  assert.equal(decideClaimGrant({ ...paid, status: "grace" }, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date() }).ok, false);
+});
+
+test("decideClaimGrant: lapsed promo blocks a second promo but allows a paid purchase", async () => {
+  const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
+  const lapsedPromo = { provider: "promo", plan: "trial", interval: "weekly", status: "ended", subscriptionId: null, customerId: null, customerEmail: "a@b.co", mode: "live", updatedAt: "2026-10-20T00:00:00Z", periodEnd: "2026-10-25T00:00:00Z", orderId: "promo_GOTHREADLY100", paidThisTerm: 0, promoConsumed: true };
+  const again = decideClaimGrant(lapsedPromo, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
+  assert.equal(again.ok, false);
+  assert.equal(again.reason, "promo_consumed");
+  const paid = decideClaimGrant(lapsedPromo, { provider: "razorpay", plan: "pro", interval: "monthly", amount: 4900, orderId: "order_paid", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-25T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
+  assert.equal(paid.ok, true);
+  assert.equal(paid.record.promoConsumed, true); // consumption survives the upgrade
+  assert.equal(paid.record.status, "active");
+});
+
+test("decideTransition preserves promoConsumed across renewals and switches", async () => {
+  const { decideTransition } = await import("../src/lib/billing/entitlement.ts");
+  const current = { provider: "dodo", plan: "pro", interval: "monthly", status: "active", subscriptionId: "sub_1", customerId: "cus_1", customerEmail: "a@b.co", mode: "live", updatedAt: "2026-10-01T00:00:00Z", promoConsumed: true };
+  const renewal = decideTransition(current, { provider: "dodo", plan: "pro", interval: "monthly", status: "active", subscriptionId: "sub_1", customerId: "cus_1", customerEmail: "a@b.co", mode: "live", eventId: "evt2", eventAt: "2026-10-26T10:00:00.000Z" });
+  assert.equal(renewal.record.promoConsumed, true);
+});
