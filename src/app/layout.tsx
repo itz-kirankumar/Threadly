@@ -32,8 +32,11 @@ export const metadata: Metadata = {
   ],
   icons: {
     icon: [
+      // Raster PNGs at 48px multiples: Google's favicon crawler does not
+      // reliably pick up SVG-only icon sets.
+      { url: "/icon-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/threadly-mark.svg", type: "image/svg+xml" },
     ],
     apple: [{ url: "/icon.jpg", type: "image/jpeg" }],
   },
