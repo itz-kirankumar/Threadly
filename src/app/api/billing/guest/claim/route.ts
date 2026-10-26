@@ -4,7 +4,7 @@ import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 
 import { periodEndFor, razorpayCheckoutAllowed, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
-import { hashClaimSecret, loadClaim, reconcileClaimWithProvider, transitionClaim } from "@/lib/billing/claims";
+import { hashClaimSecret, listPromoClaims, loadClaim, reconcileClaimWithProvider, transitionClaim } from "@/lib/billing/claims";
 import { loadBilling, saveBilling } from "@/lib/billing/store";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 
@@ -101,6 +101,26 @@ export async function POST(request: Request) {
         { error: `This account already has an active plan, so this purchase has not been linked. Do not pay again - contact hello@gothreadly.live with reference ${claim.id} and the purchase will be reviewed.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
+    }
+    // Promo consumption is enforced HERE, on verified identity: one promo
+    // trial per account / verified email / verified phone. The new claim is
+    // not consumed by this check - it pauses for review instead of attaching.
+    if (claim.provider === "promo") {
+      const used = (await listPromoClaims()).find(
+        (c) =>
+          c.status === "claimed" &&
+          c.id !== claim.id &&
+          (c.claimedBy === access.workspaceUid ||
+            (c.checkoutEmail || "").toLowerCase() === claimantEmail ||
+            (c.checkoutContact && normalizeE164(c.checkoutContact) === accountPhone)),
+      );
+      if (used) {
+        await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
+        return Response.json(
+          { error: `This promotion has already been redeemed with this account or these details, so this claim is paused for review - your plan has not been activated. Reference ${claim.id} at hello@gothreadly.live.` },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
     }
     const now = new Date();
     const periodEnd = periodEndFor(claim.interval, now);

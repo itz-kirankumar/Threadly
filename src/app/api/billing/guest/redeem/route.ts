@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
 import { loadBilling } from "@/lib/billing/store";
 import { normalizeE164 } from "@/lib/billing/identity";
-import { newClaimSecret, saveClaim, listPromoClaims, type BillingClaim } from "@/lib/billing/claims";
+import { newClaimSecret, saveClaim, listPromoClaims, transitionClaim, type BillingClaim } from "@/lib/billing/claims";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -67,19 +67,33 @@ export async function POST(request: Request) {
         );
       }
     }
-    // Any prior promo claim with the same details - pending, unclaimed, or
-    // already claimed - blocks a repeat redemption.
-    const existing = await listPromoClaims();
-    const clash = existing.find(
+    // Eligibility is consumed at VERIFIED redemption (claim time), not here:
+    // checkout details are typed, unverified signals, so an unclaimed claim
+    // must never lock the real owner out. A promo already CLAIMED with these
+    // details is real consumption and blocks a repeat; still-unclaimed promo
+    // claims with the same details are superseded (expired) so a mistyped or
+    // squatted claim cannot hold the slot - the newest redeem link wins.
+    const promos = await listPromoClaims();
+    const consumed = promos.find(
       (c) =>
-        (c.checkoutEmail || "").toLowerCase() === email || normalizeE164(c.checkoutContact) === contact,
+        c.status === "claimed" &&
+        ((c.checkoutEmail || "").toLowerCase() === email || normalizeE164(c.checkoutContact) === contact),
     );
-    if (clash) {
+    if (consumed) {
       return Response.json(
-        { error: "This code has already been used with these details. If that was you, continue from the claim link you received." },
+        { error: "This code has already been used with these details. If that was you, the trial is already on your account." },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
+    await Promise.all(
+      promos
+        .filter(
+          (c) =>
+            c.status === "paid_unclaimed" &&
+            ((c.checkoutEmail || "").toLowerCase() === email || normalizeE164(c.checkoutContact) === contact),
+        )
+        .map((c) => transitionClaim(c.id, ["paid_unclaimed"], () => ({ status: "expired" as const }))),
+    );
     const now = new Date();
     const { secret, hash } = newClaimSecret();
     const claim: BillingClaim = {
