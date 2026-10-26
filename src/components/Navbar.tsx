@@ -23,7 +23,7 @@ export default function Navbar() {
           <DeveloperMenu />
           <Link
             href="/portal"
-            className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-200"
+            className="whitespace-nowrap rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-200"
           >
             Get started
           </Link>
