@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect } from "react";
-import { sanitizeAnalyticsEvent } from "@/lib/analytics-sanitize";
+import { sanitizeAnalyticsEvent, sanitizeTrackedUrl } from "@/lib/analytics-sanitize";
 import { analyticsAllowed, CONSENT_CHANGE_EVENT } from "@/lib/consent";
 
 // PostHog, consent-gated. No key configured -> renders nothing, loads nothing.
 // Declined/undecided -> never initialized. Withdrawal after acceptance ->
 // opted out and identity reset. Pageviews only: no autocapture, no session
-// recording, no identified profiles. Query strings and hashes are stripped
-// from tracked URLs so claim/invite/checkout secrets never leave the page.
+// recording, no identified profiles.
+//
+// Capture is explicit, not automatic: posthog's own capture_pageview is off and
+// every $pageview is fired by trackCurrent(), which first runs the route
+// allowlist - non-marketing routes (portal, checkout, invite, claim, API,
+// preview) are never tracked, so claim/invite secrets in URLs cannot reach
+// PostHog. before_send stays configured as defense in depth.
 export default function PostHogProvider() {
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
@@ -17,35 +22,53 @@ export default function PostHogProvider() {
     let active = false;
     let stopped = false;
 
+    const trackCurrent = async () => {
+      if (!active || stopped) return;
+      const url = sanitizeTrackedUrl(window.location.href);
+      if (!url) return; // route not allowlisted - track nothing
+      const { default: posthog } = await import("posthog-js");
+      posthog.capture("$pageview", {
+        $current_url: url,
+        $pathname: new URL(url).pathname,
+      });
+    };
+
+    const onNav = () => {
+      // App Router navigations don't emit popstate; wrap pushState/replaceState.
+      window.setTimeout(() => void trackCurrent(), 50);
+    };
+
     const start = async () => {
       if (active || stopped) return;
       const { default: posthog } = await import("posthog-js");
-      try {
-        posthog.init(key, {
-          api_host: host,
-          autocapture: false,
-          capture_pageview: true,
-          capture_pageleave: false,
-          disable_session_recording: true,
-          person_profiles: "identified_only",
-          opt_out_capturing_by_default: false,
-          debug: true,
-          before_send: (event) => {
-            try {
-              const result = sanitizeAnalyticsEvent(event);
-              console.log("[ph-diag] before_send", event?.event, result ? "pass" : "drop");
-              return result;
-            } catch (err) {
-              console.log("[ph-diag] before_send THREW", event?.event, String(err));
-              return null;
-            }
-          },
-        });
-        console.log("[ph-diag] init ok");
-      } catch (err) {
-        console.log("[ph-diag] init threw", String(err));
-      }
+      posthog.init(key, {
+        api_host: host,
+        autocapture: false,
+        capture_pageview: false,
+        capture_pageleave: false,
+        disable_session_recording: true,
+        person_profiles: "identified_only",
+        opt_out_capturing_by_default: false,
+        before_send: sanitizeAnalyticsEvent,
+      });
+      // Our consent gate has already run at this point; make sure the SDK's
+      // own opt-out state can't silently swallow events.
+      posthog.opt_in_capturing();
       active = true;
+      window.addEventListener("popstate", onNav);
+      const originalPush = window.history.pushState;
+      const originalReplace = window.history.replaceState;
+      window.history.pushState = function (...args) {
+        const result = originalPush.apply(this, args);
+        onNav();
+        return result;
+      };
+      window.history.replaceState = function (...args) {
+        const result = originalReplace.apply(this, args);
+        onNav();
+        return result;
+      };
+      void trackCurrent();
     };
 
     const stop = async () => {
