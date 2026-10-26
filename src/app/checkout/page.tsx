@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import SupportLink from "@/components/SupportLink";
@@ -35,7 +35,14 @@ function CheckoutInner() {
   const price = interval === "annual" ? plan.annual : plan.monthly;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testMode, setTestMode] = useState(false);
+  const [testMode, setTestMode] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/billing/guest/order", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setTestMode(Boolean(d.testMode)))
+      .catch(() => setTestMode(null));
+  }, []);
 
   const pay = async () => {
     setBusy(true);
@@ -101,6 +108,11 @@ function CheckoutInner() {
         Enter the email and mobile number of the Threadly account you want this plan linked to. Use these same details when signing in or creating your account.
       </div>
       <p className="mt-3 text-xs text-zinc-500">One-time purchase for the selected term. No sign-in needed to pay - you link the plan to your account after payment.</p>
+      {testMode && (
+        <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+          TEST MODE - no real charges. Payments run against the Razorpay sandbox, and while launch is prepared a purchase can only be linked to pre-approved test accounts.
+        </div>
+      )}
       {error && (
         <div className="mt-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-200">
           <p>{error}</p>
@@ -116,7 +128,7 @@ function CheckoutInner() {
         {busy ? "Opening secure checkout…" : `Pay $${price} securely`}
       </button>
       <p className="mt-3 text-center text-[11px] text-zinc-600">
-        Payments by Razorpay.{testMode ? " Test mode - no real charges while launch is prepared." : ""}
+        Payments by Razorpay.
       </p>
     </main>
   );

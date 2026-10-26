@@ -57,6 +57,12 @@ export async function POST(request: Request) {
     const claimantPhone = await lookupVerifiedPhone(access.identity.idToken);
     const checkoutDigits = normalizePhoneDigits(claim.checkoutContact);
     const accountDigits = normalizePhoneDigits(claimantPhone);
+    if (checkoutDigits && !accountDigits) {
+      return Response.json(
+        { error: "Verify the mobile number on your Threadly account first, then open this claim link again - the payment must match your account details." },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     if (checkoutDigits && accountDigits && checkoutDigits !== accountDigits) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(

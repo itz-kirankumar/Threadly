@@ -59,6 +59,18 @@ export async function loadClaimByOrder(orderId: string): Promise<BillingClaim | 
   return Object.values(snap.val() as Record<string, BillingClaim>)[0] ?? null;
 }
 
+// Pure transition decision, unit-tested: the RTDB transaction applies exactly
+// this logic, so concurrency/replay/interruption behavior is provable offline.
+export function decideClaimTransition(
+  current: BillingClaim | null,
+  from: ClaimStatus[],
+  now: Date,
+): "abort" | "expire" | "apply" {
+  if (!current || !from.includes(current.status)) return "abort";
+  if (current.status !== "claimed" && now.getTime() - Date.parse(current.createdAt) > CLAIM_EXPIRY_MS) return "expire";
+  return "apply";
+}
+
 // Atomic status transition: exactly one caller can move a claim out of an
 // expected state (claim-once, no double entitlement).
 export async function transitionClaim(
@@ -68,9 +80,10 @@ export async function transitionClaim(
 ): Promise<{ applied: boolean; claim: BillingClaim | null }> {
   const ref = (await db()).ref(`${CLAIMS_ROOT}/${id}`);
   const result = await ref.transaction((current: BillingClaim | null) => {
-    if (!current || !from.includes(current.status)) return undefined; // abort
-    if (current.status !== "claimed" && Date.now() - Date.parse(current.createdAt) > CLAIM_EXPIRY_MS) {
-      return { ...current, status: "expired", updatedAt: new Date().toISOString() };
+    const verdict = decideClaimTransition(current, from, new Date());
+    if (verdict === "abort") return undefined;
+    if (verdict === "expire" || !current) {
+      return current ? { ...current, status: "expired", updatedAt: new Date().toISOString() } : undefined;
     }
     return { ...current, ...mutate(current), updatedAt: new Date().toISOString() };
   });

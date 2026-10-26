@@ -81,7 +81,10 @@ export async function POST(request: Request) {
     const paymentEmail = (payment.email || "").toLowerCase();
     const accountPhone = normalizePhoneDigits(await lookupVerifiedPhone(access.identity.idToken));
     const paymentPhone = normalizePhoneDigits(payment.contact);
-    if ((paymentEmail && accountEmail && paymentEmail !== accountEmail) || (paymentPhone && accountPhone && paymentPhone !== accountPhone)) {
+    if (
+      (paymentEmail && accountEmail && paymentEmail !== accountEmail) ||
+      (paymentPhone && (!accountPhone || paymentPhone !== accountPhone))
+    ) {
       const attempt0 = await loadCheckoutAttempt(access.workspaceUid);
       if (attempt0 && attempt0.providerRef === body.orderId) {
         await saveCheckoutAttempt(access.workspaceUid, { ...attempt0, state: "uncertain", updatedAt: new Date().toISOString() });

@@ -175,3 +175,39 @@ test("guest claim secret hashing is stable and salted", async () => {
   assert.notEqual(hashClaimSecret(a.secret), b.hash);
   assert.match(a.secret, /^[A-Za-z0-9_-]{32}$/);
 });
+
+test("guest claim transitions: replay, interruption, expiry, wrong-state", async () => {
+  const { decideClaimTransition } = await import("../src/lib/billing/claims.ts");
+  const base = {
+    id: "clm_x", provider: "razorpay", plan: "pro", interval: "annual", amount: 46800, currency: "USD",
+    orderId: "order_x", paymentId: null, claimTokenHash: "h", checkoutEmail: null, checkoutContact: null,
+    claimedBy: null, claimedAt: null, createdAt: "2026-10-20T00:00:00Z", updatedAt: "2026-10-20T00:00:00Z",
+  };
+  const now = new Date("2026-10-26T00:00:00Z");
+  // confirm replay (pending -> paid_unclaimed twice): second is abort
+  assert.equal(decideClaimTransition({ ...base, status: "pending" }, ["pending"], now), "apply");
+  assert.equal(decideClaimTransition({ ...base, status: "paid_unclaimed" }, ["pending"], now), "abort");
+  // claim replay (paid_unclaimed -> claimed twice): second is abort
+  assert.equal(decideClaimTransition({ ...base, status: "paid_unclaimed" }, ["paid_unclaimed"], now), "apply");
+  assert.equal(decideClaimTransition({ ...base, status: "claimed" }, ["paid_unclaimed"], now), "abort");
+  // interrupted claim left uncertain cannot be claimed directly
+  assert.equal(decideClaimTransition({ ...base, status: "uncertain" }, ["paid_unclaimed"], now), "abort");
+  // expired claim (older than 7d) transitions to expire instead
+  const old = { ...base, status: "paid_unclaimed", createdAt: "2026-10-01T00:00:00Z" };
+  assert.equal(decideClaimTransition(old, ["paid_unclaimed"], now), "expire");
+  // claimed claims never expire out
+  const claimed = { ...base, status: "claimed", createdAt: "2026-10-01T00:00:00Z" };
+  assert.equal(decideClaimTransition(claimed, ["paid_unclaimed"], now), "abort");
+  // missing claim aborts
+  assert.equal(decideClaimTransition(null, ["pending"], now), "abort");
+});
+
+test("phone normalization: trailing 10 digits, country-code tolerant, empty stays empty", async () => {
+  const { normalizePhoneDigits } = await import("../src/lib/billing/identity.ts");
+  assert.equal(normalizePhoneDigits("+91 63836 66595"), "6383666595");
+  assert.equal(normalizePhoneDigits("6383666595"), "6383666595");
+  assert.equal(normalizePhoneDigits("+916383666595"), "6383666595");
+  assert.equal(normalizePhoneDigits(""), "");
+  assert.equal(normalizePhoneDigits(null), "");
+  assert.equal(normalizePhoneDigits(undefined), "");
+});

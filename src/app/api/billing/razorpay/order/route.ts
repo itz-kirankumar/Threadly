@@ -3,7 +3,7 @@ import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, canCheckout, isInterval, isPaidPlan } from "@/lib/billing/dodo";
 import { ORDER_PRICES, razorpayConfigured, razorpayCreateOrder, razorpayKeyId, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
-import { lookupVerifiedPhone } from "@/lib/billing/identity";
+import { lookupVerifiedPhone, normalizePhoneDigits } from "@/lib/billing/identity";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, saveCheckoutAttempt } from "@/lib/billing/store";
 
@@ -131,6 +131,12 @@ export async function POST(request: Request) {
       } catch { /* audit is best-effort */ }
       const price = ORDER_PRICES[body.plan][body.interval];
       const prefillPhone = await lookupVerifiedPhone(access.identity.idToken);
+      if (!normalizePhoneDigits(prefillPhone)) {
+        return Response.json(
+          { error: "Verify the mobile number on your account before checkout - the payment must use the same details." },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
       return Response.json(
         { orderId: order.id, amount: quote ? quote.due : price.amount, currency: price.currency, keyId: razorpayKeyId(), provider: "razorpay", testMode: billingTestMode(), quote, prefill: { email: access.identity.email || null, contact: prefillPhone } },
         { headers: { "Cache-Control": "no-store" } },

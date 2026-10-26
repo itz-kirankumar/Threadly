@@ -6,6 +6,14 @@ import { newClaimSecret, saveClaim, type BillingClaim } from "@/lib/billing/clai
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// GET /api/billing/guest/order - public pre-payment disclosure probe.
+export async function GET() {
+  return Response.json(
+    { testMode: billingTestMode(), available: razorpayConfigured() },
+    { headers: { "Cache-Control": "no-store" } },
+  );
+}
+
 // POST /api/billing/guest/order - start checkout WITHOUT sign-in. Creates a
 // Razorpay order (server-priced) plus a durable claim record. The claim secret
 // is returned once and is the only proof of purchase authority.
