@@ -4,7 +4,7 @@ import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, canCheckout, isInterval, isPaidPlan } from "@/lib/billing/dodo";
 import { ORDER_PRICES, periodEndFor, razorpayConfigured, razorpayFetchPayment, resolvePaidThisTerm, verifyPaymentSignature } from "@/lib/billing/razorpay";
-import { lookupVerifiedPhone, normalizePhoneDigits } from "@/lib/billing/identity";
+import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 import { loadBilling, loadCheckoutAttempt, saveBilling, saveCheckoutAttempt } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
@@ -79,8 +79,8 @@ export async function POST(request: Request) {
     // pauses to uncertain instead of attaching to the wrong account.
     const accountEmail = (access.identity.email || "").toLowerCase();
     const paymentEmail = (payment.email || "").toLowerCase();
-    const accountPhone = normalizePhoneDigits(await lookupVerifiedPhone(access.identity.idToken));
-    const paymentPhone = normalizePhoneDigits(payment.contact);
+    const accountPhone = normalizeE164(await lookupVerifiedPhone(access.identity.idToken));
+    const paymentPhone = normalizeE164(payment.contact);
     if (
       (paymentEmail && accountEmail && paymentEmail !== accountEmail) ||
       (paymentPhone && (!accountPhone || paymentPhone !== accountPhone))

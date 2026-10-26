@@ -18,6 +18,19 @@ export async function lookupVerifiedPhone(idToken: string): Promise<string | nul
   }
 }
 
-export function normalizePhoneDigits(value: string | null | undefined): string {
-  return (value || "").replace(/\D/g, "").slice(-10);
+// Canonical E.164 normalization. A phone number only ever matches on its
+// COMPLETE international form: country code + full national number. Inputs
+// without an explicit country prefix ("+"/"00") are ambiguous - a bare
+// national number could belong to any country - and return null so callers
+// pause to pending instead of ever matching. Never strip or guess country
+// codes: two different countries' numbers can share a trailing suffix.
+export function normalizeE164(value: string | null | undefined): string | null {
+  if (!value) return null;
+  let v = value.trim().replace(/[\s().-]/g, "");
+  if (v.startsWith("00")) v = `+${v.slice(2)}`;
+  if (!v.startsWith("+")) return null;
+  const digits = v.slice(1);
+  // E.164: country code + national number, 8-15 digits total.
+  if (!/^\d{8,15}$/.test(digits)) return null;
+  return `+${digits}`;
 }

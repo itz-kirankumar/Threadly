@@ -15,6 +15,8 @@ interface SubscriptionPayload {
   status?: string;
   created_at?: string;
   updated_at?: string;
+  next_billing_date?: string;
+  cancel_at_next_billing_date?: boolean;
   customer?: { customer_id?: string; email?: string };
   metadata?: Record<string, string>;
 }
@@ -83,6 +85,8 @@ export async function POST(request: Request) {
           interval,
           status,
           mode: billingTestMode() ? "test" : "live",
+          nextBillingDate: data.next_billing_date ?? null,
+          cancelAtPeriodEnd: data.cancel_at_next_billing_date ?? null,
         });
         if (decision.action === "ignore") return `ignored: ${decision.reason}`;
         if (decision.action === "downgrade") await savePlan("trial");

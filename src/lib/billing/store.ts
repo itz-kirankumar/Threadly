@@ -15,6 +15,9 @@ export interface BillingRecord {
   updatedAt: string;
   /** One-time (Razorpay order) entitlements: when the paid term ends. */
   periodEnd?: string | null;
+  /** Dodo subscriptions: provider-reported next charge and scheduled cancel. */
+  nextBillingDate?: string | null;
+  cancelAtPeriodEnd?: boolean | null;
   orderId?: string | null;
   // Total actually paid (subunits) toward the CURRENT term, including upgrade
   // top-ups. This - never today's catalog price - is the upgrade credit basis.

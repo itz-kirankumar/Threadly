@@ -6,7 +6,7 @@ import { billingTestMode, canCheckout } from "@/lib/billing/dodo";
 import { periodEndFor, razorpayConfigured } from "@/lib/billing/razorpay";
 import { hashClaimSecret, loadClaim, transitionClaim } from "@/lib/billing/claims";
 import { loadBilling, saveBilling } from "@/lib/billing/store";
-import { lookupVerifiedPhone, normalizePhoneDigits } from "@/lib/billing/identity";
+import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,28 +54,27 @@ export async function POST(request: Request) {
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
-    // Phone cross-check: accounts hold a verified phone. When both the
-    // checkout contact and the account phone are known and differ, pause the
-    // claim rather than attach to the wrong account. Digits-only comparison
-    // on the trailing 10 digits (country-code tolerant).
+    // Phone cross-check: canonical E.164 only - country code + full national
+    // number, exact match. Ambiguous or missing country context never matches;
+    // the claim pauses instead of attaching to the wrong account.
     const claimantPhone = await lookupVerifiedPhone(access.identity.idToken);
-    const checkoutDigits = normalizePhoneDigits(claim.checkoutContact);
-    const accountDigits = normalizePhoneDigits(claimantPhone);
-    if (!checkoutDigits) {
+    const checkoutPhone = normalizeE164(claim.checkoutContact);
+    const accountPhone = normalizeE164(claimantPhone);
+    if (!checkoutPhone) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(
         { error: `The payment record has no verifiable mobile number, so the claim is paused for review - no entitlement was granted. Reference ${claim.id} at hello@gothreadly.live.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
-    if (!accountDigits) {
+    if (!accountPhone) {
       // Account-side gap the user can fix - the claim stays claimable.
       return Response.json(
         { error: "Verify the mobile number on your Threadly account first, then open this claim link again - the payment must match your account details." },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
-    if (checkoutDigits !== accountDigits) {
+    if (checkoutPhone !== accountPhone) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(
         { error: `The mobile number on the payment does not match this account, so the claim is paused for review - no entitlement was granted. Reference ${claim.id} at hello@gothreadly.live.` },

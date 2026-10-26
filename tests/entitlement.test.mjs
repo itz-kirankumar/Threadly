@@ -203,11 +203,55 @@ test("guest claim transitions: replay, interruption, expiry, wrong-state", async
 });
 
 test("phone normalization: trailing 10 digits, country-code tolerant, empty stays empty", async () => {
-  const { normalizePhoneDigits } = await import("../src/lib/billing/identity.ts");
-  assert.equal(normalizePhoneDigits("+91 63836 66595"), "6383666595");
-  assert.equal(normalizePhoneDigits("6383666595"), "6383666595");
-  assert.equal(normalizePhoneDigits("+916383666595"), "6383666595");
-  assert.equal(normalizePhoneDigits(""), "");
-  assert.equal(normalizePhoneDigits(null), "");
-  assert.equal(normalizePhoneDigits(undefined), "");
+  // Renewal semantics: provider fields persist and survive events that omit them.
+  {
+    const { decideTransition } = await import("../src/lib/billing/entitlement.ts");
+    const base = {
+      provider: "dodo", eventId: "ev1", eventAt: "2026-10-26T00:00:00.000Z",
+      subscriptionId: "sub_1", customerId: "cus_1", customerEmail: "a@b.c",
+      plan: "pro", interval: "monthly", status: "active", mode: "test",
+      nextBillingDate: "2026-11-26T00:00:00.000Z", cancelAtPeriodEnd: false,
+    };
+    const first = decideTransition(null, base);
+    assert.equal(first.record.nextBillingDate, "2026-11-26T00:00:00.000Z");
+    assert.equal(first.record.cancelAtPeriodEnd, false);
+    // A later event without renewal fields preserves the last known values.
+    const second = decideTransition(first.record, { ...base, eventId: "ev2", eventAt: "2026-10-27T00:00:00.000Z", status: "grace", nextBillingDate: undefined, cancelAtPeriodEnd: undefined });
+    assert.equal(second.record.nextBillingDate, "2026-11-26T00:00:00.000Z");
+    assert.equal(second.record.cancelAtPeriodEnd, false);
+    // A scheduled cancellation flips the flag from the provider payload.
+    const third = decideTransition(second.record, { ...base, eventId: "ev3", eventAt: "2026-10-28T00:00:00.000Z", cancelAtPeriodEnd: true });
+    assert.equal(third.record.cancelAtPeriodEnd, true);
+    // Terminal events clear renewal fields.
+    const fourth = decideTransition(third.record, { ...base, eventId: "ev4", eventAt: "2026-11-26T00:00:00.000Z", status: "ended", nextBillingDate: undefined, cancelAtPeriodEnd: undefined });
+    assert.equal(fourth.record.nextBillingDate, null);
+    assert.equal(fourth.record.cancelAtPeriodEnd, null);
+  }
+
+  const { normalizeE164 } = await import("../src/lib/billing/identity.ts");
+  // Canonical form: separators tolerated, 00 prefix accepted.
+  assert.equal(normalizeE164("+91 63836 66595"), "+916383666595");
+  assert.equal(normalizeE164("+91-638-366-6595"), "+916383666595");
+  assert.equal(normalizeE164("00916383666595"), "+916383666595");
+  assert.equal(normalizeE164("  +916383666595 "), "+916383666595");
+  // REGRESSION - cross-country suffix collision: these share trailing digits
+  // but are different numbers in different countries and must NEVER match.
+  assert.notEqual(normalizeE164("+916383666595"), normalizeE164("+16383666595"));
+  assert.notEqual(normalizeE164("+14155552671"), normalizeE164("+914155552671"));
+  // Same number, same country, canonical match.
+  assert.equal(normalizeE164("+14155552671"), normalizeE164("+1 415 555 2671"));
+  // No explicit country context -> ambiguous -> null (pending, never match).
+  assert.equal(normalizeE164("6383666595"), null);
+  assert.equal(normalizeE164("916383666595"), null);
+  // Length rules: E.164 total is 8-15 digits including country code.
+  assert.equal(normalizeE164("+12345678"), "+12345678");
+  assert.equal(normalizeE164("+1234567"), null);
+  assert.equal(normalizeE164("+123456789012345"), "+123456789012345");
+  assert.equal(normalizeE164("+1234567890123456"), null);
+  // Garbage / empty / missing -> null.
+  assert.equal(normalizeE164("+91abcdefghij"), null);
+  assert.equal(normalizeE164("+"), null);
+  assert.equal(normalizeE164(""), null);
+  assert.equal(normalizeE164(null), null);
+  assert.equal(normalizeE164(undefined), null);
 });

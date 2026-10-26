@@ -13,6 +13,8 @@ interface BillingStatus {
     mode: "test" | "live";
     updatedAt: string;
     periodEnd?: string | null;
+    nextBillingDate?: string | null;
+    cancelAtPeriodEnd?: boolean | null;
   } | null;
   billingAvailable: boolean;
   providers?: { dodo: boolean; razorpay: boolean };
@@ -192,11 +194,15 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                 {status.billing.interval ? ` · ${status.billing.interval} term` : ""}
                 {status.billing.provider === "razorpay" && status.billing.periodEnd
                   ? ` · expires ${new Date(status.billing.periodEnd).toLocaleDateString()} (${Math.max(0, Math.ceil((Date.parse(status.billing.periodEnd) - Date.now()) / 86400000))} days left)`
-                  : status.billing.provider === "dodo" && status.billing.status === "active"
-                    ? " · renews automatically"
-                    : status.billing.provider === "dodo"
-                      ? ` · ${status.billing.status}`
-                      : ""}
+                  : status.billing.provider === "dodo" && status.billing.status === "active" && status.billing.cancelAtPeriodEnd
+                    ? ` · cancels on ${status.billing.nextBillingDate ? new Date(status.billing.nextBillingDate).toLocaleDateString() : "term end"} - access until then`
+                    : status.billing.provider === "dodo" && status.billing.status === "active" && status.billing.nextBillingDate
+                      ? ` · renews ${new Date(status.billing.nextBillingDate).toLocaleDateString()}`
+                      : status.billing.provider === "dodo" && status.billing.status === "active"
+                        ? " · renews automatically"
+                        : status.billing.provider === "dodo"
+                          ? ` · ${status.billing.status}`
+                          : ""}
                 {` · updated ${new Date(status.billing.updatedAt).toLocaleString()}`}
               </p>
             )}

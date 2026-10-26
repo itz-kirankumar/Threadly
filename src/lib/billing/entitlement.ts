@@ -19,6 +19,9 @@ export interface IncomingEvent {
   interval: BillingInterval | null;
   status: IncomingStatus;
   mode: "test" | "live";
+  /** Provider-reported renewal semantics (Dodo subscription payload). */
+  nextBillingDate?: string | null;
+  cancelAtPeriodEnd?: boolean | null;
 }
 
 export type Decision =
@@ -27,7 +30,7 @@ export type Decision =
   | { action: "keep"; plan: PaidPlanId; record: BillingRecord; note: string }
   | { action: "ignore"; reason: string };
 
-function toRecord(event: IncomingEvent, status: string): BillingRecord {
+function toRecord(event: IncomingEvent, status: string, previous?: BillingRecord | null): BillingRecord {
   return {
     provider: event.provider,
     plan: event.plan,
@@ -38,6 +41,10 @@ function toRecord(event: IncomingEvent, status: string): BillingRecord {
     customerEmail: event.customerEmail,
     mode: event.mode,
     updatedAt: event.eventAt ?? new Date().toISOString(),
+    // Renewal semantics come from provider payload fields; when an event
+    // omits them, keep the last known values rather than dropping to unknown.
+    nextBillingDate: event.nextBillingDate ?? previous?.nextBillingDate ?? null,
+    cancelAtPeriodEnd: event.cancelAtPeriodEnd ?? previous?.cancelAtPeriodEnd ?? null,
   };
 }
 
@@ -58,17 +65,17 @@ export function decideTransition(current: BillingRecord | null, event: IncomingE
       return {
         action: "upgrade",
         plan: event.plan,
-        record: toRecord(event, "active"),
+        record: toRecord(event, "active", current),
         note: `subscription switched from ${current.subscriptionId} (${current.provider}) - cancel the old one at its provider`,
       };
     }
-    return { action: "upgrade", plan: event.plan, record: toRecord(event, "active"), note: "subscription active" };
+    return { action: "upgrade", plan: event.plan, record: toRecord(event, "active", current), note: "subscription active" };
   }
   if (event.status === "grace") {
     if (!sameSubscription) return { action: "ignore", reason: "grace event for a superseded subscription" };
     // Customer keeps access through dunning/grace; only record the status.
     const plan = current?.plan ?? event.plan;
-    return { action: "keep", plan, record: { ...toRecord(event, "grace"), plan }, note: "payment issue - access kept during grace/dunning" };
+    return { action: "keep", plan, record: { ...toRecord(event, "grace", current), plan }, note: "payment issue - access kept during grace/dunning" };
   }
   if (event.status === "ended") {
     if (!sameSubscription) return { action: "ignore", reason: "terminal event for a superseded subscription" };
