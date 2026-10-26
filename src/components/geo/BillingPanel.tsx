@@ -45,6 +45,9 @@ const PLANS = [
   { id: "growth" as const, name: "Growth", monthly: 149, annualMonthly: 119, blurb: "150 tracked questions, 25 seats, audit log, API access." },
 ];
 
+// Higher rank = higher plan; used only to label the checkout button honestly.
+const PLAN_RANK: Record<string, number> = { none: 0, trial: 0, pro: 1, growth: 2, enterprise: 3 };
+
 export default function BillingPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -268,7 +271,9 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                           ? "Opening checkout…"
                           : quote && plan.id === "growth" && provider === "razorpay"
                             ? `Upgrade to ${plan.name} - pay $${(quote.due / 100).toFixed(2)}`
-                            : `Upgrade to ${plan.name}`}
+                            : (PLAN_RANK[plan.id] ?? 0) < (PLAN_RANK[status.plan] ?? 0)
+                              ? `Switch to ${plan.name} (lower plan)`
+                              : `Upgrade to ${plan.name}`}
                     </button>
                   </div>
                 ))}
