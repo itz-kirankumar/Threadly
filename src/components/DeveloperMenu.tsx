@@ -109,7 +109,7 @@ export default function DeveloperMenu() {
       {open && (
         <div
           role="menu"
-          className="fixed inset-x-3 top-[4.25rem] z-50 max-h-[75vh] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950/95 p-5 shadow-2xl shadow-black/60 backdrop-blur-md sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[44rem] sm:max-w-[calc(100vw-3rem)]"
+          className="fixed inset-x-3 top-[4.25rem] z-50 max-h-[75vh] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/60 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[44rem] sm:max-w-[calc(100vw-3rem)]"
         >
           <div className="grid gap-6 sm:grid-cols-3">
             {GROUPS.map((group) => (
@@ -128,13 +128,13 @@ export default function DeveloperMenu() {
                         role="menuitem"
                         onClick={() => setOpen(false)}
                         {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                        className="flex min-h-[2.25rem] items-center justify-between gap-3 rounded-md px-3 py-2 text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"
+                        className="block rounded-md px-3 py-2 text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"
                       >
-                        <span>
+                        <span className="block leading-snug">
                           {link.label}
                           {link.external && <span className="ml-1 text-zinc-600" aria-hidden="true">&#8599;</span>}
                         </span>
-                        {link.note && <span className="text-[11px] text-zinc-600">{link.note}</span>}
+                        {link.note && <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">{link.note}</span>}
                       </Link>
                     </li>
                   ))}
