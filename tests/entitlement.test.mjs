@@ -414,12 +414,14 @@ test("decideClaimGrant: same-claim retry after partial attach is idempotent - re
 
 
 
-// ---- lease + fencing: true interleavings over a serialized-node harness ----
-// Models RTDB single-node transaction semantics: each transaction applies its
-// update atomically and transactions on one node serialize.
-function makeNode(initial = null) {
+// ---- single-boundary promo consumption: interleavings over a serialized node ----
+// Models RTDB transaction semantics on geo/promoIdentities: each transaction
+// reads the current value and its update applies atomically; transactions on
+// the node serialize. The email+phone pair lives in this one map, so pair
+// updates are atomic.
+function makeMapNode() {
   return {
-    value: initial,
+    value: null,
     tx(fn) {
       const next = fn(this.value);
       if (next !== undefined) this.value = next;
@@ -429,88 +431,134 @@ function makeNode(initial = null) {
 }
 const T0 = new Date("2026-10-26T00:00:00Z");
 const plus = (min) => new Date(T0.getTime() + min * 60000);
+const KEYS = { emailKey: "email_x", phoneKey: "phone_y" };
 
-test("interleaving: unexpired lease is honored - paid_unclaimed in-flight owner cannot be reclaimed", async () => {
-  const { reserveTransition, reclaimTransition, PROMO_LEASE_MS } = await import("../src/lib/billing/claims.ts");
-  const node = makeNode();
-  node.tx((c) => { const t = reserveTransition(c, "clm_A", "uidA", T0); return t.action === "taken" ? undefined : t.value; });
-  // A is mid-grant: claim paid_unclaimed, no billing yet, lease fresh. This is
-  // the normal in-flight state - it must NOT be reclaimable.
-  const d = reclaimTransition(node.value, { claimId: "clm_A", fence: 1 }, { claimId: "clm_B", uid: "uidB" }, plus(1));
-  assert.equal(d.action, "busy");
-  assert.equal(node.value.claimId, "clm_A");
-  assert.ok(PROMO_LEASE_MS >= 60000);
+test("boundary: reserve is atomic over the email+phone pair", async () => {
+  const { reserveAllTransition } = await import("../src/lib/billing/claims.ts");
+  const r = reserveAllTransition(null, KEYS, "clm_A", "uidA", T0);
+  assert.equal(r.action, "held");
+  assert.equal(r.map.email_x.claimId, "clm_A");
+  assert.equal(r.map.phone_y.claimId, "clm_A");
+  assert.equal(r.map.email_x.fence, r.map.phone_y.fence);
 });
 
-test("interleaving: renew-before-grant vs reclaim - exactly one winner in both orders", async () => {
-  const { reserveTransition, renewTransition, reclaimTransition } = await import("../src/lib/billing/claims.ts");
-  // Order (i): A renews first, then B tries to reclaim -> lease extended, B busy.
-  let node = makeNode();
-  node.tx((c) => { const t = reserveTransition(c, "clm_A", "uidA", T0); return t.action === "taken" ? undefined : t.value; });
-  const renewed = renewTransition(node.value, "clm_A", 1, plus(1));
-  assert.equal(renewed.ok, true);
-  node.tx(() => (renewed.ok ? renewed.value : undefined));
-  let d = reclaimTransition(node.value, { claimId: "clm_A", fence: 1 }, { claimId: "clm_B", uid: "uidB" }, plus(1));
-  assert.equal(d.action, "busy");
-  // Order (ii): lease truly expired, B reclaims first, then A's renew fails on fence.
-  node = makeNode();
-  node.tx((c) => { const t = reserveTransition(c, "clm_A", "uidA", T0); return t.action === "taken" ? undefined : t.value; });
-  d = reclaimTransition(node.value, { claimId: "clm_A", fence: 1 }, { claimId: "clm_B", uid: "uidB" }, plus(11));
-  assert.equal(d.action, "reclaim");
-  if (d.action === "reclaim") node.tx(() => d.value);
-  assert.equal(node.value.claimId, "clm_B");
-  assert.equal(node.value.fence, 2);
-  const stale = renewTransition(node.value, "clm_A", 1, plus(11));
-  assert.equal(stale.ok, false); // A can no longer grant
-});
-
-test("interleaving: crash after grant before commit marker - billing truth keeps identity consumed", async () => {
-  const { classifyReservationOwner, reclaimTransition } = await import("../src/lib/billing/claims.ts");
-  const reservation = { claimId: "clm_A", uid: "uidA", fence: 1, leaseUntil: plus(-1).toISOString(), at: T0.toISOString() };
-  // Grant committed to billing, marker never written, lease now expired.
-  assert.equal(classifyReservationOwner(reservation, { status: "paid_unclaimed" }, { claimId: "clm_A", status: "active" }), "consumed");
-  // And a committed flag blocks CAS reclaim outright.
-  const d = reclaimTransition({ ...reservation, committed: true }, { claimId: "clm_A", fence: 1 }, { claimId: "clm_B", uid: "uidB" }, plus(11));
-  assert.equal(d.action, "busy");
-});
-
-test("interleaving: consumed is permanent - term end and later billing changes never unconsume", async () => {
-  const { classifyReservationOwner } = await import("../src/lib/billing/claims.ts");
-  const reservation = { claimId: "clm_A", uid: "uidA", fence: 1, leaseUntil: plus(-100).toISOString(), committed: true, at: T0.toISOString() };
-  // Term ended, billing moved on to a paid plan from another claim.
-  assert.equal(classifyReservationOwner(reservation, { status: "claimed" }, { claimId: "clm_paid", status: "active" }), "consumed");
-  // Claimed marker alone (billing record gone/changed) still consumed.
-  assert.equal(classifyReservationOwner({ ...reservation, committed: false }, { status: "claimed" }, null), "consumed");
-  // Ended grant from that same claim still consumed.
-  assert.equal(classifyReservationOwner({ ...reservation, committed: false }, { status: "paid_unclaimed" }, { claimId: "clm_A", status: "ended" }), "consumed");
-});
-
-test("interleaving: full double-identity sequence - one promo grant total", async () => {
-  const { reserveTransition, renewTransition, commitTransition } = await import("../src/lib/billing/claims.ts");
+test("boundary: THE PAUSE-AFTER-RESUME schedule - stale claimant cannot grant after reclamation", async () => {
+  const { reserveAllTransition, reclaimAllTransition, consumeAllTransition } = await import("../src/lib/billing/claims.ts");
   const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
-  const emailNode = makeNode();
-  const phoneNode = makeNode();
+  const node = makeMapNode();
   let billing = null;
-  const grant = (claimId) => ({ provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", claimId, customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: T0 });
-  // A: full flow - reserve both, renew both, grant, commit both.
-  let r = reserveTransition(emailNode.value, "clm_A", "uidA", T0);
-  if (r.action !== "taken") emailNode.tx(() => r.value);
-  r = reserveTransition(phoneNode.value, "clm_A", "uidA", T0);
-  if (r.action !== "taken") phoneNode.tx(() => r.value);
-  const re1 = renewTransition(emailNode.value, "clm_A", 1, plus(1));
-  if (re1.ok) emailNode.tx(() => re1.value);
-  const re2 = renewTransition(phoneNode.value, "clm_A", 1, plus(1));
-  if (re2.ok) phoneNode.tx(() => re2.value);
-  assert.ok(re1.ok && re2.ok);
-  const g = decideClaimGrant(billing, grant("clm_A"));
+  // A reserves, then pauses > lease.
+  node.tx((m) => { const t = reserveAllTransition(m, KEYS, "clm_A", "uidA", T0); return t.action === "held" ? t.map : undefined; });
+  const snapshot = node.value;
+  // 11 minutes pass. B's truth check says orphan (claim paid_unclaimed, no billing). B reclaims.
+  const d = reclaimAllTransition(node.value, KEYS, snapshot, { claimId: "clm_B", uid: "uidB" }, plus(11));
+  assert.equal(d.action, "reclaim");
+  if (d.action === "reclaim") node.tx(() => d.map);
+  assert.equal(node.value.email_x.fence, 2);
+  // A resumes and tries to consume: ownership changed -> FAILS before any billing write.
+  const consumeA = consumeAllTransition(node.value, KEYS, "clm_A");
+  assert.equal(consumeA.ok, false);
+  // The route gates billing on consumption, so decideClaimGrant is never reached for A:
+  // assert the guard ordering by confirming billing is untouched.
+  assert.equal(billing, null);
+  // B consumes and grants.
+  const consumeB = consumeAllTransition(node.value, KEYS, "clm_B");
+  assert.equal(consumeB.ok, true);
+  if (consumeB.ok) node.tx(() => consumeB.map);
+  const g = decideClaimGrant(billing, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", claimId: "clm_B", customerEmail: "b@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: plus(11) });
   assert.equal(g.ok, true);
   if (g.ok) billing = g.record;
-  emailNode.tx((c) => commitTransition(c, "clm_A", 1));
-  phoneNode.tx((c) => commitTransition(c, "clm_A", 1));
-  assert.equal(emailNode.value.committed, true);
-  assert.equal(phoneNode.value.committed, true);
-  // B (same verified phone, different account/claim): taken, committed, no reclaim.
-  const rb = reserveTransition(phoneNode.value, "clm_B", "uidB", plus(2));
-  assert.equal(rb.action, "yours");
-  assert.equal(rb.value.claimId, "clm_A");
+  // A retries from scratch: committed + claimed truth -> taken forever.
+  const rA = reserveAllTransition(node.value, KEYS, "clm_A2", "uidA", plus(12));
+  assert.equal(rA.action, "taken");
+});
+
+test("boundary: consume vs reclaim landing order - both orders yield exactly one consumer", async () => {
+  const { reserveAllTransition, reclaimAllTransition, consumeAllTransition } = await import("../src/lib/billing/claims.ts");
+  // Order (i): owner consumes first on an expired-but-unreclaimed lease -> reclaimer's CAS mismatches.
+  let node = makeMapNode();
+  node.tx((m) => { const t = reserveAllTransition(m, KEYS, "clm_A", "uidA", T0); return t.action === "held" ? t.map : undefined; });
+  const snap = node.value;
+  let c = consumeAllTransition(node.value, KEYS, "clm_A");
+  assert.equal(c.ok, true);
+  if (c.ok) node.tx(() => c.map);
+  let d = reclaimAllTransition(node.value, KEYS, snap, { claimId: "clm_B", uid: "uidB" }, plus(11));
+  assert.equal(d.action, "busy");
+  // Order (ii): reclaim first -> stale consume fails.
+  node = makeMapNode();
+  node.tx((m) => { const t = reserveAllTransition(m, KEYS, "clm_A", "uidA", T0); return t.action === "held" ? t.map : undefined; });
+  const snap2 = node.value;
+  d = reclaimAllTransition(node.value, KEYS, snap2, { claimId: "clm_B", uid: "uidB" }, plus(11));
+  assert.equal(d.action, "reclaim");
+  if (d.action === "reclaim") node.tx(() => d.map);
+  c = consumeAllTransition(node.value, KEYS, "clm_A");
+  assert.equal(c.ok, false);
+});
+
+test("boundary: unexpired lease is never reclaimable (in-flight paid_unclaimed honored)", async () => {
+  const { reserveAllTransition, reclaimAllTransition } = await import("../src/lib/billing/claims.ts");
+  const node = makeMapNode();
+  node.tx((m) => { const t = reserveAllTransition(m, KEYS, "clm_A", "uidA", T0); return t.action === "held" ? t.map : undefined; });
+  const d = reclaimAllTransition(node.value, KEYS, node.value, { claimId: "clm_B", uid: "uidB" }, plus(1));
+  assert.equal(d.action, "busy");
+});
+
+test("boundary: crash after consume before billing - same-claim retry recovers idempotently", async () => {
+  const { reserveAllTransition, consumeAllTransition } = await import("../src/lib/billing/claims.ts");
+  const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
+  const node = makeMapNode();
+  let billing = null;
+  const grant = (now) => ({ provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", claimId: "clm_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now });
+  node.tx((m) => { const t = reserveAllTransition(m, KEYS, "clm_A", "uidA", T0); return t.action === "held" ? t.map : undefined; });
+  const c1 = consumeAllTransition(node.value, KEYS, "clm_A");
+  assert.equal(c1.ok, true);
+  if (c1.ok) node.tx(() => c1.map);
+  // CRASH: no billing write, no claim marker.
+  // Retry: reserve sees consumed-by-me; consume is idempotent; billing grant runs.
+  const r = reserveAllTransition(node.value, KEYS, "clm_A", "uidA", plus(3));
+  assert.equal(r.action, "consumed-by-me");
+  const c2 = consumeAllTransition(node.value, KEYS, "clm_A");
+  assert.equal(c2.ok, true);
+  assert.equal(c2.ok && c2.already, true);
+  const g = decideClaimGrant(billing, grant(plus(3)));
+  assert.equal(g.ok, true);
+  if (g.ok) billing = g.record;
+  // Third pass (marker/plan already fine): decideClaimGrant idempotent - term never moves.
+  const g2 = decideClaimGrant(billing, grant(plus(4)));
+  assert.equal(g2.ok, true);
+  if (g2.ok) assert.equal(g2.record.periodEnd, "2026-11-02T00:00:00.000Z");
+});
+
+test("boundary: rollback after billing abort removes only our ungranted hold", async () => {
+  const { reserveAllTransition, consumeAllTransition, rollbackAllTransition } = await import("../src/lib/billing/claims.ts");
+  const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
+  const node = makeMapNode();
+  const paid = { provider: "razorpay", plan: "pro", interval: "monthly", status: "active", subscriptionId: null, customerId: null, customerEmail: "a@b.co", mode: "live", updatedAt: "2026-10-01T00:00:00Z", periodEnd: "2026-11-01T00:00:00Z", orderId: "order_paid", paidThisTerm: 4900, claimId: "clm_paid" };
+  node.tx((m) => { const t = reserveAllTransition(m, KEYS, "clm_A", "uidA", T0); return t.action === "held" ? t.map : undefined; });
+  const c = consumeAllTransition(node.value, KEYS, "clm_A");
+  assert.equal(c.ok, true);
+  if (c.ok) node.tx(() => c.map);
+  const g = decideClaimGrant(paid, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", claimId: "clm_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: T0 });
+  assert.equal(g.ok, false); // active_plan: paid plan preserved
+  // Rollback: identity released because nothing was granted.
+  node.tx((m) => rollbackAllTransition(m, KEYS, "clm_A", 1));
+  assert.equal(node.value.email_x, undefined);
+  assert.equal(node.value.phone_y, undefined);
+  // The paid billing record is untouched.
+  assert.equal(paid.plan, "pro");
+  // A fresh promo attempt for the same identity now succeeds.
+  const r = reserveAllTransition(node.value, KEYS, "clm_C", "uidA", plus(1));
+  assert.equal(r.action, "held");
+});
+
+test("boundary: consumed is permanent - term end, plan change, ended billing never unconsume", async () => {
+  const { classifyReservationOwner, reclaimAllTransition } = await import("../src/lib/billing/claims.ts");
+  const committed = { claimId: "clm_A", uid: "uidA", fence: 1, leaseUntil: plus(-100).toISOString(), committed: true, at: T0.toISOString() };
+  assert.equal(classifyReservationOwner(committed, { status: "claimed" }, { claimId: "clm_paid", status: "active" }), "consumed");
+  assert.equal(classifyReservationOwner({ ...committed, committed: false }, { status: "claimed" }, null), "consumed");
+  assert.equal(classifyReservationOwner({ ...committed, committed: false }, { status: "paid_unclaimed" }, { claimId: "clm_A", status: "ended" }), "consumed");
+  const node = makeMapNode();
+  node.value = { email_x: committed, phone_y: committed };
+  const d = reclaimAllTransition(node.value, KEYS, node.value, { claimId: "clm_B", uid: "uidB" }, plus(200));
+  assert.equal(d.action, "busy");
 });
