@@ -80,29 +80,39 @@ export function lapsedPlan(
   return { plan: stored, lapsed: false };
 }
 
+// Exempt accounts (the product owner) are floored at Growth: the exemption
+// must hold even when a stored plan record exists (e.g. a test purchase), or
+// Growth-gated surfaces break for exactly the person running the product.
+// The stored record itself is never rewritten here.
+export function applyExemption(plan: PlanId, email: string | undefined, exemptEmails: string): PlanId {
+  if (!email) return plan;
+  const exempt = exemptEmails
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  if (!exempt.includes(email.trim().toLowerCase())) return plan;
+  return PLAN_RANK[plan] >= PLAN_RANK.growth ? plan : "growth";
+}
+
 export async function loadPlan(email?: string): Promise<PlanId> {
   const stored = await readData<PlanId>(PLAN_ROOT);
+  let resolved: PlanId = "none";
   if (stored && stored in PLAN_LIMITS) {
+    resolved = stored;
     try {
       const billing = await readData<{ provider?: string; status?: string; periodEnd?: string | null }>("geo/billing");
       const { plan, lapsed } = lapsedPlan(stored, billing);
       if (lapsed) {
         await savePlan("none");
         await writeData("geo/billing", { ...billing, status: "ended", updatedAt: new Date().toISOString() });
-        return "none";
+        resolved = "none";
       }
     } catch {
       // billing record unreadable - keep the stored plan
     }
-    return stored;
   }
-  const exempt = (process.env.TRIAL_EXEMPT_EMAILS ?? "")
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  if (email && exempt.includes(email.toLowerCase())) return "growth";
   // New workspaces start with no plan: the 7-day trial is a paid product.
-  return "none";
+  return applyExemption(resolved, email, process.env.TRIAL_EXEMPT_EMAILS ?? "");
 }
 
 export async function savePlan(plan: PlanId): Promise<void> {

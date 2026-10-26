@@ -644,3 +644,18 @@ test("social gate: 0 blocks, null means unlimited (no rate check), finite caps p
   assert.deepEqual(socialGate("pro"), { kind: "capped", hourly: 25 });
   PLAN_LIMITS.pro.socialHourly = original;
 });
+
+// ---- plan exemption floors at growth without rewriting stored records ----
+test("applyExemption: exempt emails floored at growth, stored higher plans kept, others untouched", async () => {
+  const { applyExemption } = await import("../src/lib/geo/plan.ts");
+  const list = "Owner@Example.com, second@example.com";
+  assert.equal(applyExemption("none", "owner@example.com", list), "growth");
+  assert.equal(applyExemption("pro", "owner@example.com", list), "growth");
+  assert.equal(applyExemption("growth", "owner@example.com", list), "growth");
+  assert.equal(applyExemption("enterprise", "owner@example.com", list), "enterprise");
+  assert.equal(applyExemption("pro", "someone-else@example.com", list), "pro");
+  assert.equal(applyExemption("none", "someone-else@example.com", list), "none");
+  assert.equal(applyExemption("pro", undefined, list), "pro");
+  assert.equal(applyExemption("pro", "owner@example.com", ""), "pro");
+  assert.equal(applyExemption("none", " second@example.com ", list), "growth");
+});
