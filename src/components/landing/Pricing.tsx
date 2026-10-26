@@ -31,7 +31,7 @@ const TIERS: Tier[] = [
       "AI crawler access check",
       "7-day scan history",
       "1 workspace seat",
-      "Social listening + Reddit intelligence (beta)",
+      "Access to new beta features",
     ],
   },
   {
@@ -50,7 +50,7 @@ const TIERS: Tier[] = [
       "Daily automatic scans, unlimited history",
       "Citation leaderboard and answer archive",
       "Team workspace - up to 5 seats",
-      "Social listening + Reddit intelligence (beta)",
+      "Access to new beta features",
     ],
   },
   {
@@ -69,7 +69,7 @@ const TIERS: Tier[] = [
       "Unlimited custom providers",
       "Priority scan queue",
       "Priority support",
-      "Full beta access - social listening + Reddit intelligence",
+      "Full access to all new + upcoming beta features",
     ],
   },
   {
@@ -86,7 +86,7 @@ const TIERS: Tier[] = [
       "Custom API rate limits and data exports",
       "Dedicated onboarding and success manager",
       "Custom terms and invoicing",
-      "Full beta access - social listening + Reddit intelligence",
+      "Full access to all new + upcoming beta features",
     ],
   },
 ];
@@ -104,7 +104,7 @@ const COMPARISON: { label: string; values: (string | boolean)[] }[] = [
   { label: "Roles and invite links", values: [false, true, true, true] },
   { label: "Activity log (audit trail)", values: [false, false, true, true] },
   { label: "Public API access", values: [false, false, true, true] },
-  { label: "Social + Reddit intelligence (beta)", values: ["Included", "Included", "Full access", "Full access"] },
+  { label: "New + upcoming beta features", values: ["Included", "Included", "Full access", "Full access"] },
   { label: "Support", values: ["Community", "Standard", "Priority", "Dedicated manager"] },
 ];
 
