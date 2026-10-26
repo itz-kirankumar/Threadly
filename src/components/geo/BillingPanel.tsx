@@ -47,6 +47,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
   const [error, setError] = useState<string | null>(null);
   const [annual, setAnnual] = useState(true);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const [provider, setProvider] = useState<"dodo" | "razorpay">("dodo");
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -123,7 +124,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
     setBusyPlan(plan);
     setError(null);
     try {
-      if (status && !status.providers?.dodo && status.providers?.razorpay) {
+      if (status?.providers?.razorpay && (!status.providers?.dodo || provider === "razorpay")) {
         await razorpayCheckout(plan);
         return;
       }
@@ -224,11 +225,28 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
               </div>
 
               <p className="text-[11px] leading-relaxed text-zinc-600">
-                {status.providers?.dodo && status.providers?.razorpay
-                  ? "Checkout uses Dodo Payments (Razorpay available as backup)."
-                  : status.providers?.razorpay
-                    ? "Checkout uses Razorpay - one-time purchase, each payment covers the selected term."
-                    : "Checkout uses Dodo Payments."}
+                {status.providers?.dodo && status.providers?.razorpay ? (
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-zinc-700 p-0.5 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setProvider("dodo")}
+                      className={`rounded-full px-2.5 py-1 ${provider === "dodo" ? "bg-zinc-100 text-zinc-900" : "text-zinc-400"}`}
+                    >
+                      Card via Dodo (subscription)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProvider("razorpay")}
+                      className={`rounded-full px-2.5 py-1 ${provider === "razorpay" ? "bg-zinc-100 text-zinc-900" : "text-zinc-400"}`}
+                    >
+                      Razorpay (one-time)
+                    </button>
+                  </span>
+                ) : status.providers?.razorpay ? (
+                  "Checkout uses Razorpay - one-time purchase, each payment covers the selected term."
+                ) : (
+                  "Checkout uses Dodo Payments."
+                )}
                 {status.testMode ? " Billing is in test mode while launch is prepared - checkouts run against the payment sandbox and no real card is charged." : ""}
               </p>
             </>
