@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CONSENT_CHANGE_EVENT } from "@/lib/consent";
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "threadly_cookie_consent";
@@ -23,6 +24,8 @@ export default function CookieConsent() {
       // storage unavailable - just dismiss for this session
     }
     setVisible(false);
+    // Notify consent-gated analytics in this tab (storage event only fires cross-tab).
+    window.dispatchEvent(new Event(CONSENT_CHANGE_EVENT));
   };
 
   if (!visible) return null;

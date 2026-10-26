@@ -28,8 +28,23 @@ export function getFirebaseAuth(): Auth {
   return getAuth(getFirebaseApp());
 }
 
+// Optional analytics: initialized only after an explicit "accepted" choice and
+// collection-disabled again on withdrawal. Undecided/declined never starts it.
 export async function initializeFirebaseAnalytics() {
   if (typeof window === "undefined" || !firebaseConfig.measurementId) return;
-  const { getAnalytics, isSupported } = await import("firebase/analytics");
-  if (await isSupported()) getAnalytics(getFirebaseApp());
+  const { analyticsAllowed, CONSENT_CHANGE_EVENT } = await import("@/lib/consent");
+  const { getAnalytics, isSupported, setAnalyticsCollectionEnabled } = await import("firebase/analytics");
+  if (!(await isSupported())) return;
+  let analytics: ReturnType<typeof getAnalytics> | null = null;
+  const apply = () => {
+    if (analyticsAllowed(window.localStorage)) {
+      analytics = analytics ?? getAnalytics(getFirebaseApp());
+      setAnalyticsCollectionEnabled(analytics, true);
+    } else if (analytics) {
+      setAnalyticsCollectionEnabled(analytics, false);
+    }
+  };
+  apply();
+  window.addEventListener(CONSENT_CHANGE_EVENT, apply);
+  window.addEventListener("storage", apply);
 }

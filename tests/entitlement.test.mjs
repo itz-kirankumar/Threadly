@@ -562,3 +562,26 @@ test("boundary: consumed is permanent - term end, plan change, ended billing nev
   const d = reclaimAllTransition(node.value, KEYS, node.value, { claimId: "clm_B", uid: "uidB" }, plus(200));
   assert.equal(d.action, "busy");
 });
+
+// ---- analytics consent gate: only explicit acceptance permits optional analytics ----
+test("consent: undecided/declined/malformed never allow analytics; only explicit accepted does", async () => {
+  const { parseConsent, analyticsAllowed, readConsent, CONSENT_STORAGE_KEY } = await import("../src/lib/consent.ts");
+  assert.equal(parseConsent(null), "undecided");
+  assert.equal(parseConsent(""), "undecided");
+  assert.equal(parseConsent("not-json{"), "undecided");
+  assert.equal(parseConsent(JSON.stringify({ value: "declined", at: "2026-10-26" })), "declined");
+  assert.equal(parseConsent(JSON.stringify({ value: "accepted", at: "2026-10-26" })), "accepted");
+  // Tricks that must NOT count as acceptance:
+  assert.equal(parseConsent(JSON.stringify({ value: "ACCEPTED" })), "declined");
+  assert.equal(parseConsent(JSON.stringify({ value: true })), "declined");
+  assert.equal(parseConsent(JSON.stringify({ value: "accepted", extra: 1 })), "accepted");
+  // Storage-facing helpers: missing/broken storage never allows.
+  assert.equal(analyticsAllowed(null), false);
+  const fake = (v) => ({ getItem: () => v });
+  assert.equal(analyticsAllowed(fake(null)), false);
+  assert.equal(analyticsAllowed(fake(JSON.stringify({ value: "declined" }))), false);
+  assert.equal(analyticsAllowed(fake(JSON.stringify({ value: "accepted" }))), true);
+  const throwing = { getItem: () => { throw new Error("blocked"); } };
+  assert.equal(readConsent(throwing), "undecided");
+  assert.equal(CONSENT_STORAGE_KEY, "threadly_cookie_consent"); // matches the banner's key
+});
