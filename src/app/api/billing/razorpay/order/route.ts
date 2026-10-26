@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, canCheckout, isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { ORDER_PRICES, razorpayConfigured, razorpayCreateOrder, razorpayKeyId } from "@/lib/billing/razorpay";
+import { ORDER_PRICES, razorpayConfigured, razorpayCreateOrder, razorpayKeyId, upgradeQuote } from "@/lib/billing/razorpay";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, saveCheckoutAttempt } from "@/lib/billing/store";
 
@@ -42,11 +42,30 @@ export async function POST(request: Request) {
     }
 
     const existing = await inWorkspace(access, () => loadBilling());
+    let quote: ReturnType<typeof upgradeQuote> = null;
     if (existing && (existing.status === "active" || existing.status === "grace")) {
-      return Response.json(
-        { error: "This workspace already has a subscription. Manage it from Settings - Billing." },
-        { status: 409, headers: { "Cache-Control": "no-store" } },
-      );
+      // Upgrades: only for Razorpay one-time purchases, same interval, to a
+      // higher-priced plan, paying the prorated difference. Dodo subscriptions
+      // and downgrades keep the manage flow.
+      if (existing.provider !== "razorpay" || !existing.periodEnd) {
+        return Response.json(
+          { error: "This workspace already has a subscription. Manage it from Settings - Billing." },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      quote = upgradeQuote({
+        currentPlan: existing.plan,
+        newPlan: body.plan,
+        interval: body.interval,
+        purchasedAt: existing.updatedAt,
+        periodEnd: existing.periodEnd,
+      });
+      if (!quote) {
+        return Response.json(
+          { error: "That change is not an upgrade. Only upgrades to a higher plan on the same term are supported here." },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
     }
 
     const now = new Date();
@@ -82,11 +101,16 @@ export async function POST(request: Request) {
         interval: body.interval,
         workspaceUid: access.workspaceUid,
         email: access.identity.email,
+        amountOverride: quote?.due,
+        upgradeOf: existing?.orderId ?? null,
       });
       await saveCheckoutAttempt(access.workspaceUid, {
         ...attempt,
         state: "issued",
         providerRef: order.id,
+        amount: quote ? quote.due : ORDER_PRICES[body.plan][body.interval].amount,
+        currency: ORDER_PRICES[body.plan][body.interval].currency,
+        upgradeOf: existing?.orderId ?? null,
         updatedAt: new Date().toISOString(),
       });
       try {
@@ -98,7 +122,7 @@ export async function POST(request: Request) {
       } catch { /* audit is best-effort */ }
       const price = ORDER_PRICES[body.plan][body.interval];
       return Response.json(
-        { orderId: order.id, amount: price.amount, currency: price.currency, keyId: razorpayKeyId(), provider: "razorpay", testMode: billingTestMode() },
+        { orderId: order.id, amount: quote ? quote.due : price.amount, currency: price.currency, keyId: razorpayKeyId(), provider: "razorpay", testMode: billingTestMode(), quote },
         { headers: { "Cache-Control": "no-store" } },
       );
     } catch (error) {

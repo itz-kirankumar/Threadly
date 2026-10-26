@@ -103,13 +103,15 @@ export async function razorpayCreateOrder(params: {
   interval: BillingInterval;
   workspaceUid: string;
   email: string;
+  amountOverride?: number;
+  upgradeOf?: string | null;
 }): Promise<{ id: string; amount: number; currency: string }> {
   const price = ORDER_PRICES[params.plan][params.interval];
   const response = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: authHeader() },
     body: JSON.stringify({
-      amount: price.amount,
+      amount: params.amountOverride ?? price.amount,
       currency: price.currency,
       receipt: `ws_${params.workspaceUid.slice(0, 24)}_${Date.now().toString(36)}`,
       notes: {
@@ -117,6 +119,7 @@ export async function razorpayCreateOrder(params: {
         plan: params.plan,
         interval: params.interval,
         email: params.email,
+        ...(params.upgradeOf ? { upgrade: "1", upgrade_of: params.upgradeOf } : {}),
       },
     }),
     cache: "no-store",
@@ -159,6 +162,37 @@ export function verifyPaymentSignature(orderId: string, paymentId: string, signa
   const a = Buffer.from(expected);
   const b = Buffer.from(String(signature));
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Upgrade quote: credit the unused paid time on the current one-time purchase
+// (catalog price prorated daily over the recorded term), charge only the
+// difference for the SAME remaining term. The term end never moves on upgrade.
+export function upgradeQuote(params: {
+  currentPlan: PaidPlanId;
+  newPlan: PaidPlanId;
+  interval: BillingInterval;
+  purchasedAt: string; // billing record updatedAt when the purchase was applied
+  periodEnd: string;
+  now?: Date;
+}): { due: number; currency: string; credit: number; newPlanCost: number; remainingDays: number } | null {
+  const now = params.now ?? new Date();
+  const end = Date.parse(params.periodEnd);
+  const start = Date.parse(params.purchasedAt);
+  const total = end - start;
+  const remaining = end - now.getTime();
+  if (!Number.isFinite(total) || total <= 0 || remaining <= 0) return null;
+  const cur = ORDER_PRICES[params.currentPlan][params.interval];
+  const nxt = ORDER_PRICES[params.newPlan][params.interval];
+  if (nxt.amount <= cur.amount) return null; // upgrades only, same interval
+  const due = Math.round(((nxt.amount - cur.amount) * remaining) / total);
+  if (due < 100) return null; // Razorpay minimum order amount (subunits)
+  return {
+    due,
+    currency: nxt.currency,
+    credit: Math.round((cur.amount * remaining) / total),
+    newPlanCost: Math.round((nxt.amount * remaining) / total),
+    remainingDays: Math.ceil(remaining / 86400000),
+  };
 }
 
 export function periodEndFor(interval: BillingInterval, from: Date): string {

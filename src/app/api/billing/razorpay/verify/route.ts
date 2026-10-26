@@ -74,10 +74,27 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    const periodEnd = periodEndFor(interval, now);
     const existing = await inWorkspace(access, () => loadBilling());
     if (existing?.orderId === body.orderId && existing.status === "active") {
-      return Response.json({ received: true, plan, periodEnd }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ received: true, plan, periodEnd: existing.periodEnd }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const isUpgrade = (notes as Record<string, string>).upgrade === "1";
+    let periodEnd = periodEndFor(interval, now);
+    if (isUpgrade) {
+      // Upgrade orders must match the server-stored quote on the attempt and
+      // keep the original term end - never silently reset the term.
+      const attemptForQuote = await loadCheckoutAttempt(access.workspaceUid);
+      if (
+        !attemptForQuote ||
+        attemptForQuote.providerRef !== body.orderId ||
+        attemptForQuote.amount !== payment.amount ||
+        !existing?.periodEnd ||
+        existing.provider !== "razorpay" ||
+        existing.status !== "active"
+      ) {
+        return Response.json({ error: "Upgrade quote mismatch - no change was applied." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+      }
+      periodEnd = existing.periodEnd;
     }
     await inWorkspace(access, async () => {
       await savePlan(plan);

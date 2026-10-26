@@ -8,10 +8,11 @@ interface BillingStatus {
   billing: {
     provider?: "dodo" | "razorpay";
     plan: string;
-    interval: string | null;
+    interval: "monthly" | "annual" | null;
     status: string;
     mode: "test" | "live";
     updatedAt: string;
+    periodEnd?: string | null;
   } | null;
   billingAvailable: boolean;
   providers?: { dodo: boolean; razorpay: boolean };
@@ -50,9 +51,23 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
   const [provider, setProvider] = useState<"dodo" | "razorpay">("dodo");
   const [notice, setNotice] = useState<string | null>(null);
 
+  const [quote, setQuote] = useState<{ due: number; currency: string; credit: number; remainingDays: number } | null>(null);
   const load = useCallback(async () => {
     try {
-      setStatus((await authedFetch("/api/billing/status")) as BillingStatus);
+      const next = (await authedFetch("/api/billing/status")) as BillingStatus;
+      setStatus(next);
+      setQuote(null);
+      if (next.billing?.provider === "razorpay" && next.billing.status === "active" && next.billing.plan === "pro" && next.billing.interval) {
+        try {
+          const q = (await authedFetch("/api/billing/razorpay/quote", {
+            method: "POST",
+            body: JSON.stringify({ plan: "growth", interval: next.billing.interval }),
+          })) as { quote?: { due: number; currency: string; credit: number; remainingDays: number } | null };
+          setQuote(q.quote ?? null);
+        } catch {
+          setQuote(null);
+        }
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load billing.");
@@ -169,9 +184,14 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
             </div>
             {status.billing && (
               <p className="mt-1.5 text-xs text-zinc-500">
-                Subscription {status.billing.status}
+                {status.billing.provider === "razorpay" ? "One-time purchase" : "Subscription"} {status.billing.status}
                 {status.billing.provider ? ` via ${status.billing.provider === "dodo" ? "Dodo Payments" : "Razorpay"}` : ""}
-                {status.billing.interval ? ` · billed ${status.billing.interval}` : ""}
+                {status.billing.interval ? ` · ${status.billing.interval} term` : ""}
+                {status.billing.provider === "razorpay" && status.billing.periodEnd
+                  ? ` · expires ${new Date(status.billing.periodEnd).toLocaleDateString()} (${Math.max(0, Math.ceil((Date.parse(status.billing.periodEnd) - Date.now()) / 86400000))} days left)`
+                  : status.billing.provider === "dodo"
+                    ? " · renews automatically"
+                    : ""}
                 {` · updated ${new Date(status.billing.updatedAt).toLocaleString()}`}
               </p>
             )}
@@ -218,13 +238,24 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                       onClick={() => checkout(plan.id)}
                       className="mt-3.5 w-full rounded-lg border border-white/15 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {status.plan === plan.id ? "Current plan" : busyPlan === plan.id ? "Opening checkout…" : `Upgrade to ${plan.name}`}
+                      {status.plan === plan.id
+                        ? "Current plan"
+                        : busyPlan === plan.id
+                          ? "Opening checkout…"
+                          : quote && plan.id === "growth" && provider === "razorpay"
+                            ? `Upgrade to ${plan.name} - pay $${(quote.due / 100).toFixed(2)}`
+                            : `Upgrade to ${plan.name}`}
                     </button>
                   </div>
                 ))}
               </div>
 
               <p className="text-[11px] leading-relaxed text-zinc-600">
+                {quote && provider === "razorpay" && status.billing?.plan === "pro" && (
+                  <span className="mt-1.5 block text-[11px] text-zinc-500">
+                    Upgrade quote: ${(quote.credit / 100).toFixed(2)} unused Pro time credited against Growth for the remaining {quote.remainingDays} days - you pay only the difference. The term end date does not change.
+                  </span>
+                )}
                 {status.providers?.dodo && status.providers?.razorpay ? (
                   <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-zinc-700 p-0.5 text-[11px]">
                     <button

@@ -6,6 +6,41 @@ import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
+type PlanBadge = { label: string; hint: string | null; paid: boolean };
+
+function usePlanBadge(user: User | null): PlanBadge | null {
+  const [badge, setBadge] = useState<PlanBadge | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/billing/status", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        if (!res.ok) return;
+        const status = (await res.json()) as {
+          planLabel?: string;
+          billing?: { provider?: string; status?: string; periodEnd?: string | null } | null;
+        };
+        if (cancelled) return;
+        const paid = status.planLabel === "Pro" || status.planLabel === "Growth" || status.planLabel === "Enterprise";
+        let hint: string | null = null;
+        if (paid && status.billing?.provider === "razorpay" && status.billing.periodEnd) {
+          const days = Math.max(0, Math.ceil((Date.parse(status.billing.periodEnd) - Date.now()) / 86400000));
+          hint = `expires in ${days} day${days === 1 ? "" : "s"}`;
+        } else if (paid && status.billing?.provider === "dodo" && status.billing.status === "active") {
+          hint = "renews automatically";
+        }
+        setBadge({ label: paid ? status.planLabel! : "Free", hint, paid });
+      } catch {
+        // badge is cosmetic - stay quiet on failure
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+  return badge;
+}
+
 function displayName(user: User): string {
   if (user.displayName?.trim()) return user.displayName.trim();
   return (user.email ?? "Account").split("@")[0];
@@ -19,6 +54,7 @@ function initials(user: User): string {
 
 function ProfileMenu({ user }: { user: User }) {
   const [open, setOpen] = useState(false);
+  const badge = usePlanBadge(user);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +84,16 @@ function ProfileMenu({ user }: { user: User }) {
           {initials(user)}
         </span>
         <span className="hidden max-w-[140px] truncate text-[13px] font-medium text-zinc-200 sm:inline">{displayName(user)}</span>
+        {badge && (
+          <span
+            className={`hidden rounded-full px-2 py-0.5 text-[10px] font-semibold sm:inline ${
+              badge.paid ? "bg-violet-500/20 text-violet-300" : "bg-zinc-500/20 text-zinc-400"
+            }`}
+            title={badge.hint ?? undefined}
+          >
+            {badge.label}
+          </span>
+        )}
         <svg width="10" height="6" viewBox="0 0 10 6" className={`text-zinc-500 transition ${open ? "rotate-180" : ""}`}>
           <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
         </svg>
@@ -57,6 +103,12 @@ function ProfileMenu({ user }: { user: User }) {
           <div className="border-b border-white/[0.06] px-3 py-2.5">
             <p className="truncate text-[13px] font-medium text-white">{displayName(user)}</p>
             <p className="truncate text-xs text-zinc-500">{user.email}</p>
+            {badge && (
+              <p className="mt-1 text-[11px]">
+                <span className={badge.paid ? "font-medium text-violet-300" : "font-medium text-zinc-400"}>{badge.label}</span>
+                {badge.hint && <span className="text-zinc-500"> · {badge.hint}</span>}
+              </p>
+            )}
           </div>
           <div className="py-1">
             <button type="button" className={item} onClick={() => openSettings("profile")}>

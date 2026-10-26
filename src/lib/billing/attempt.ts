@@ -10,7 +10,10 @@ export interface CheckoutAttempt {
   interval: BillingInterval;
   state: AttemptState;
   checkoutUrl: string | null;
-  providerRef: string | null; // dodo checkout session id / razorpay subscription id
+  providerRef: string | null; // dodo checkout session id / razorpay order id
+  amount?: number | null; // server-priced order amount in subunits (razorpay)
+  currency?: string | null;
+  upgradeOf?: string | null; // previous razorpay order id when this is an upgrade
   createdAt: string;
   updatedAt: string;
 }

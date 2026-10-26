@@ -139,3 +139,22 @@ test("razorpay server-authoritative order pricing (client cannot underprice)", a
   assert.equal(ORDER_PRICES.growth.monthly.currency, "USD");
   assert.equal(ORDER_PRICES.growth.annual.currency, "USD");
 });
+
+test("razorpay upgrade quote: prorated difference, same term, upgrades only", async () => {
+  const { upgradeQuote } = await import("../src/lib/billing/razorpay.ts");
+  const purchasedAt = "2026-10-01T00:00:00Z";
+  const periodEnd = "2027-10-01T00:00:00Z";
+  const now = new Date("2027-04-01T00:00:00Z"); // ~half the term left
+  const q = upgradeQuote({ currentPlan: "pro", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, now });
+  assert.ok(q, "quote exists for pro -> growth annual");
+  assert.equal(q.currency, "USD");
+  // difference 142800-46800 = 96000, ~half remaining
+  assert.ok(q.due > 44000 && q.due < 50000, `due ${q.due} roughly half of 96000`);
+  assert.ok(q.credit > 21000 && q.credit < 25000);
+  assert.ok(q.remainingDays >= 180 && q.remainingDays <= 185);
+  // not upgrades:
+  assert.equal(upgradeQuote({ currentPlan: "growth", newPlan: "pro", interval: "annual", purchasedAt, periodEnd, now }), null);
+  assert.equal(upgradeQuote({ currentPlan: "pro", newPlan: "pro", interval: "annual", purchasedAt, periodEnd, now }), null);
+  // expired term: no quote
+  assert.equal(upgradeQuote({ currentPlan: "pro", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, now: new Date("2027-10-02T00:00:00Z") }), null);
+});
