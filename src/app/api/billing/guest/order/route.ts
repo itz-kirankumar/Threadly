@@ -1,4 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
+import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { loadBilling } from "@/lib/billing/store";
 import { billingTestMode, isInterval, isPaidPlan } from "@/lib/billing/dodo";
 import { ORDER_PRICES, razorpayConfigured, razorpayCreateOrder, razorpayKeyId } from "@/lib/billing/razorpay";
 import { newClaimSecret, saveClaim, type BillingClaim } from "@/lib/billing/claims";
@@ -25,6 +27,25 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown };
     if (!isPaidPlan(body.plan) || !isInterval(body.interval)) {
       return Response.json({ error: "Choose a plan (pro or growth) and interval (monthly or annual)." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    }
+    // Server-side duplicate guard: when the visitor sends a valid sign-in token
+    // (the checkout page always does for signed-in users), an account that
+    // already holds an active plan is refused BEFORE any order exists - a
+    // second purchase must be managed/upgraded from billing, not bought again.
+    // Token absence or a lookup failure never blocks the genuine guest path.
+    try {
+      const identity = await getFirebaseIdentity(request, true);
+      if (identity) {
+        const existing = await withWorkspace(identity.uid, identity.idToken, () => loadBilling());
+        if (existing && (existing.status === "active" || existing.status === "grace")) {
+          return Response.json(
+            { error: "This account already has an active plan - manage or upgrade it from billing settings instead of buying again.", code: "active_plan" },
+            { status: 409, headers: { "Cache-Control": "no-store" } },
+          );
+        }
+      }
+    } catch {
+      // Soft check only - fall through to the guest path.
     }
     const now = new Date();
     const { secret, hash } = newClaimSecret();

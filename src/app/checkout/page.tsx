@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import SupportLink from "@/components/SupportLink";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
@@ -40,6 +40,7 @@ function CheckoutInner() {
   const [testMode, setTestMode] = useState<boolean | null>(null);
   const [activePlanLabel, setActivePlanLabel] = useState<string | null>(null);
   const [checkingPlan, setCheckingPlan] = useState(true);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // A signed-in visitor who already has a paid plan must not buy a second one
   // here: route them to manage/upgrade before any payment happens.
@@ -47,6 +48,7 @@ function CheckoutInner() {
     let cancelled = false;
     const unsubscribe = onAuthStateChanged(getFirebaseAuth(), async (user) => {
       if (cancelled) return;
+      setCurrentUser(user);
       if (!user) {
         setCheckingPlan(false);
         return;
@@ -86,12 +88,25 @@ function CheckoutInner() {
     setBusy(true);
     setError(null);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (currentUser) {
+        try {
+          headers.Authorization = `Bearer ${await currentUser.getIdToken()}`;
+        } catch {
+          // Token refresh failed - the server treats the call as a guest.
+        }
+      }
       const res = await fetch("/api/billing/guest/order", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ plan: planId, interval }),
       });
       const order = await res.json();
+      if (res.status === 409 && order.code === "active_plan") {
+        setActivePlanLabel((prev) => prev || "paid");
+        setBusy(false);
+        return;
+      }
       if (!res.ok) throw new Error(order.error || "Could not start checkout.");
       setTestMode(Boolean(order.testMode));
       await loadRazorpayScript();

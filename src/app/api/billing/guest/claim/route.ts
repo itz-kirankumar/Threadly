@@ -72,7 +72,13 @@ export async function POST(request: Request) {
     }
     const existing = await inWorkspace(access, () => loadBilling());
     if (existing && (existing.status === "active" || existing.status === "grace")) {
-      return Response.json({ error: "This workspace already has a plan. Manage it from Settings - Billing." }, { status: 409, headers: { "Cache-Control": "no-store" } });
+      // Paid but not attachable: fail closed, keep the claim untouched, and
+      // give a safe reference (claim ID alone grants nothing) for support to
+      // reconcile - transfer to another account or refund.
+      return Response.json(
+        { error: `This account already has an active plan, so the purchase was not attached. Your payment is safe - contact hello@gothreadly.live with reference ${claim.id} to transfer or refund it.` },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
+      );
     }
     const now = new Date();
     const periodEnd = periodEndFor(claim.interval, now);
