@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { sanitizeAnalyticsEvent } from "@/lib/analytics-sanitize";
 import { analyticsAllowed, CONSENT_CHANGE_EVENT } from "@/lib/consent";
 
 // PostHog, consent-gated. No key configured -> renders nothing, loads nothing.
@@ -16,22 +17,6 @@ export default function PostHogProvider() {
     let active = false;
     let stopped = false;
 
-    const sanitize = (properties: Record<string, unknown>) => {
-      for (const prop of ["$current_url", "$initial_current_url", "$referrer"]) {
-        const value = properties[prop];
-        if (typeof value === "string") {
-          try {
-            const url = new URL(value);
-            properties[prop] = url.origin + url.pathname;
-          } catch {
-            delete properties[prop];
-          }
-        }
-      }
-      delete properties["$search"];
-      return properties;
-    };
-
     const start = async () => {
       if (active || stopped) return;
       const { default: posthog } = await import("posthog-js");
@@ -43,7 +28,7 @@ export default function PostHogProvider() {
         disable_session_recording: true,
         person_profiles: "identified_only",
         opt_out_capturing_by_default: false,
-        sanitize_properties: sanitize,
+        before_send: sanitizeAnalyticsEvent,
       });
       active = true;
     };
