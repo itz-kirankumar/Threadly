@@ -42,11 +42,15 @@ export async function POST(request: Request) {
     if (claim.status !== "paid_unclaimed") {
       return Response.json({ error: `This purchase is ${claim.status} - it cannot be claimed yet.` }, { status: 409, headers: { "Cache-Control": "no-store" } });
     }
-    const claimantEmail = (access.identity.email || "").toLowerCase();
-    if (claim.checkoutEmail && claim.checkoutEmail.toLowerCase() !== claimantEmail) {
+    const claimantEmail = (access.identity.email || "").trim().toLowerCase();
+    // Provider-side contacts are the purchase's ownership evidence. Missing or
+    // unverifiable email/contact can never silently attach on secret
+    // possession alone - the claim pauses for review instead.
+    const checkoutEmail = (claim.checkoutEmail || "").trim().toLowerCase();
+    if (!checkoutEmail || !claimantEmail || checkoutEmail !== claimantEmail) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(
-        { error: "The email on the payment does not match this account. The claim is paused for review - no entitlement was granted." },
+        { error: `The email on the payment does not match this account, so the claim is paused for review - no entitlement was granted. Reference ${claim.id} at hello@gothreadly.live.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -57,26 +61,34 @@ export async function POST(request: Request) {
     const claimantPhone = await lookupVerifiedPhone(access.identity.idToken);
     const checkoutDigits = normalizePhoneDigits(claim.checkoutContact);
     const accountDigits = normalizePhoneDigits(claimantPhone);
-    if (checkoutDigits && !accountDigits) {
+    if (!checkoutDigits) {
+      await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
+      return Response.json(
+        { error: `The payment record has no verifiable mobile number, so the claim is paused for review - no entitlement was granted. Reference ${claim.id} at hello@gothreadly.live.` },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (!accountDigits) {
+      // Account-side gap the user can fix - the claim stays claimable.
       return Response.json(
         { error: "Verify the mobile number on your Threadly account first, then open this claim link again - the payment must match your account details." },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
-    if (checkoutDigits && accountDigits && checkoutDigits !== accountDigits) {
+    if (checkoutDigits !== accountDigits) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(
-        { error: "The mobile number on the payment does not match this account. The claim is paused for review - no entitlement was granted." },
+        { error: `The mobile number on the payment does not match this account, so the claim is paused for review - no entitlement was granted. Reference ${claim.id} at hello@gothreadly.live.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
     const existing = await inWorkspace(access, () => loadBilling());
     if (existing && (existing.status === "active" || existing.status === "grace")) {
       // Paid but not attachable: fail closed, keep the claim untouched, and
-      // give a safe reference (claim ID alone grants nothing) for support to
-      // reconcile - transfer to another account or refund.
+      // give a safe reference (claim ID alone grants nothing) for support
+      // reconciliation. No promise of outcome - it is pending review.
       return Response.json(
-        { error: `This account already has an active plan, so the purchase was not attached. Your payment is safe - contact hello@gothreadly.live with reference ${claim.id} to transfer or refund it.` },
+        { error: `This account already has an active plan, so the purchase was not attached. The payment was captured and the purchase remains unclaimed - no second charge happened. Reconciliation is pending: contact hello@gothreadly.live with reference ${claim.id}.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
