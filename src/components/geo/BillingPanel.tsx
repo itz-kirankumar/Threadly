@@ -122,7 +122,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
           setBusyPlan(null);
           load();
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Payment could not be verified. No entitlement was granted.");
+          setError(err instanceof Error ? err.message : "Payment could not be verified. Your plan has not been activated.");
           setBusyPlan(null);
         }
       },
