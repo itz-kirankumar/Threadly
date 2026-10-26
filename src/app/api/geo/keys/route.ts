@@ -3,6 +3,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { encryptSecret, keyEncryptionReady, lastFour } from "@/lib/geo/crypto";
 import { providerKeyStatuses } from "@/lib/geo/keys";
+import { loadPlan, planAtLeast, planBlockResponse } from "@/lib/geo/plan";
 import {
   deleteBuiltinKey,
   deleteCustomProvider,
@@ -35,6 +36,10 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "manageKeys");
+    const plan = await inWorkspace(access, () => loadPlan(access.identity.email));
+    if (!planAtLeast(plan, "pro")) {
+      return planBlockResponse("Custom providers and your own API keys are part of Pro and above - upgrade to use them.", plan);
+    }
     if (access.identity.idToken === "demo-token") {
       return Response.json({ error: "The demo identity cannot store keys. Sign in with Google." }, { status: 403 });
     }
@@ -90,6 +95,10 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "manageKeys");
+    const plan = await inWorkspace(access, () => loadPlan(access.identity.email));
+    if (!planAtLeast(plan, "pro")) {
+      return planBlockResponse("Custom providers and your own API keys are part of Pro and above.", plan);
+    }
     const body = (await readJsonBody(request, 4 * 1024)) as { provider?: unknown; customId?: unknown };
     return await inWorkspace(access, async () => {
       if (typeof body.customId === "string") {

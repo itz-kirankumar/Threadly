@@ -339,3 +339,13 @@ test("trial expiry: lapsedPlan enforces 7-day term server-side", async () => {
   // No billing record at all: stored plan stands (grandfathered free-trial users).
   assert.deepEqual(lapsedPlan("trial", null, now), { plan: "trial", lapsed: false });
 });
+
+test("planAtLeast enforces the tier ordering used by feature gates", async () => {
+  const { planAtLeast } = await import("../src/lib/geo/plan.ts");
+  assert.equal(planAtLeast("trial", "pro"), false);   // BYOK/invites gate
+  assert.equal(planAtLeast("pro", "pro"), true);
+  assert.equal(planAtLeast("pro", "growth"), false);  // audit + public API gate
+  assert.equal(planAtLeast("growth", "growth"), true);
+  assert.equal(planAtLeast("enterprise", "growth"), true);
+  assert.equal(planAtLeast("none", "trial"), false);
+});

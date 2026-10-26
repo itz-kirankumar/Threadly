@@ -1,4 +1,5 @@
 import { RequestError } from "@/lib/api-request";
+import { PLAN_LIMITS } from "./plan";
 import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
 import { adminConfigured, getAdminDatabase } from "@/lib/geo/admin-store";
 
@@ -218,6 +219,17 @@ export async function acceptInvite(request: Request, token: string): Promise<{ w
   const invite = geo?.team?.invites?.[token];
   if (!invite) throw new RequestError("This invite link is invalid or was revoked.", 404);
   if (Date.parse(invite.expiresAt) <= Date.now()) throw new RequestError("This invite link has expired.", 410);
+
+  // Seat cap re-check at accept time: capacity can fill after the invite was
+  // created. The workspace plan lives on this same geo snapshot.
+  const planId = (geo as { plan?: string } | null)?.plan ?? "none";
+  const seats = (PLAN_LIMITS as Record<string, { seats: number | null }>)[planId]?.seats ?? null;
+  if (seats != null) {
+    const memberCount = Object.keys((geo?.team as { members?: Record<string, unknown> } | undefined)?.members ?? {}).length;
+    if (memberCount >= seats - 1) {
+      throw new RequestError("This workspace has no seats left on its plan.", 409);
+    }
+  }
 
   const workspaceName = geo?.brand?.brand || geo?.brand?.company || "a Threadly workspace";
   const member: TeamMember = {

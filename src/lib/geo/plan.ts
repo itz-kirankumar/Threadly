@@ -34,6 +34,13 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   enterprise: { scans: null, queries: null, historyDays: null, seats: null, socialHourly: null },
 };
 
+export const PLAN_RANK: Record<PlanId, number> = { none: 0, trial: 1, pro: 2, growth: 3, enterprise: 4 };
+
+/** Tier ordering for feature gates ("Pro and above", "Growth and above"). */
+export function planAtLeast(plan: PlanId, min: PlanId): boolean {
+  return PLAN_RANK[plan] >= PLAN_RANK[min];
+}
+
 export const PLAN_LABELS: Record<PlanId, string> = {
   none: "No plan",
   trial: "7-day trial",
