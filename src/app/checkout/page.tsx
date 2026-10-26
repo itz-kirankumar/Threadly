@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import SupportLink from "@/components/SupportLink";
+import Footer from "@/components/Footer";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
 declare global {
@@ -153,7 +154,8 @@ function CheckoutInner() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-16">
+    <div className="flex min-h-screen flex-col">
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
       <Link href="/" className="mb-8 text-sm text-zinc-500 hover:text-zinc-300">&larr; Threadly</Link>
       <h1 className="text-2xl font-semibold text-white">{plan.name} - {interval === "annual" ? "Annual" : "Monthly"}</h1>
       <p className="mt-1 text-3xl font-bold text-white">${price}<span className="text-sm font-normal text-zinc-500"> {interval === "annual" ? "/year" : "/month"}</span></p>
@@ -199,6 +201,8 @@ function CheckoutInner() {
         Payments by Razorpay.
       </p>
     </main>
+    <Footer />
+    </div>
   );
 }
 
