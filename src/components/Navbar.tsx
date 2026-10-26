@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import DeveloperMenu from "@/components/DeveloperMenu";
 
 export default function Navbar() {
   return (
@@ -19,6 +20,7 @@ export default function Navbar() {
           <Link href="/docs" className="hidden text-zinc-400 transition hover:text-white sm:inline">
             Docs
           </Link>
+          <DeveloperMenu />
           <Link
             href="/portal"
             className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-200"
