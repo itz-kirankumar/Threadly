@@ -142,6 +142,8 @@ export async function razorpayFetchOrder(orderId: string): Promise<{ id: string;
 
 export async function razorpayFetchPayment(paymentId: string): Promise<{
   id: string;
+  email?: string | null;
+  contact?: string | null;
   order_id?: string;
   status?: string;
   amount?: number;

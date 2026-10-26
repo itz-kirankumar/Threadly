@@ -164,3 +164,14 @@ test("razorpay upgrade quote: prorated difference, same term, upgrades only", as
   // expired term: no quote
   assert.equal(upgradeQuote({ currentPlan: "pro", newPlan: "growth", interval: "annual", purchasedAt, periodEnd, paidThisTerm: 46800, now: new Date("2027-10-02T00:00:00Z") }), null);
 });
+
+test("guest claim secret hashing is stable and salted", async () => {
+  const { newClaimSecret, hashClaimSecret } = await import("../src/lib/billing/claims.ts");
+  const a = newClaimSecret();
+  const b = newClaimSecret();
+  assert.notEqual(a.secret, b.secret);
+  assert.notEqual(a.hash, b.hash);
+  assert.equal(hashClaimSecret(a.secret), a.hash);
+  assert.notEqual(hashClaimSecret(a.secret), b.hash);
+  assert.match(a.secret, /^[A-Za-z0-9_-]{32}$/);
+});
