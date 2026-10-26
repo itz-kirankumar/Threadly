@@ -93,7 +93,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
     const order = (await authedFetch("/api/billing/razorpay/order", {
       method: "POST",
       body: JSON.stringify({ plan, interval: annual ? "annual" : "monthly" }),
-    })) as { orderId: string; amount: number; currency: string; keyId: string };
+    })) as { orderId: string; amount: number; currency: string; keyId: string; prefill?: { email?: string | null; contact?: string | null } };
     await loadRazorpayScript();
     if (!window.Razorpay) throw new Error("Could not load the Razorpay checkout.");
     const rzp = new window.Razorpay({
@@ -103,6 +103,9 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
       currency: order.currency,
       name: "Threadly",
       description: `${plan === "pro" ? "Pro" : "Growth"} - ${annual ? "annual" : "monthly"}`,
+      ...(order.prefill?.email || order.prefill?.contact
+        ? { prefill: { ...(order.prefill.email ? { email: order.prefill.email } : {}), ...(order.prefill.contact ? { contact: order.prefill.contact } : {}) }, readonly: { email: Boolean(order.prefill.email), contact: Boolean(order.prefill.contact) } }
+        : {}),
       handler: async (response: { razorpay_payment_id?: string; razorpay_order_id?: string; razorpay_signature?: string }) => {
         try {
           await authedFetch("/api/billing/razorpay/verify", {

@@ -6,26 +6,7 @@ import { billingTestMode, canCheckout } from "@/lib/billing/dodo";
 import { periodEndFor, razorpayConfigured } from "@/lib/billing/razorpay";
 import { hashClaimSecret, loadClaim, transitionClaim } from "@/lib/billing/claims";
 import { loadBilling, saveBilling } from "@/lib/billing/store";
-
-// Verified phone on the claimant's own Firebase account (REST lookup - the
-// Admin SDK auth bundle does not run in this deployment).
-async function lookupVerifiedPhone(idToken: string): Promise<string | null> {
-  try {
-    const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-    if (!apiKey) return null;
-    const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken }),
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { users?: { phoneNumber?: string }[] };
-    return data.users?.[0]?.phoneNumber ?? null;
-  } catch {
-    return null;
-  }
-}
+import { lookupVerifiedPhone, normalizePhoneDigits } from "@/lib/billing/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,8 +55,8 @@ export async function POST(request: Request) {
     // claim rather than attach to the wrong account. Digits-only comparison
     // on the trailing 10 digits (country-code tolerant).
     const claimantPhone = await lookupVerifiedPhone(access.identity.idToken);
-    const checkoutDigits = (claim.checkoutContact || "").replace(/\D/g, "").slice(-10);
-    const accountDigits = (claimantPhone || "").replace(/\D/g, "").slice(-10);
+    const checkoutDigits = normalizePhoneDigits(claim.checkoutContact);
+    const accountDigits = normalizePhoneDigits(claimantPhone);
     if (checkoutDigits && accountDigits && checkoutDigits !== accountDigits) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(

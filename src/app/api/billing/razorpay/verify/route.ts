@@ -4,6 +4,7 @@ import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, canCheckout, isInterval, isPaidPlan } from "@/lib/billing/dodo";
 import { ORDER_PRICES, periodEndFor, razorpayConfigured, razorpayFetchPayment, resolvePaidThisTerm, verifyPaymentSignature } from "@/lib/billing/razorpay";
+import { lookupVerifiedPhone, normalizePhoneDigits } from "@/lib/billing/identity";
 import { loadBilling, loadCheckoutAttempt, saveBilling, saveCheckoutAttempt } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
@@ -71,6 +72,24 @@ export async function POST(request: Request) {
     const price = ORDER_PRICES[plan][interval];
     if (payment.amount !== price.amount || payment.currency !== price.currency) {
       return Response.json({ error: "Paid amount does not match the plan price." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    }
+
+    // Same-details rule (owner instruction): the payment's checkout contacts
+    // must match the account's verified email/phone when known - a mismatch
+    // pauses to uncertain instead of attaching to the wrong account.
+    const accountEmail = (access.identity.email || "").toLowerCase();
+    const paymentEmail = (payment.email || "").toLowerCase();
+    const accountPhone = normalizePhoneDigits(await lookupVerifiedPhone(access.identity.idToken));
+    const paymentPhone = normalizePhoneDigits(payment.contact);
+    if ((paymentEmail && accountEmail && paymentEmail !== accountEmail) || (paymentPhone && accountPhone && paymentPhone !== accountPhone)) {
+      const attempt0 = await loadCheckoutAttempt(access.workspaceUid);
+      if (attempt0 && attempt0.providerRef === body.orderId) {
+        await saveCheckoutAttempt(access.workspaceUid, { ...attempt0, state: "uncertain", updatedAt: new Date().toISOString() });
+      }
+      return Response.json(
+        { error: "The email or mobile on the payment does not match this account. The payment is recorded for review - no entitlement was granted." },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
+      );
     }
 
     const now = new Date();
