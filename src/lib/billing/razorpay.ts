@@ -188,6 +188,10 @@ export function upgradeQuote(params: {
   const total = end - start;
   const remaining = end - now.getTime();
   if (!Number.isFinite(total) || total <= 0 || remaining <= 0 || params.paidThisTerm <= 0) return null;
+  // Same-plan and lower-catalog-plan changes are never upgrades, whatever the
+  // paid basis - renewals and downgrades are separate flows.
+  if (params.newPlan === params.currentPlan) return null;
+  if (ORDER_PRICES[params.newPlan][params.interval].amount <= ORDER_PRICES[params.currentPlan][params.interval].amount) return null;
   const nxt = ORDER_PRICES[params.newPlan][params.interval];
   // Credit = unused share of what was ACTUALLY paid this term (purchase
   // basis preserved across discounts and repeated upgrades). Cost of the new
