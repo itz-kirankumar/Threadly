@@ -20,16 +20,30 @@ export default function PostHogProvider() {
     const start = async () => {
       if (active || stopped) return;
       const { default: posthog } = await import("posthog-js");
-      posthog.init(key, {
-        api_host: host,
-        autocapture: false,
-        capture_pageview: true,
-        capture_pageleave: false,
-        disable_session_recording: true,
-        person_profiles: "identified_only",
-        opt_out_capturing_by_default: false,
-        before_send: sanitizeAnalyticsEvent,
-      });
+      try {
+        posthog.init(key, {
+          api_host: host,
+          autocapture: false,
+          capture_pageview: true,
+          capture_pageleave: false,
+          disable_session_recording: true,
+          person_profiles: "identified_only",
+          opt_out_capturing_by_default: false,
+          before_send: (event) => {
+            try {
+              const result = sanitizeAnalyticsEvent(event);
+              console.log("[ph-diag] before_send", event?.event, result ? "pass" : "drop");
+              return result;
+            } catch (err) {
+              console.log("[ph-diag] before_send THREW", event?.event, String(err));
+              return null;
+            }
+          },
+        });
+        console.log("[ph-diag] init ok");
+      } catch (err) {
+        console.log("[ph-diag] init threw", String(err));
+      }
       active = true;
     };
 
