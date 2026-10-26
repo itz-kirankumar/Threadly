@@ -1,6 +1,11 @@
 import { createHash, randomBytes } from "crypto";
 import type { BillingInterval, PaidPlanId } from "./dodo";
-import { getAdminDatabase } from "@/lib/geo/admin-store";
+async function db() {
+  const { getAdminDatabase } = await import("@/lib/geo/admin-store");
+  const database = await getAdminDatabase();
+  if (!database) throw new Error("Database unavailable");
+  return database;
+}
 
 // Guest checkout claim: a payment is bound to a durable claim record. The
 // claim secret (returned once at order creation, carried in the claim URL) is
@@ -40,22 +45,16 @@ export function hashClaimSecret(secret: string): string {
 }
 
 export async function saveClaim(claim: BillingClaim): Promise<void> {
-  const db = await getAdminDatabase();
-  if (!db) throw new Error("Database unavailable");
-  await db.ref(`${CLAIMS_ROOT}/${claim.id}`).set(claim);
+  await (await db()).ref(`${CLAIMS_ROOT}/${claim.id}`).set(claim);
 }
 
 export async function loadClaim(id: string): Promise<BillingClaim | null> {
-  const db = await getAdminDatabase();
-  if (!db) throw new Error("Database unavailable");
-  const snap = await db.ref(`${CLAIMS_ROOT}/${id}`).get();
+  const snap = await (await db()).ref(`${CLAIMS_ROOT}/${id}`).get();
   return snap.exists() ? (snap.val() as BillingClaim) : null;
 }
 
 export async function loadClaimByOrder(orderId: string): Promise<BillingClaim | null> {
-  const db = await getAdminDatabase();
-  if (!db) throw new Error("Database unavailable");
-  const snap = await db.ref(CLAIMS_ROOT).orderByChild("orderId").equalTo(orderId).limitToFirst(1).get();
+  const snap = await (await db()).ref(CLAIMS_ROOT).orderByChild("orderId").equalTo(orderId).limitToFirst(1).get();
   if (!snap.exists()) return null;
   return Object.values(snap.val() as Record<string, BillingClaim>)[0] ?? null;
 }
@@ -67,9 +66,7 @@ export async function transitionClaim(
   from: ClaimStatus[],
   mutate: (claim: BillingClaim) => Partial<BillingClaim>,
 ): Promise<{ applied: boolean; claim: BillingClaim | null }> {
-  const db = await getAdminDatabase();
-  if (!db) throw new Error("Database unavailable");
-  const ref = db.ref(`${CLAIMS_ROOT}/${id}`);
+  const ref = (await db()).ref(`${CLAIMS_ROOT}/${id}`);
   const result = await ref.transaction((current: BillingClaim | null) => {
     if (!current || !from.includes(current.status)) return undefined; // abort
     if (current.status !== "claimed" && Date.now() - Date.parse(current.createdAt) > CLAIM_EXPIRY_MS) {
