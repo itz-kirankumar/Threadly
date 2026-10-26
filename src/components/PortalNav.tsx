@@ -28,8 +28,11 @@ function usePlanBadge(user: User | null): PlanBadge | null {
         if (paid && status.billing?.provider === "razorpay" && status.billing.periodEnd) {
           const days = Math.max(0, Math.ceil((Date.parse(status.billing.periodEnd) - Date.now()) / 86400000));
           hint = `expires in ${days} day${days === 1 ? "" : "s"}`;
-        } else if (paid && status.billing?.provider === "dodo" && status.billing.status === "active") {
-          hint = "renews automatically";
+        } else if (paid && status.billing?.provider === "dodo") {
+          const b = status.billing;
+          if (b.status === "active") hint = "renews automatically";
+          else if (b.status === "cancelled" && b.periodEnd) hint = `ends ${new Date(b.periodEnd).toLocaleDateString()}`;
+          else if (b.status) hint = b.status.replace(/_/g, " ");
         }
         setBadge({ label: paid ? status.planLabel! : "Free", hint, paid });
       } catch {
