@@ -475,7 +475,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           <div className="flex items-center gap-3">
             {state.plan === "trial" && (
               <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200">
-                Free trial - 1 scan included
+                7-day trial - 1 scan included
               </span>
             )}
             <button

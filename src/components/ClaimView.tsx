@@ -21,7 +21,7 @@ export default function ClaimView({ status, message, plan, periodEnd, email, cla
         <>
           <h1 className="text-2xl font-semibold text-white">Your plan is active</h1>
           <p className="mt-2 text-sm text-zinc-400">
-            {plan === "growth" ? "Growth" : "Pro"} is linked to {email}.
+            {plan === "growth" ? "Growth" : plan === "trial" ? "7-Day Trial" : "Pro"} is linked to {email}.
             {periodEnd ? ` It runs until ${new Date(periodEnd).toLocaleDateString()}.` : ""}
           </p>
           <Link href="/portal" className="mt-6 rounded-lg bg-white px-4 py-3 text-center text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200">

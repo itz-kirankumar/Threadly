@@ -171,10 +171,10 @@ export default function LandingPage() {
             <div className="text-center">
               <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">Pricing</p>
               <h2 className="mt-3 font-display text-4xl tracking-tight text-white sm:text-5xl">
-                Free during early access
+                Simple, honest pricing
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-                Paid plans are free until billing launches - the trial always stays free, no card needed.
+                Start with a 7-day trial for $7 - one-time, no auto-renewal. Upgrade to Pro or Growth when your coverage grows.
               </p>
             </div>
             </Reveal>

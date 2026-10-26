@@ -1,5 +1,5 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
-import { ORDER_PRICES, razorpayConfigured, razorpayFetchPayment, verifyPaymentSignature } from "@/lib/billing/razorpay";
+import { orderPrice, razorpayConfigured, razorpayFetchPayment, verifyPaymentSignature } from "@/lib/billing/razorpay";
 import { loadClaim, transitionClaim } from "@/lib/billing/claims";
 
 export const runtime = "nodejs";
@@ -46,8 +46,8 @@ export async function POST(request: Request) {
     if (payment.order_id !== claim.orderId) {
       return Response.json({ error: "Payment does not belong to this checkout." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
-    const price = ORDER_PRICES[claim.plan][claim.interval];
-    if (payment.amount !== price.amount || payment.currency !== price.currency) {
+    const price = orderPrice(claim.plan, claim.interval);
+    if (!price || payment.amount !== price.amount || payment.currency !== price.currency) {
       const t = await transitionClaim(claim.id, ["pending"], () => ({ status: "uncertain", paymentId: body.paymentId as string }));
       return Response.json({ error: "Paid amount does not match the plan price.", status: t.claim?.status ?? "uncertain" }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }

@@ -64,7 +64,7 @@ export default function RootLayout({
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     description,
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD", description: "Free while in early access" },
+    offers: { "@type": "Offer", price: "7", priceCurrency: "USD", description: "7-day trial, one-time payment" },
   };
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable} ${display.variable}`}>

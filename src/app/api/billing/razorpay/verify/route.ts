@@ -2,9 +2,9 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
-import { isInterval, isPaidPlan } from "@/lib/billing/dodo";
+import { isInterval, isRazorpayPlan } from "@/lib/billing/dodo";
 import { razorpayCheckoutAllowed } from "@/lib/billing/razorpay";
-import { ORDER_PRICES, periodEndFor, razorpayFetchPayment, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, verifyPaymentSignature } from "@/lib/billing/razorpay";
+import { orderPrice, periodEndFor, razorpayFetchPayment, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, verifyPaymentSignature } from "@/lib/billing/razorpay";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 import { loadBilling, loadCheckoutAttempt, saveBilling, saveCheckoutAttempt } from "@/lib/billing/store";
 
@@ -65,12 +65,15 @@ export async function POST(request: Request) {
       return Response.json({ error: "Payment does not belong to this order." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
     const notes = payment.notes ?? {};
-    const plan = isPaidPlan(notes.plan) ? notes.plan : null;
+    const plan = isRazorpayPlan(notes.plan) ? notes.plan : null;
     const interval = isInterval(notes.interval) ? notes.interval : null;
     if (!plan || !interval || notes.workspace_uid !== access.workspaceUid) {
       return Response.json({ error: "Payment is not bound to this workspace." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
-    const price = ORDER_PRICES[plan][interval];
+    const price = orderPrice(plan, interval);
+    if (!price) {
+      return Response.json({ error: "That plan and term combination is not sold." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    }
     if (payment.amount !== price.amount || payment.currency !== price.currency) {
       return Response.json({ error: "Paid amount does not match the plan price." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }

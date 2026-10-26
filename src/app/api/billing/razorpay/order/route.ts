@@ -1,8 +1,8 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
-import { isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { ORDER_PRICES, razorpayCheckoutAllowed, razorpayCreateOrder, razorpayKeyId, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
+import { isInterval, isRazorpayPlan } from "@/lib/billing/dodo";
+import { orderPrice, razorpayCheckoutAllowed, razorpayCreateOrder, razorpayKeyId, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, saveCheckoutAttempt } from "@/lib/billing/store";
@@ -35,16 +35,18 @@ export async function POST(request: Request) {
       );
     }
     const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown };
-    if (!isPaidPlan(body.plan) || !isInterval(body.interval)) {
+    if (!isRazorpayPlan(body.plan) || !isInterval(body.interval) || !orderPrice(body.plan, body.interval)) {
       return Response.json(
-        { error: "Choose a plan (pro or growth) and interval (monthly or annual)." },
+        { error: "Choose a plan (trial, pro or growth) with a valid term." },
         { status: 400, headers: { "Cache-Control": "no-store" } },
       );
     }
 
     const existing = await inWorkspace(access, () => loadBilling());
+    // An active paid trial never blocks a real purchase: trial to paid is a
+    // fresh order at full price, not a prorated upgrade.
     let quote: ReturnType<typeof upgradeQuote> = null;
-    if (existing && (existing.status === "active" || existing.status === "grace")) {
+    if (existing && (existing.status === "active" || existing.status === "grace") && existing.plan !== "trial") {
       // Upgrades: only for Razorpay one-time purchases, same interval, to a
       // higher-priced plan, paying the prorated difference. Dodo subscriptions
       // and downgrades keep the manage flow.
@@ -62,8 +64,8 @@ export async function POST(request: Request) {
         );
       }
       quote = upgradeQuote({
-        currentPlan: existing.plan,
-        newPlan: body.plan,
+        currentPlan: existing.plan as import("@/lib/billing/dodo").PaidPlanId,
+        newPlan: body.plan as import("@/lib/billing/dodo").PaidPlanId,
         interval: body.interval,
         purchasedAt: existing.updatedAt,
         periodEnd: existing.periodEnd,
@@ -106,7 +108,7 @@ export async function POST(request: Request) {
 
     try {
       const order = await razorpayCreateOrder({
-        plan: body.plan,
+        plan: body.plan as import("@/lib/billing/dodo").RazorpayPlanId,
         interval: body.interval,
         workspaceUid: access.workspaceUid,
         email: access.identity.email,
@@ -117,8 +119,8 @@ export async function POST(request: Request) {
         ...attempt,
         state: "issued",
         providerRef: order.id,
-        amount: quote ? quote.due : ORDER_PRICES[body.plan][body.interval].amount,
-        currency: ORDER_PRICES[body.plan][body.interval].currency,
+        amount: quote ? quote.due : orderPrice(body.plan as import("@/lib/billing/dodo").RazorpayPlanId, body.interval)?.amount ?? null,
+        currency: orderPrice(body.plan as import("@/lib/billing/dodo").RazorpayPlanId, body.interval)?.currency ?? null,
         upgradeOf: existing?.orderId ?? null,
         updatedAt: new Date().toISOString(),
       });
@@ -129,7 +131,8 @@ export async function POST(request: Request) {
           detail: `${body.plan} (${body.interval}) ${order.id}${razorpayTestMode() ? " - test mode" : ""}`,
         });
       } catch { /* audit is best-effort */ }
-      const price = ORDER_PRICES[body.plan][body.interval];
+      const price = orderPrice(body.plan, body.interval);
+    if (!price) throw new Error("That plan and term combination is not sold.");
       const prefillPhone = await lookupVerifiedPhone(access.identity.idToken);
       if (!normalizeE164(prefillPhone)) {
         return Response.json(

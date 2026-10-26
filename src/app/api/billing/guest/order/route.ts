@@ -1,8 +1,8 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
 import { loadBilling } from "@/lib/billing/store";
-import { isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { ORDER_PRICES, razorpayCreateOrder, razorpayKeyId, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
+import { isInterval, isRazorpayPlan } from "@/lib/billing/dodo";
+import { orderPrice, razorpayCreateOrder, razorpayKeyId, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
 import { newClaimSecret, saveClaim, type BillingClaim } from "@/lib/billing/claims";
 
 export const runtime = "nodejs";
@@ -25,8 +25,8 @@ export async function POST(request: Request) {
       return Response.json({ error: "Checkout is not available yet." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
     const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown };
-    if (!isPaidPlan(body.plan) || !isInterval(body.interval)) {
-      return Response.json({ error: "Choose a plan (pro or growth) and interval (monthly or annual)." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    if (!isRazorpayPlan(body.plan) || !isInterval(body.interval) || !orderPrice(body.plan, body.interval)) {
+      return Response.json({ error: "Choose a plan (trial, pro or growth) with a valid term." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
     // Server-side duplicate guard. Only a genuinely ABSENT token means guest:
     // a supplied token that fails verification, or an account lookup that
@@ -61,14 +61,17 @@ export async function POST(request: Request) {
       }
     }
     const now = new Date();
+    const plan = body.plan as import("@/lib/billing/dodo").RazorpayPlanId;
+    const interval = body.interval as import("@/lib/billing/dodo").BillingInterval;
     const { secret, hash } = newClaimSecret();
     const order = await razorpayCreateOrder({
-      plan: body.plan,
-      interval: body.interval,
+      plan,
+      interval,
       workspaceUid: `guest_${now.getTime().toString(36)}`,
       email: "",
     });
-    const price = ORDER_PRICES[body.plan][body.interval];
+    const price = orderPrice(body.plan, body.interval);
+    if (!price) throw new Error("That plan and term combination is not sold.");
     const claim: BillingClaim = {
       id: `clm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
       provider: "razorpay",

@@ -1,6 +1,6 @@
 import type { BillingProvider, BillingRecord } from "./store";
 import type { PlanId } from "@/lib/geo/plan";
-import type { BillingInterval, PaidPlanId } from "./dodo";
+import type { BillingInterval, PaidPlanId, RazorpayPlanId } from "./dodo";
 
 export type IncomingStatus =
   | "active" // active / renewed / activated / charged / resumed
@@ -25,9 +25,9 @@ export interface IncomingEvent {
 }
 
 export type Decision =
-  | { action: "upgrade"; plan: PaidPlanId; record: BillingRecord; note: string }
+  | { action: "upgrade"; plan: RazorpayPlanId; record: BillingRecord; note: string }
   | { action: "downgrade"; plan: "trial"; record: BillingRecord; note: string }
-  | { action: "keep"; plan: PaidPlanId; record: BillingRecord; note: string }
+  | { action: "keep"; plan: RazorpayPlanId; record: BillingRecord; note: string }
   | { action: "ignore"; reason: string };
 
 function toRecord(event: IncomingEvent, status: string, previous?: BillingRecord | null): BillingRecord {

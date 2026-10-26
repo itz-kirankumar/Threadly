@@ -255,3 +255,46 @@ test("phone normalization: trailing 10 digits, country-code tolerant, empty stay
   assert.equal(normalizeE164(null), null);
   assert.equal(normalizeE164(undefined), null);
 });
+
+test("claim reconcile: provider evidence only - paid+match advances, everything else holds", async () => {
+  const { decideClaimReconcile } = await import("../src/lib/billing/claims.ts");
+  const claim = {
+    id: "clm_1", provider: "razorpay", plan: "pro", interval: "monthly",
+    amount: 4900, currency: "USD", orderId: "order_1", paymentId: null,
+    status: "pending", claimTokenHash: "h", checkoutEmail: null, checkoutContact: null,
+    claimedBy: null, claimedAt: null, createdAt: "2026-10-26T00:00:00.000Z", updatedAt: "2026-10-26T00:00:00.000Z",
+  };
+  const paid = { status: "paid" };
+  const captured = { id: "pay_1", status: "captured", amount: 4900, currency: "USD", order_id: "order_1", email: "b@x.y", contact: "+916383666595" };
+
+  // paid order + matching captured payment advances with provider contacts
+  const ok = decideClaimReconcile(claim, paid, captured);
+  assert.equal(ok.action, "mark_paid");
+  assert.equal(ok.paymentId, "pay_1");
+  assert.equal(ok.email, "b@x.y");
+
+  // unpaid order: no change, claim stays pending (no assumed expiry)
+  assert.equal(decideClaimReconcile(claim, { status: "created" }, null).action, "none");
+  // paid order but payment not captured yet: no change
+  assert.equal(decideClaimReconcile(claim, paid, { ...captured, status: "created" }).action, "none");
+  // payment bound to a different order: no change
+  assert.equal(decideClaimReconcile(claim, paid, { ...captured, order_id: "order_2" }).action, "none");
+  // amount/currency mismatch pauses for review, never grants
+  assert.equal(decideClaimReconcile(claim, paid, { ...captured, amount: 46800 }).action, "pause_mismatch");
+  assert.equal(decideClaimReconcile(claim, paid, { ...captured, currency: "INR" }).action, "pause_mismatch");
+  // a non-pending claim is never re-touched by reconciliation
+  assert.equal(decideClaimReconcile({ ...claim, status: "paid_unclaimed" }, paid, captured).action, "none");
+  assert.equal(decideClaimReconcile({ ...claim, status: "uncertain" }, paid, captured).action, "none");
+});
+
+test("paid trial pricing: $7 weekly only, period ends in 7 days", async () => {
+  const { orderPrice, periodEndFor } = await import("../src/lib/billing/razorpay.ts");
+  assert.deepEqual(orderPrice("trial", "weekly"), { amount: 700, currency: "USD" });
+  // The trial is never sold as monthly/annual, and paid plans have no weekly term.
+  assert.equal(orderPrice("trial", "monthly"), null);
+  assert.equal(orderPrice("trial", "annual"), null);
+  assert.equal(orderPrice("pro", "weekly"), null);
+  assert.deepEqual(orderPrice("pro", "monthly"), { amount: 4900, currency: "USD" });
+  const start = new Date("2026-10-26T10:00:00.000Z");
+  assert.equal(periodEndFor("weekly", start), "2026-11-02T10:00:00.000Z");
+});

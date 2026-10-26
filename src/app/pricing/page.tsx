@@ -6,7 +6,7 @@ import Pricing from "@/components/landing/Pricing";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Threadly pricing: free trial (10 questions, 1 full scan), Pro and Growth for marketing teams, and Enterprise for global brands. Paid plans are free during early access.",
+    "Threadly pricing: 7-day trial for $7 (10 questions, 1 full scan), Pro and Growth for marketing teams, and Enterprise for global brands. One-time purchases, no auto-renewal.",
 };
 
 export default function PricingPage() {
@@ -18,8 +18,8 @@ export default function PricingPage() {
           <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">Pricing</p>
           <h1 className="mt-3 text-4xl font-bold tracking-tight text-white">Enterprise GEO intelligence, priced for every team</h1>
           <p className="mx-auto mt-4 max-w-2xl text-zinc-400">
-            Measure how ChatGPT, Claude and Gemini talk about your brand. Start free, upgrade when your coverage
-            grows - every paid plan is free during early access.
+            Measure how ChatGPT, Claude and Gemini talk about your brand. Start with the $7 trial, upgrade when
+            your coverage grows - one-time purchases, no auto-renewal.
           </p>
         </div>
         <div className="mt-12">

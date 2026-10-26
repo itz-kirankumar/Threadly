@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { BillingInterval, PaidPlanId } from "./dodo";
+import type { BillingInterval, PaidPlanId, RazorpayPlanId } from "./dodo";
 
 export function razorpayConfigured(): boolean {
   return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
@@ -45,13 +45,14 @@ function authHeader(): string {
   return `Basic ${Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString("base64")}`;
 }
 
-const PLAN_ENV: Record<PaidPlanId, Record<BillingInterval, string>> = {
+const PLAN_ENV: Record<PaidPlanId, Partial<Record<BillingInterval, string>>> = {
   pro: { monthly: "RAZORPAY_PLAN_PRO_MONTHLY", annual: "RAZORPAY_PLAN_PRO_ANNUAL" },
   growth: { monthly: "RAZORPAY_PLAN_GROWTH_MONTHLY", annual: "RAZORPAY_PLAN_GROWTH_ANNUAL" },
 };
 
 export function razorpayPlanFor(plan: PaidPlanId, interval: BillingInterval): string {
-  const id = process.env[PLAN_ENV[plan][interval]];
+  const envName = PLAN_ENV[plan]?.[interval];
+  const id = envName ? process.env[envName] : undefined;
   if (!id) throw new Error("Razorpay plans are not configured on this deployment.");
   return id;
 }
@@ -60,7 +61,8 @@ export function razorpayPlanFromPlanId(planId: string | null | undefined): PaidP
   if (!planId) return null;
   for (const plan of ["pro", "growth"] as const) {
     for (const interval of ["monthly", "annual"] as const) {
-      if (process.env[PLAN_ENV[plan][interval]] === planId) return plan;
+      const envName = PLAN_ENV[plan]?.[interval];
+      if (envName && process.env[envName] === planId) return plan;
     }
   }
   return null;
@@ -119,7 +121,7 @@ export function verifyRazorpaySignature(rawBody: string, signature: string | nul
 
 // Server-authoritative pricing in the smallest currency unit (cents/paise).
 // Mirrors the public pricing page exactly; clients never supply amounts.
-export const ORDER_PRICES: Record<PaidPlanId, Record<BillingInterval, { amount: number; currency: string }>> = {
+export const ORDER_PRICES: Record<RazorpayPlanId, Partial<Record<BillingInterval, { amount: number; currency: string }>>> = {
   pro: {
     monthly: { amount: 4900, currency: "USD" },
     annual: { amount: 46800, currency: "USD" },
@@ -128,21 +130,28 @@ export const ORDER_PRICES: Record<PaidPlanId, Record<BillingInterval, { amount: 
     monthly: { amount: 14900, currency: "USD" },
     annual: { amount: 142800, currency: "USD" },
   },
+  trial: { weekly: { amount: 700, currency: "USD" } },
 };
+
+/** Price for a Razorpay plan+term, or null when that combination is not sold. */
+export function orderPrice(plan: RazorpayPlanId, interval: BillingInterval): { amount: number; currency: string } | null {
+  return ORDER_PRICES[plan]?.[interval] ?? null;
+}
 
 export function razorpayKeyId(): string | null {
   return process.env.RAZORPAY_KEY_ID ?? null;
 }
 
 export async function razorpayCreateOrder(params: {
-  plan: PaidPlanId;
+  plan: RazorpayPlanId;
   interval: BillingInterval;
   workspaceUid: string;
   email: string;
   amountOverride?: number;
   upgradeOf?: string | null;
 }): Promise<{ id: string; amount: number; currency: string }> {
-  const price = ORDER_PRICES[params.plan][params.interval];
+  const price = orderPrice(params.plan, params.interval);
+  if (!price) throw new Error("That plan and term combination is not sold.");
   const response = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: authHeader() },
@@ -174,6 +183,24 @@ export async function razorpayFetchOrder(orderId: string): Promise<{ id: string;
   const response = await fetch(`https://api.razorpay.com/v1/orders/${orderId}`, { headers: { Authorization: authHeader() }, cache: "no-store" });
   if (!response.ok) throw new Error(`Razorpay order fetch failed (${response.status})`);
   return (await response.json()) as { id: string; amount?: number; currency?: string; status?: string };
+}
+
+export async function razorpayFetchOrderPayments(orderId: string): Promise<Array<{
+  id: string;
+  email?: string | null;
+  contact?: string | null;
+  order_id?: string;
+  status?: string;
+  amount?: number;
+  currency?: string;
+}>> {
+  const response = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}/payments`, {
+    headers: { Authorization: authHeader() },
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => ({}))) as { items?: Array<Record<string, unknown>> };
+  if (!response.ok) throw new Error(`Razorpay order payments fetch failed (${response.status})`);
+  return (payload.items ?? []) as never;
 }
 
 export async function razorpayFetchPayment(paymentId: string): Promise<{
@@ -229,8 +256,9 @@ export function upgradeQuote(params: {
   // Same-plan and lower-catalog-plan changes are never upgrades, whatever the
   // paid basis - renewals and downgrades are separate flows.
   if (params.newPlan === params.currentPlan) return null;
-  if (ORDER_PRICES[params.newPlan][params.interval].amount <= ORDER_PRICES[params.currentPlan][params.interval].amount) return null;
-  const nxt = ORDER_PRICES[params.newPlan][params.interval];
+  const cur = orderPrice(params.currentPlan, params.interval);
+  const nxt = orderPrice(params.newPlan, params.interval);
+  if (!cur || !nxt || nxt.amount <= cur.amount) return null;
   // Credit = unused share of what was ACTUALLY paid this term (purchase
   // basis preserved across discounts and repeated upgrades). Cost of the new
   // plan for the remaining term uses the current catalog price.
@@ -264,6 +292,7 @@ export async function resolvePaidThisTerm(record: { paidThisTerm?: number | null
 export function periodEndFor(interval: BillingInterval, from: Date): string {
   const end = new Date(from);
   if (interval === "annual") end.setFullYear(end.getFullYear() + 1);
+  else if (interval === "weekly") end.setDate(end.getDate() + 7);
   else end.setMonth(end.getMonth() + 1);
   return end.toISOString();
 }

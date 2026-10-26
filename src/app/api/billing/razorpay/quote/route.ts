@@ -29,8 +29,8 @@ export async function POST(request: Request) {
       return Response.json({ quote: null, error: "Could not confirm the amount paid for the current term." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
     const quote = upgradeQuote({
-      currentPlan: existing.plan,
-      newPlan: body.plan,
+      currentPlan: existing.plan as import("@/lib/billing/dodo").PaidPlanId,
+      newPlan: body.plan as import("@/lib/billing/dodo").PaidPlanId,
       interval: body.interval,
       purchasedAt: existing.updatedAt,
       periodEnd: existing.periodEnd,

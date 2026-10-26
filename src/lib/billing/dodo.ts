@@ -1,7 +1,9 @@
 import DodoPayments from "dodopayments";
 
-export type BillingInterval = "monthly" | "annual";
+export type BillingInterval = "monthly" | "annual" | "weekly";
 export type PaidPlanId = "pro" | "growth";
+/** Razorpay one-time purchases additionally sell the paid 7-day trial. */
+export type RazorpayPlanId = PaidPlanId | "trial";
 
 export function billingConfigured(): boolean {
   return Boolean(process.env.DODO_PAYMENTS_API_KEY);
@@ -21,13 +23,14 @@ export function dodoClient(): DodoPayments {
   });
 }
 
-const PRODUCT_ENV: Record<PaidPlanId, Record<BillingInterval, string>> = {
+const PRODUCT_ENV: Record<PaidPlanId, Partial<Record<BillingInterval, string>>> = {
   pro: { monthly: "DODO_PRODUCT_PRO_MONTHLY", annual: "DODO_PRODUCT_PRO_ANNUAL" },
   growth: { monthly: "DODO_PRODUCT_GROWTH_MONTHLY", annual: "DODO_PRODUCT_GROWTH_ANNUAL" },
 };
 
 export function productFor(plan: PaidPlanId, interval: BillingInterval): string {
-  const id = process.env[PRODUCT_ENV[plan][interval]];
+  const envName = PRODUCT_ENV[plan]?.[interval];
+  const id = envName ? process.env[envName] : undefined;
   if (!id) throw new Error("Billing is not fully configured on this deployment.");
   return id;
 }
@@ -36,7 +39,8 @@ export function planFromProductId(productId: string | null | undefined): PaidPla
   if (!productId) return null;
   for (const plan of ["pro", "growth"] as const) {
     for (const interval of ["monthly", "annual"] as const) {
-      if (process.env[PRODUCT_ENV[plan][interval]] === productId) return plan;
+      const envName = PRODUCT_ENV[plan]?.[interval];
+      if (envName && process.env[envName] === productId) return plan;
     }
   }
   return null;
@@ -47,7 +51,11 @@ export function isPaidPlan(value: unknown): value is PaidPlanId {
 }
 
 export function isInterval(value: unknown): value is BillingInterval {
-  return value === "monthly" || value === "annual";
+  return value === "monthly" || value === "annual" || value === "weekly";
+}
+
+export function isRazorpayPlan(value: unknown): value is RazorpayPlanId {
+  return isPaidPlan(value) || value === "trial";
 }
 
 /** While in test mode, only these emails can start checkout (comma-separated env). */

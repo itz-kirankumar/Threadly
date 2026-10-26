@@ -35,11 +35,33 @@ export async function GET(request: Request) {
     console.error("Cron: pending-deletion sweep failed", error);
   }
 
+  // Guest-checkout claims reconciliation: a buyer whose browser never
+  // confirmed after paying gets the claim advanced from provider evidence
+  // (order paid + captured payment), never from assumption. Unpaid orders
+  // keep their claims pending until the provider shows a terminal state.
+  const claimsSweep = { checked: 0, advanced: 0, paused: 0, errors: 0 };
+  try {
+    const { listOpenClaims, reconcileClaimWithProvider } = await import("@/lib/billing/claims");
+    const open = await listOpenClaims(25);
+    for (const claim of open) {
+      claimsSweep.checked++;
+      try {
+        const status = await reconcileClaimWithProvider(claim);
+        if (status === "paid_unclaimed") claimsSweep.advanced++;
+        else if (status === "uncertain") claimsSweep.paused++;
+      } catch {
+        claimsSweep.errors++;
+      }
+    }
+  } catch (error) {
+    console.error("Cron: claims sweep failed", error);
+  }
+
   // Ops affordance: ?sweepOnly=1 (same CRON_SECRET auth) runs only the
   // tombstone reconciliation - used to verify recovery without burning AI
   // scan credits.
   if (new URL(request.url).searchParams.get("sweepOnly") === "1") {
-    return Response.json({ ok: true, sweep });
+    return Response.json({ ok: true, sweep, claimsSweep });
   }
 
   const scanned: Array<{ uid: string; runId?: string; error?: string }> = [];
@@ -59,5 +81,5 @@ export async function GET(request: Request) {
       scanned.push({ uid, error: error instanceof Error ? error.message : "scan failed" });
     }
   }
-  return Response.json({ ok: true, workspaces: scanned.length, scanned, pendingDeletionsSwept: sweep.swept.length });
+  return Response.json({ ok: true, workspaces: scanned.length, scanned, pendingDeletionsSwept: sweep.swept.length, claimsSweep });
 }

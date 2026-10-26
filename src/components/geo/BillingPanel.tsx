@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 interface BillingStatus {
-  plan: "trial" | "pro" | "growth" | "enterprise";
+  plan: "none" | "trial" | "pro" | "growth" | "enterprise";
   planLabel: string;
   billing: {
     provider?: "dodo" | "razorpay";
@@ -207,7 +207,12 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
               </p>
             )}
             {status.plan === "trial" && (
-              <p className="mt-1.5 text-xs text-zinc-500">Free trial: 1 full scan, 10 tracked questions, 7-day history.</p>
+              <p className="mt-1.5 text-xs text-zinc-500">7-day trial: 1 full scan, 10 tracked questions, 7-day history.</p>
+            )}
+            {status.plan === "none" && (
+              <p className="mt-1.5 text-xs text-zinc-500">
+                No active plan. <a href="/checkout?plan=trial" className="text-violet-300 underline underline-offset-2">Start the 7-day trial for $7</a> - one-time, no auto-renewal.
+              </p>
             )}
           </div>
 

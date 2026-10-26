@@ -21,7 +21,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: "When does billing start?",
-    a: "Not yet. Threadly is in early access and paid plans are free until billing launches - we will announce it before it switches on. The free trial (10 questions, 1 full scan) always stays free, and early users keep their workspaces and history.",
+    a: "Billing is live. The 7-day trial is $7 (one-time, no auto-renewal), and Pro and Growth are one-time purchases for a monthly or annual term through Razorpay. Plans do not renew by themselves, and early users keep their workspaces and history.",
   },
 ];
 

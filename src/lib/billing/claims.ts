@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import type { BillingInterval, PaidPlanId } from "./dodo";
+import type { BillingInterval, RazorpayPlanId } from "./dodo";
 async function db() {
   const { getAdminDatabase } = await import("@/lib/geo/admin-store");
   const database = await getAdminDatabase();
@@ -16,7 +16,7 @@ export type ClaimStatus = "pending" | "paid_unclaimed" | "claimed" | "uncertain"
 export interface BillingClaim {
   id: string;
   provider: "razorpay";
-  plan: PaidPlanId;
+  plan: RazorpayPlanId;
   interval: BillingInterval;
   amount: number;
   currency: string;
@@ -88,4 +88,70 @@ export async function transitionClaim(
     return { ...current, ...mutate(current), updatedAt: new Date().toISOString() };
   });
   return { applied: result.committed, claim: (result.snapshot.val() as BillingClaim) ?? null };
+}
+
+export interface ClaimPaymentView {
+  id?: string;
+  status?: string;
+  amount?: number;
+  currency?: string;
+  order_id?: string;
+  email?: string | null;
+  contact?: string | null;
+}
+
+export type ClaimReconcileDecision =
+  | { action: "mark_paid"; paymentId: string; email: string | null; contact: string | null }
+  | { action: "pause_mismatch" }
+  | { action: "none" };
+
+// Pure reconcile decision, unit-tested: a claim only advances from PROVIDER
+// evidence (order paid + a captured/authorized payment of the exact price
+// bound to the same order). Anything short of that changes nothing - an
+// unpaid order keeps the claim pending; a wrong amount pauses it for review.
+export function decideClaimReconcile(
+  claim: BillingClaim,
+  order: { status?: string } | null,
+  payment: ClaimPaymentView | null,
+): ClaimReconcileDecision {
+  if (claim.status !== "pending") return { action: "none" };
+  if (!order || order.status !== "paid") return { action: "none" };
+  if (!payment || (payment.status !== "captured" && payment.status !== "authorized")) return { action: "none" };
+  if (payment.order_id !== claim.orderId) return { action: "none" };
+  if (payment.amount !== claim.amount || payment.currency !== claim.currency) return { action: "pause_mismatch" };
+  return {
+    action: "mark_paid",
+    paymentId: payment.id as string,
+    email: payment.email ?? null,
+    contact: payment.contact ?? null,
+  };
+}
+
+// Refresh a pending claim against Razorpay. Returns the resulting status.
+// Provider errors propagate so callers decide: the claim page ignores them
+// (buyer keeps the honest "pending" state), the cron sweep counts them.
+export async function reconcileClaimWithProvider(claim: BillingClaim): Promise<ClaimStatus> {
+  if (claim.status !== "pending" || claim.provider !== "razorpay") return claim.status;
+  // Dynamic import: keeps this module free of runtime provider deps so the
+  // pure decisions above stay loadable (and testable) in isolation.
+  const { razorpayFetchOrder, razorpayFetchOrderPayments } = await import("./razorpay");
+  const order = await razorpayFetchOrder(claim.orderId);
+  if (order.status !== "paid") return claim.status;
+  const payments = await razorpayFetchOrderPayments(claim.orderId);
+  const payment = payments.find((p) => p.status === "captured" || p.status === "authorized") ?? null;
+  const decision = decideClaimReconcile(claim, order, payment);
+  if (decision.action === "none") return claim.status;
+  const t = await transitionClaim(claim.id, ["pending"], () =>
+    decision.action === "mark_paid"
+      ? { status: "paid_unclaimed" as const, paymentId: decision.paymentId, checkoutEmail: decision.email, checkoutContact: decision.contact }
+      : { status: "uncertain" as const },
+  );
+  return t.claim?.status ?? claim.status;
+}
+
+// Pending claims for the reconciliation sweep (bounded).
+export async function listOpenClaims(limit = 25): Promise<BillingClaim[]> {
+  const snap = await (await db()).ref(CLAIMS_ROOT).orderByChild("status").equalTo("pending").limitToFirst(limit).get();
+  if (!snap.exists()) return [];
+  return Object.values(snap.val() as Record<string, BillingClaim>);
 }

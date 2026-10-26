@@ -7,6 +7,7 @@ interface Tier {
   name: string;
   monthly: number | null;
   annualMonthly: number | null;
+  oneTime?: boolean;
   blurb: string;
   cta: string;
   highlight?: boolean;
@@ -17,10 +18,11 @@ interface Tier {
 const TIERS: Tier[] = [
   {
     name: "Trial",
-    monthly: 0,
-    annualMonthly: 0,
+    monthly: 7,
+    annualMonthly: 7,
+    oneTime: true,
     blurb: "For founders getting their first read on AI visibility.",
-    cta: "Start free trial",
+    cta: "Start 7-day trial",
     features: [
       "10 tracked buyer questions",
       "1 full scan across all providers",
@@ -29,6 +31,7 @@ const TIERS: Tier[] = [
       "AI crawler access check",
       "7-day scan history",
       "1 workspace seat",
+      "Social listening beta - 2 searches/hour",
     ],
   },
   {
@@ -47,6 +50,7 @@ const TIERS: Tier[] = [
       "Daily automatic scans, unlimited history",
       "Citation leaderboard and answer archive",
       "Team workspace - up to 5 seats",
+      "Social listening + Reddit intelligence beta - 5 searches/hour",
     ],
   },
   {
@@ -65,6 +69,7 @@ const TIERS: Tier[] = [
       "Unlimited custom providers",
       "Priority scan queue",
       "Priority support",
+      "Full beta access - social listening + Reddit intelligence",
     ],
   },
   {
@@ -81,6 +86,7 @@ const TIERS: Tier[] = [
       "Custom API rate limits and data exports",
       "Dedicated onboarding and success manager",
       "Custom terms and invoicing",
+      "Full beta access - social listening + Reddit intelligence",
     ],
   },
 ];
@@ -98,6 +104,7 @@ const COMPARISON: { label: string; values: (string | boolean)[] }[] = [
   { label: "Roles and invite links", values: [false, true, true, true] },
   { label: "Activity log (audit trail)", values: [false, false, true, true] },
   { label: "Public API access", values: [false, false, true, true] },
+  { label: "Social + Reddit intelligence (beta)", values: ["2/hour", "5/hour", "Full access", "Full access"] },
   { label: "Support", values: ["Community", "Standard", "Priority", "Dedicated manager"] },
 ];
 
@@ -113,10 +120,6 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
   const [annual, setAnnual] = useState(true);
   return (
     <div>
-      <p className="mx-auto w-fit rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-center text-sm font-medium text-emerald-200">
-        Early access: paid plans are free until billing launches - no card collected today.
-      </p>
-
       <div className="mt-6 flex items-center justify-center gap-3 text-sm">
         <span className={annual ? "text-zinc-500" : "text-zinc-200"}>Monthly</span>
         <button
@@ -155,22 +158,22 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
                   <span className="text-3xl font-bold text-white">
                     ${annual ? tier.annualMonthly : tier.monthly}
                   </span>
-                  <span className="text-sm text-zinc-500">/mo</span>
+                  <span className="text-sm text-zinc-500">{tier.oneTime ? " one-time" : "/mo"}</span>
                 </>
               )}
             </div>
-            {tier.monthly !== null && tier.monthly > 0 && (
+            {tier.oneTime && <p className="mt-1 text-xs text-zinc-500">$1/day for 7 days - no auto-renewal</p>}
+            {tier.monthly !== null && tier.monthly > 0 && !tier.oneTime && (
               <p className="mt-1 text-xs text-zinc-500">
                 {annual ? "Billed annually" : "Billed monthly"}
                 {annual && tier.unitAnchor ? ` · ${tier.unitAnchor}` : ""}
               </p>
             )}
-            {tier.monthly === 0 && <p className="mt-1 text-xs text-zinc-500">Free, no card needed</p>}
             <p className="mt-3 text-sm leading-relaxed text-zinc-400">{tier.blurb}</p>
-            {tier.name === "Pro" || tier.name === "Growth" ? (
+            {tier.name === "Trial" || tier.name === "Pro" || tier.name === "Growth" ? (
               <>
                 <Link
-                  href={`/checkout?plan=${tier.name.toLowerCase()}&interval=${annual ? "annual" : "monthly"}`}
+                  href={tier.oneTime ? "/checkout?plan=trial" : `/checkout?plan=${tier.name.toLowerCase()}&interval=${annual ? "annual" : "monthly"}`}
                   className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition ${
                     tier.highlight
                       ? "bg-white text-zinc-950 hover:bg-zinc-200"
@@ -179,9 +182,11 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
                 >
                   Buy now - no sign-in needed
                 </Link>
-                <Link href="/portal" className="mt-2 block rounded-lg py-1.5 text-center text-xs text-zinc-500 transition hover:text-zinc-300">
-                  or start free first
-                </Link>
+                {!tier.oneTime && (
+                  <Link href="/checkout?plan=trial" className="mt-2 block rounded-lg py-1.5 text-center text-xs text-zinc-500 transition hover:text-zinc-300">
+                    or start with the $7 trial
+                  </Link>
+                )}
               </>
             ) : (
               <Link

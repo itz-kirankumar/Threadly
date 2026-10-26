@@ -4,7 +4,7 @@ import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 
 import { periodEndFor, razorpayCheckoutAllowed, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
-import { hashClaimSecret, loadClaim, transitionClaim } from "@/lib/billing/claims";
+import { hashClaimSecret, loadClaim, reconcileClaimWithProvider, transitionClaim } from "@/lib/billing/claims";
 import { loadBilling, saveBilling } from "@/lib/billing/store";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 
@@ -32,9 +32,20 @@ export async function POST(request: Request) {
     if (typeof body.claimId !== "string" || typeof body.claimSecret !== "string" || !body.claimId || !body.claimSecret) {
       return Response.json({ error: "Missing claim credentials." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
-    const claim = await loadClaim(body.claimId);
+    let claim = await loadClaim(body.claimId);
     if (!claim || claim.claimTokenHash !== hashClaimSecret(body.claimSecret)) {
       return Response.json({ error: "Invalid claim link." }, { status: 404, headers: { "Cache-Control": "no-store" } });
+    }
+    // Recovery path: a payment captured while the buyer's browser never
+    // confirmed leaves the claim pending. Refresh it against the provider
+    // here so a valid claim link works without waiting for the daily sweep.
+    if (claim.status === "pending") {
+      try {
+        const status = await reconcileClaimWithProvider(claim);
+        if (status !== claim.status) claim = { ...claim, status };
+      } catch {
+        // Provider unreachable - keep the honest pending state.
+      }
     }
     if (claim.status === "claimed") {
       return Response.json({ error: "This purchase was already claimed." }, { status: 409, headers: { "Cache-Control": "no-store" } });

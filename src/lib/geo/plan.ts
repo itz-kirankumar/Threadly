@@ -1,7 +1,7 @@
 import { readData, writeData } from "@/lib/portal-db";
 import type { ScanRun } from "./types";
 
-export type PlanId = "trial" | "pro" | "growth" | "enterprise";
+export type PlanId = "none" | "trial" | "pro" | "growth" | "enterprise";
 
 export interface PlanLimits {
   /** Total full scans allowed, ever. null = unlimited. */
@@ -12,17 +12,21 @@ export interface PlanLimits {
   historyDays: number | null;
   /** Workspace seats. null = unlimited. */
   seats: number | null;
+  /** Beta social features (Reddit intel + social search): max searches per hour. null = full access. */
+  socialHourly: number | null;
 }
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
-  trial: { scans: 1, queries: 10, historyDays: 7, seats: 1 },
-  pro: { scans: null, queries: 50, historyDays: null, seats: 5 },
-  growth: { scans: null, queries: 150, historyDays: null, seats: 25 },
-  enterprise: { scans: null, queries: null, historyDays: null, seats: null },
+  none: { scans: 0, queries: 0, historyDays: 7, seats: 1, socialHourly: 0 },
+  trial: { scans: 1, queries: 10, historyDays: 7, seats: 1, socialHourly: 2 },
+  pro: { scans: null, queries: 50, historyDays: null, seats: 5, socialHourly: 5 },
+  growth: { scans: null, queries: 150, historyDays: null, seats: 25, socialHourly: null },
+  enterprise: { scans: null, queries: null, historyDays: null, seats: null, socialHourly: null },
 };
 
 export const PLAN_LABELS: Record<PlanId, string> = {
-  trial: "Free trial",
+  none: "No plan",
+  trial: "7-day trial",
   pro: "Pro",
   growth: "Growth",
   enterprise: "Enterprise",
@@ -38,16 +42,17 @@ export async function loadPlan(email?: string): Promise<PlanId> {
     try {
       const billing = await readData<{ provider?: string; status?: string; periodEnd?: string | null }>("geo/billing");
       if (
-        stored !== "trial" &&
         billing?.provider === "razorpay" &&
         billing.status === "active" &&
         billing.periodEnd &&
         Date.parse(billing.periodEnd) < Date.now()
       ) {
-        await savePlan("trial");
+        // Paid terms (trial included) lapse to no-plan: the trial is a paid
+        // product, so an expired term never falls back to free access.
+        await savePlan("none");
         const { writeData: write } = await import("@/lib/portal-db");
         await write("geo/billing", { ...billing, status: "ended", updatedAt: new Date().toISOString() });
-        return "trial";
+        return "none";
       }
     } catch {
       // billing record unreadable - keep the stored plan
@@ -59,7 +64,8 @@ export async function loadPlan(email?: string): Promise<PlanId> {
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
   if (email && exempt.includes(email.toLowerCase())) return "growth";
-  return "trial";
+  // New workspaces start with no plan: the 7-day trial is a paid product.
+  return "none";
 }
 
 export async function savePlan(plan: PlanId): Promise<void> {

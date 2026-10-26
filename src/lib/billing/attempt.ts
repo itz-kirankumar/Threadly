@@ -1,12 +1,12 @@
 import type { BillingProvider } from "./store";
-import type { BillingInterval, PaidPlanId } from "./dodo";
+import type { BillingInterval, RazorpayPlanId } from "./dodo";
 
 export type AttemptState = "pending" | "issued" | "uncertain" | "failed" | "expired" | "reconciled";
 
 export interface CheckoutAttempt {
   id: string;
   provider: BillingProvider;
-  plan: PaidPlanId;
+  plan: RazorpayPlanId;
   interval: BillingInterval;
   state: AttemptState;
   checkoutUrl: string | null;

@@ -38,7 +38,9 @@ export async function POST(request: Request) {
       const scanCap = PLAN_LIMITS[plan].scans;
       if (scanCap !== null && (await loadRunCount()) >= scanCap) {
         return planBlockResponse(
-          `Your free trial includes ${scanCap} full scan - and it is used. Upgrade to Pro or Growth for unlimited scans (paid plans are free during early access).`,
+          plan === "none"
+            ? "Your workspace has no active plan - start the 7-day trial for $7 or choose a paid plan to run scans."
+            : `Your trial includes ${scanCap} full scan - and it is used. Upgrade to Pro or Growth for unlimited scans.`,
           plan,
         );
       }

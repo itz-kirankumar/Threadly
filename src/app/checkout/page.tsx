@@ -28,18 +28,22 @@ function loadRazorpayScript(): Promise<void> {
 const PLANS: Record<string, { name: string; monthly: number; annual: number }> = {
   pro: { name: "Pro", monthly: 49, annual: 468 },
   growth: { name: "Growth", monthly: 149, annual: 1428 },
+  trial: { name: "7-Day Trial", monthly: 7, annual: 7 },
 };
 
 function CheckoutInner() {
   const params = useSearchParams();
-  const planId = params.get("plan") === "growth" ? "growth" : "pro";
-  const interval = params.get("interval") === "monthly" ? "monthly" : "annual";
+  const requestedPlan = params.get("plan");
+  const planId = requestedPlan === "growth" || requestedPlan === "trial" ? requestedPlan : "pro";
+  const isTrial = planId === "trial";
+  const interval = isTrial ? "weekly" : params.get("interval") === "monthly" ? "monthly" : "annual";
   const plan = PLANS[planId];
   const price = interval === "annual" ? plan.annual : plan.monthly;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testMode, setTestMode] = useState<boolean | null>(null);
   const [activePlanLabel, setActivePlanLabel] = useState<string | null>(null);
+  const [claimRef, setClaimRef] = useState<string | null>(null);
   const [checkingPlan, setCheckingPlan] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
@@ -110,6 +114,15 @@ function CheckoutInner() {
       }
       if (!res.ok) throw new Error(order.error || "Could not start checkout.");
       setTestMode(Boolean(order.testMode));
+      // Persist purchase authority immediately, BEFORE the modal opens: if the
+      // browser dies between capture and confirm, this browser can still
+      // recover the purchase through the claim page.
+      try {
+        sessionStorage.setItem("threadly_claim", JSON.stringify({ claimId: order.claimId, claimSecret: order.claimSecret }));
+        setClaimRef(order.claimId);
+      } catch {
+        // Storage unavailable - the post-confirm redirect still carries recovery.
+      }
       await loadRazorpayScript();
       if (!window.Razorpay) throw new Error("Could not load the checkout.");
       const rzp = new window.Razorpay({
@@ -157,12 +170,12 @@ function CheckoutInner() {
     <div className="flex min-h-screen flex-col">
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
       <Link href="/" className="mb-8 text-sm text-zinc-500 hover:text-zinc-300">&larr; Threadly</Link>
-      <h1 className="text-2xl font-semibold text-white">{plan.name} - {interval === "annual" ? "Annual" : "Monthly"}</h1>
-      <p className="mt-1 text-3xl font-bold text-white">${price}<span className="text-sm font-normal text-zinc-500"> {interval === "annual" ? "/year" : "/month"}</span></p>
+      <h1 className="text-2xl font-semibold text-white">{isTrial ? plan.name : `${plan.name} - ${interval === "annual" ? "Annual" : "Monthly"}`}</h1>
+      <p className="mt-1 text-3xl font-bold text-white">${price}<span className="text-sm font-normal text-zinc-500"> {isTrial ? "one-time - 7 days" : interval === "annual" ? "/year" : "/month"}</span></p>
       <div className="mt-6 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
         Enter the email and mobile number of the Threadly account you want this plan linked to. Use these same details when signing in or creating your account.
       </div>
-      <p className="mt-3 text-xs text-zinc-500">One-time purchase for the selected term. No sign-in needed to pay - you link the plan to your account after payment.</p>
+      <p className="mt-3 text-xs text-zinc-500">One-time purchase for the selected term - no auto-renewal. No sign-in needed to pay: you link the plan to your account after payment.</p>
       {testMode && (
         <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-200">
           TEST MODE - no real charges. Payments run against the Razorpay sandbox, and while launch is prepared a purchase can only be linked to pre-approved test accounts.
@@ -196,6 +209,11 @@ function CheckoutInner() {
         >
           {busy ? "Opening secure checkout…" : checkingPlan ? "Checking your account…" : `Pay $${price} securely`}
         </button>
+      )}
+      {claimRef && (
+        <p className="mt-3 text-[11px] text-zinc-500">
+          Purchase reference: <span className="font-mono text-zinc-300">{claimRef}</span> - keep it to recover this purchase if anything interrupts the payment.
+        </p>
       )}
       <p className="mt-3 text-center text-[11px] text-zinc-600">
         Payments by Razorpay.
