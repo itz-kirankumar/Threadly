@@ -60,10 +60,13 @@ export async function POST(request: Request) {
           // email must never fail a scan
         }
       }
+      const failedProviders = Object.entries(run.providerStatus)
+        .filter(([, st]) => st === "failed")
+        .map(([id]) => `${id} (${run.providerErrors?.[id as keyof typeof run.providerErrors] ?? "unknown"})`);
       await appendAudit({
         actor: access.identity.email,
         action: "scan.completed",
-        detail: `${scannedQueries.length} questions, mention rate ${snapshot.mentionRate}%`,
+        detail: `${scannedQueries.length} questions, mention rate ${snapshot.mentionRate}%${failedProviders.length ? ` - provider failed: ${failedProviders.join(", ")}` : ""}`,
       });
       return Response.json({ run, results, snapshot });
     });

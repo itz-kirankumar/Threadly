@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PROVIDER_SCANNERS, scanCustomProvider } from "./providers";
 import { searchWeb, tavilyConfigured } from "./tavily";
+import { classifyProviderError } from "./provider-error";
 import { decryptSecret } from "./crypto";
 import type { KeySettings } from "./store";
 import { analyzeAnswer } from "./extract";
@@ -165,6 +166,15 @@ export async function runScan(
     throw new Error(`No AI providers were reachable this run (${detail}). Try again shortly.`);
   }
   for (const provider of reachable) run.providerStatus[provider.id] = "scanned";
+  // Partial failures stay visible: a provider that was configured but produced
+  // no successful cell is recorded as failed with a sanitized error class, so
+  // scans are never silently labeled complete over dropped providers.
+  for (const provider of active) {
+    if (successCount.get(provider.id)) continue;
+    run.providerStatus[provider.id] = "failed";
+    run.providerErrors = run.providerErrors ?? {};
+    run.providerErrors[provider.id] = classifyProviderError(firstError.get(provider.id) ?? "");
+  }
 
   const byQuery = new Map<string, ProviderResult[]>();
   for (const cell of cells) {

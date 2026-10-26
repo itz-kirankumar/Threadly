@@ -95,6 +95,9 @@ export interface ScanRun {
   finishedAt: string;
   queryCount: number;
   providerStatus: Record<GeoProviderId, ProviderStatus>;
+  // Sanitized failure class per failed provider (see provider-error.ts). Raw
+  // provider error messages are never stored.
+  providerErrors?: Partial<Record<GeoProviderId, string>>;
 }
 
 export interface ProviderMetrics {

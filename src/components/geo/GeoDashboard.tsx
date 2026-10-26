@@ -5,7 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { signOut, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
-import type { MetricsSnapshot, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
+import type { GeoProviderId, MetricsSnapshot, QueryResult, ScanRun, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
+import { PROVIDER_ERROR_LABELS, type ProviderErrorClass } from "@/lib/geo/provider-error";
 import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
 import TrendChart from "./TrendChart";
@@ -28,6 +29,12 @@ import {
   formatDateTime,
   labelForProvider,
 } from "./helpers";
+
+function providerErrorTitle(run: ScanRun, id: string): string {
+  const cls = run.providerErrors?.[id as GeoProviderId] as ProviderErrorClass | undefined;
+  const label = cls ? PROVIDER_ERROR_LABELS[cls] ?? cls : "unknown error";
+  return `Scan failed for this provider: ${label}`;
+}
 
 type Tab = "overview" | "queries" | "citations" | "runs" | "social" | "settings";
 
@@ -729,12 +736,26 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
                     <span className="mr-2 inline-block text-zinc-500">{expandedRunId === run.id ? "▾" : "▸"}</span>
                     {formatDateTime(run.startedAt)}
                   </p>
-                  <p className="text-xs text-zinc-500">{run.queryCount} questions × {Object.values(run.providerStatus).filter((status) => status === "scanned").length || providerOrder.length} providers</p>
+                  <p className="text-xs text-zinc-500">
+                    {run.queryCount} questions × {Object.values(run.providerStatus).filter((status) => status === "scanned").length || providerOrder.length} providers
+                    {Object.values(run.providerStatus).filter((status) => status === "failed").length > 0 && (
+                      <span className="text-amber-400"> · {Object.values(run.providerStatus).filter((status) => status === "failed").length} failed</span>
+                    )}
+                  </p>
                 </div>
                 <div className="flex gap-1.5">
                   {Object.keys(run.providerStatus).filter((id) => run.providerStatus[id] === "scanned").map((id) => (
                     <span key={id} className={`rounded-full border px-2 py-0.5 text-xs ${colorForProvider(id)}`}>
                       {labelForProvider(id, providerLabels)} ✓
+                    </span>
+                  ))}
+                  {Object.keys(run.providerStatus).filter((id) => run.providerStatus[id] === "failed").map((id) => (
+                    <span
+                      key={id}
+                      title={providerErrorTitle(run, id)}
+                      className="rounded-full border border-amber-400/40 px-2 py-0.5 text-xs text-amber-300"
+                    >
+                      {labelForProvider(id, providerLabels)} ✗
                     </span>
                   ))}
                 </div>
@@ -743,6 +764,15 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
                 const detail = runDetails[run.id];
                 return (
                   <div className="border-t border-white/10 px-2 py-3">
+                    {Object.keys(run.providerStatus).filter((id) => run.providerStatus[id] === "failed").length > 0 && (
+                      <p className="mx-3 mb-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                        {Object.keys(run.providerStatus)
+                          .filter((id) => run.providerStatus[id] === "failed")
+                          .map((id) => `${labelForProvider(id, providerLabels)} failed (${providerErrorTitle(run, id).replace("Scan failed for this provider: ", "")})`)
+                          .join(" · ")}
+                        {" - this scan's metrics cover the remaining providers only."}
+                      </p>
+                    )}
                     {!detail || detail === "loading" ? (
                       <p className="px-3 py-6 text-center text-xs text-zinc-500">Loading scan results…</p>
                     ) : detail === "error" ? (
