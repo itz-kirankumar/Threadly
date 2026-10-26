@@ -419,3 +419,49 @@ test("reservationTransition: first claim reserves, same claim re-enters idempote
   // Same claim from the same identity recovers after a partial attach.
   assert.equal(reservationTransition({ claimId: "clm_A" }, "clm_A", "uid1").action, "yours");
 });
+
+test("orphan reservation: abandoned claim (paid_unclaimed, no billing grant) is reclaimable", async () => {
+  const { classifyReservationOwner, reclaimDecision } = await import("../src/lib/billing/claims.ts");
+  // Crash after reservations, before the billing transaction: claim exists but no grant.
+  assert.equal(classifyReservationOwner({ status: "paid_unclaimed" }, null, "clm_A"), "orphan");
+  // Claim node vanished entirely: orphan.
+  assert.equal(classifyReservationOwner(null, null, "clm_A"), "orphan");
+  // Expired claim, no grant: orphan.
+  assert.equal(classifyReservationOwner({ status: "expired" }, null, "clm_A"), "orphan");
+  const d = reclaimDecision({ claimId: "clm_A", uid: "uid1" }, "clm_A", { claimId: "clm_B", uid: "uid2", at: "2026-10-26T01:00:00.000Z" });
+  assert.equal(d.action, "reclaim");
+  assert.equal(d.value.claimId, "clm_B");
+});
+
+test("consumed identity is never released: claimed marker OR live billing grant", async () => {
+  const { classifyReservationOwner } = await import("../src/lib/billing/claims.ts");
+  // Grant committed but marker failed (crash before transitionClaim): billing carries the claimId.
+  assert.equal(classifyReservationOwner({ status: "paid_unclaimed" }, { claimId: "clm_A", status: "active" }, "clm_A"), "consumed");
+  // Marker applied: claimed.
+  assert.equal(classifyReservationOwner({ status: "claimed" }, null, "clm_A"), "consumed");
+  // Grace still holds the grant.
+  assert.equal(classifyReservationOwner({ status: "paid_unclaimed" }, { claimId: "clm_A", status: "grace" }, "clm_A"), "consumed");
+  // An ended grant from that claim: the promo WAS consumed - billing truth via promoConsumed, but this reservation is spent either way; billing no longer active so classify by claim marker only.
+  assert.equal(classifyReservationOwner({ status: "claimed" }, { claimId: "clm_A", status: "ended" }, "clm_A"), "consumed");
+});
+
+test("failure injection: cleanup racing a retry - only the exact verified orphan is replaced", async () => {
+  const { reclaimDecision, reservationTransition } = await import("../src/lib/billing/claims.ts");
+  const orphan = { claimId: "clm_A", uid: "uid1" };
+  // Retry by the ORIGINAL owner lands first: value now belongs to clm_A again (same) - a cleaner expecting clm_A sees "yours" semantics preserved.
+  assert.equal(reservationTransition(orphan, "clm_A", "uid1").action, "yours");
+  // A second reclaimer that verified clm_A loses the race once clm_B already reclaimed.
+  const afterReclaim = { claimId: "clm_B", uid: "uid2" };
+  const d = reclaimDecision(afterReclaim, "clm_A", { claimId: "clm_C", uid: "uid3", at: "2026-10-26T02:00:00.000Z" });
+  assert.equal(d.action, "busy");
+});
+
+test("failure injection: crash after first reservation - same-claim retry continues, foreign claim reclaims orphan", async () => {
+  const { reservationTransition, classifyReservationOwner } = await import("../src/lib/billing/claims.ts");
+  // clm_A reserved email, crashed before phone reservation: email=yours on retry, phone free to reserve.
+  const emailNode = { claimId: "clm_A", uid: "uid1" };
+  assert.equal(reservationTransition(emailNode, "clm_A", "uid1").action, "yours");
+  assert.equal(reservationTransition(null, "clm_A", "uid1").action, "reserve");
+  // A different claim hitting the orphaned email node: truth says orphan (claim never claimed, no billing) -> reclaimable.
+  assert.equal(classifyReservationOwner({ status: "paid_unclaimed" }, null, "clm_A"), "orphan");
+});

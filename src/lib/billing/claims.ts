@@ -204,12 +204,59 @@ export async function reservePromoIdentity(
 ): Promise<"reserved" | "yours" | "taken"> {
   const ref = (await db()).ref(`${PROMO_ID_ROOT}/${promoIdentityKey(kind, value)}`);
   let outcome: "reserved" | "yours" | "taken" = "taken";
-  const tx = await ref.transaction((current) => {
+  await ref.transaction((current) => {
     const t = reservationTransition(current, claimId, uid);
     outcome = t.action === "reserve" ? "reserved" : t.action;
     return t.action === "reserve" ? t.value : undefined;
   });
-  return tx.committed ? outcome : outcome;
+  if (outcome !== "taken") return outcome;
+  // Taken: verify the owner against billing/claim truth before giving up.
+  // An orphaned reservation (claim abandoned, expired, or never committed)
+  // is reclaimed atomically; a genuinely consumed identity stays taken.
+  const snap = await ref.get();
+  const current = snap.val() as { claimId?: string; uid?: string } | null;
+  if (!current?.claimId || !current.uid) return "taken"; // raced: someone else just moved it
+  const [ownerClaim, ownerBilling] = await Promise.all([
+    loadClaim(current.claimId).catch(() => null),
+    (await db()).ref(`users/${current.uid}/geo/billing`).get().then((b) => b.val() as { claimId?: string | null; status?: string } | null).catch(() => null),
+  ]);
+  if (classifyReservationOwner(ownerClaim, ownerBilling, current.claimId) === "consumed") return "taken";
+  let reclaimed = false;
+  await ref.transaction((latest) => {
+    const d = reclaimDecision(latest, current.claimId as string, { claimId, uid, at: new Date().toISOString() });
+    reclaimed = d.action === "reclaim";
+    return d.action === "reclaim" ? d.value : undefined;
+  });
+  return reclaimed ? "reserved" : "taken";
+}
+
+/** Truth check on a reservation's owner: is the identity really consumed?
+ * Consumed ONLY when the granting claim is marked claimed or the owner's
+ * workspace billing still carries that claim's active grant. An expired,
+ * unclaimed, or never-committed reservation is an orphan and may be
+ * reclaimed - a committed/consumed identity is never released. */
+export function classifyReservationOwner(
+  claim: { status?: string } | null,
+  billing: { claimId?: string | null; status?: string } | null,
+  ownerClaimId: string,
+): "orphan" | "consumed" {
+  if (claim?.status === "claimed") return "consumed";
+  if (billing && billing.claimId === ownerClaimId && (billing.status === "active" || billing.status === "grace")) {
+    return "consumed";
+  }
+  return "orphan";
+}
+
+/** Reclaim decision applied inside the reservation transaction: replace the
+ * value only if it is still the exact orphan we verified - a concurrent
+ * reclaim or a fresh reservation by someone else must not be clobbered. */
+export function reclaimDecision(
+  current: { claimId?: string } | null,
+  expectedOrphanClaimId: string,
+  next: { claimId: string; uid: string; at: string },
+): { action: "reclaim"; value: typeof next } | { action: "busy" } {
+  if (current && current.claimId === expectedOrphanClaimId) return { action: "reclaim", value: next };
+  return { action: "busy" };
 }
 
 /** Best-effort release of OUR reservation only (claimId must match), used
