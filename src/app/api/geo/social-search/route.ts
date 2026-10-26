@@ -64,17 +64,6 @@ export async function POST(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "view");
     const user = access.identity;
-    if (user.idToken !== "demo-token") {
-      const plan = await loadPlan(user.email);
-      const cap = PLAN_LIMITS[plan].socialHourly;
-      if (cap === 0) {
-        return planBlockResponse("Social search is part of the paid plans - start the 7-day trial for $7 to use it.", plan);
-      }
-      const limit = await checkRateLimit(`social:${user.uid}`, cap ?? 10, 3600, user);
-      if (limit && !limit.allowed) {
-        return Response.json({ error: "Too many searches. Try again shortly." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
-      }
-    }
     const body = (await request.json().catch(() => ({}))) as { query?: string; sources?: string[] };
     const query = (body.query ?? "").trim();
     if (!query) return Response.json({ error: "Enter a search query." }, { status: 400 });
@@ -85,6 +74,18 @@ export async function POST(request: Request) {
     if (!apiKey) return Response.json({ error: "Search backend is not configured." }, { status: 503 });
 
     return await inWorkspace(access, async () => {
+      // Plan reads need the workspace context, so gating happens inside it.
+      if (user.idToken !== "demo-token") {
+        const plan = await loadPlan(user.email);
+        const cap = PLAN_LIMITS[plan].socialHourly;
+        if (cap === 0) {
+          return planBlockResponse("Social search is part of the paid plans - start the 7-day trial for $7 to use it.", plan);
+        }
+        const limit = await checkRateLimit(`social:${user.uid}`, cap ?? 10, 3600, user);
+        if (limit && !limit.allowed) {
+          return Response.json({ error: "Too many searches. Try again shortly." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
+        }
+      }
       const settled = await Promise.allSettled(selected.map((source) => searchSource(source, query, apiKey)));
       const results: SocialResult[] = [];
       const sourceStatus: Record<SourceId, { count: number; error?: string }> = {} as never;
