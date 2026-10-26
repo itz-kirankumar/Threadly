@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import ClaimView from "@/components/ClaimView";
 
@@ -30,7 +31,20 @@ const STATES: { label: string; props: Parameters<typeof ClaimView>[0] }[] = [
   { label: "5 - done", props: { status: "done", plan: "pro", periodEnd: "2027-10-26T00:00:00.000Z", email: "person@example.com" } },
 ];
 
-export default function ClaimStatesPreview() {
+export default async function ClaimStatesPreview({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
+  const { state } = await searchParams;
+  const idx = Number.parseInt(state ?? "", 10);
+  if (idx >= 1 && idx <= STATES.length) {
+    const one = STATES[idx - 1];
+    return (
+      <div>
+        <p className="bg-amber-500/10 px-6 py-2 text-center text-xs text-amber-200">
+          UI preview fixture {one.label} - no live data, no actions.
+        </p>
+        <ClaimView {...one.props} />
+      </div>
+    );
+  }
   return (
     <div className="divide-y divide-zinc-800">
       <p className="bg-amber-500/10 px-6 py-2 text-center text-xs text-amber-200">
