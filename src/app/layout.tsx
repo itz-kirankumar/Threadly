@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
+import PostHogProvider from "@/components/PostHogProvider";
 import { Inter, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import CookieConsent from "@/components/CookieConsent";
@@ -76,6 +77,7 @@ export default function RootLayout({
         {children}
         <CookieConsent />
         <Analytics />
+        <PostHogProvider />
         {/* Microsoft Clarity (project z3bzd50bsc) - visit analytics for the
             Shipped course tracking receipt. Public project id, not a secret. */}
         <script
