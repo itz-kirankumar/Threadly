@@ -33,8 +33,8 @@ export default function ContactPage() {
                 <a href="mailto:hello@gothreadly.live" className="text-brand-violet underline underline-offset-2">
                   hello@gothreadly.live
                 </a>
-                . For anything about a payment, include the payment reference from your receipt or checkout so the
-                review can start immediately.
+                . For anything about a payment, include the payment reference from your receipt or checkout so we can
+                match it to your payment.
               </p>
             </section>
 

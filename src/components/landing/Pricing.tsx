@@ -31,7 +31,7 @@ const TIERS: Tier[] = [
       "AI crawler access check",
       "7-day scan history",
       "1 workspace seat",
-      "Social listening beta - 2 searches/hour",
+      "Social listening + Reddit intelligence (beta)",
     ],
   },
   {
@@ -50,7 +50,7 @@ const TIERS: Tier[] = [
       "Daily automatic scans, unlimited history",
       "Citation leaderboard and answer archive",
       "Team workspace - up to 5 seats",
-      "Social listening + Reddit intelligence beta - 5 searches/hour",
+      "Social listening + Reddit intelligence (beta)",
     ],
   },
   {
@@ -104,7 +104,7 @@ const COMPARISON: { label: string; values: (string | boolean)[] }[] = [
   { label: "Roles and invite links", values: [false, true, true, true] },
   { label: "Activity log (audit trail)", values: [false, false, true, true] },
   { label: "Public API access", values: [false, false, true, true] },
-  { label: "Social + Reddit intelligence (beta)", values: ["2/hour", "5/hour", "Full access", "Full access"] },
+  { label: "Social + Reddit intelligence (beta)", values: ["Included", "Included", "Full access", "Full access"] },
   { label: "Support", values: ["Community", "Standard", "Priority", "Dedicated manager"] },
 ];
 

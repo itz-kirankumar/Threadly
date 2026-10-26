@@ -106,7 +106,7 @@ export type ClaimReconcileDecision =
   | { action: "none" };
 
 // Pure reconcile decision, unit-tested: a claim only advances from PROVIDER
-// evidence (order paid + a captured/authorized payment of the exact price
+// evidence (order paid + a captured payment of the exact price
 // bound to the same order). Anything short of that changes nothing - an
 // unpaid order keeps the claim pending; a wrong amount pauses it for review.
 export function decideClaimReconcile(
@@ -116,7 +116,9 @@ export function decideClaimReconcile(
 ): ClaimReconcileDecision {
   if (claim.status !== "pending") return { action: "none" };
   if (!order || order.status !== "paid") return { action: "none" };
-  if (!payment || (payment.status !== "captured" && payment.status !== "authorized")) return { action: "none" };
+  // Only "captured" counts: an authorized-but-uncaptured payment can still
+  // be reversed, so it must never feed an entitlement grant.
+  if (!payment || payment.status !== "captured") return { action: "none" };
   if (payment.order_id !== claim.orderId) return { action: "none" };
   if (payment.amount !== claim.amount || payment.currency !== claim.currency) return { action: "pause_mismatch" };
   return {
@@ -138,7 +140,7 @@ export async function reconcileClaimWithProvider(claim: BillingClaim): Promise<C
   const order = await razorpayFetchOrder(claim.orderId);
   if (order.status !== "paid") return claim.status;
   const payments = await razorpayFetchOrderPayments(claim.orderId);
-  const payment = payments.find((p) => p.status === "captured" || p.status === "authorized") ?? null;
+  const payment = payments.find((p) => p.status === "captured") ?? null;
   const decision = decideClaimReconcile(claim, order, payment);
   if (decision.action === "none") return claim.status;
   const t = await transitionClaim(claim.id, ["pending"], () =>
