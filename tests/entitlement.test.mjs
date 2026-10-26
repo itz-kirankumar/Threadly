@@ -352,11 +352,11 @@ test("planAtLeast enforces the tier ordering used by feature gates", async () =>
 
 test("decideClaimGrant: concurrent promo claims for one workspace have exactly one winner", async () => {
   const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
-  const promoGrant = (orderId) => ({ provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId, customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
+  const promoGrant = (claimId) => ({ provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", claimId, customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
   // Two claims race on an empty workspace; the transaction applies them in some order.
-  const first = decideClaimGrant(null, promoGrant("promo_A"));
+  const first = decideClaimGrant(null, promoGrant("clm_A"));
   assert.equal(first.ok, true);
-  const second = decideClaimGrant(first.record, promoGrant("promo_B"));
+  const second = decideClaimGrant(first.record, promoGrant("clm_B"));
   assert.equal(second.ok, false);
   assert.equal(second.reason, "active_plan");
   // Loser retry after the winner's term: winner still active -> still blocked, term untouched.
@@ -366,20 +366,20 @@ test("decideClaimGrant: concurrent promo claims for one workspace have exactly o
 test("decideClaimGrant: promo can never overwrite or extend a paid plan", async () => {
   const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
   const paid = { provider: "razorpay", plan: "pro", interval: "monthly", status: "active", subscriptionId: null, customerId: null, customerEmail: "a@b.co", mode: "live", updatedAt: "2026-10-01T00:00:00Z", periodEnd: "2026-11-01T00:00:00Z", orderId: "order_paid", paidThisTerm: 4900 };
-  const res = decideClaimGrant(paid, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
+  const res = decideClaimGrant(paid, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_A", claimId: "clm_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
   assert.equal(res.ok, false);
   assert.equal(res.reason, "active_plan");
   // Grace also blocks (dunning customer keeps their plan).
-  assert.equal(decideClaimGrant({ ...paid, status: "grace" }, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date() }).ok, false);
+  assert.equal(decideClaimGrant({ ...paid, status: "grace" }, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_A", claimId: "clm_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date() }).ok, false);
 });
 
 test("decideClaimGrant: lapsed promo blocks a second promo but allows a paid purchase", async () => {
   const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
   const lapsedPromo = { provider: "promo", plan: "trial", interval: "weekly", status: "ended", subscriptionId: null, customerId: null, customerEmail: "a@b.co", mode: "live", updatedAt: "2026-10-20T00:00:00Z", periodEnd: "2026-10-25T00:00:00Z", orderId: "promo_GOTHREADLY100", paidThisTerm: 0, promoConsumed: true };
-  const again = decideClaimGrant(lapsedPromo, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
+  const again = decideClaimGrant(lapsedPromo, { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", claimId: "clm_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
   assert.equal(again.ok, false);
   assert.equal(again.reason, "promo_consumed");
-  const paid = decideClaimGrant(lapsedPromo, { provider: "razorpay", plan: "pro", interval: "monthly", amount: 4900, orderId: "order_paid", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-25T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
+  const paid = decideClaimGrant(lapsedPromo, { provider: "razorpay", plan: "pro", interval: "monthly", amount: 4900, orderId: "order_paid", claimId: "clm_paid", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-25T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") });
   assert.equal(paid.ok, true);
   assert.equal(paid.record.promoConsumed, true); // consumption survives the upgrade
   assert.equal(paid.record.status, "active");
@@ -390,4 +390,32 @@ test("decideTransition preserves promoConsumed across renewals and switches", as
   const current = { provider: "dodo", plan: "pro", interval: "monthly", status: "active", subscriptionId: "sub_1", customerId: "cus_1", customerEmail: "a@b.co", mode: "live", updatedAt: "2026-10-01T00:00:00Z", promoConsumed: true };
   const renewal = decideTransition(current, { provider: "dodo", plan: "pro", interval: "monthly", status: "active", subscriptionId: "sub_1", customerId: "cus_1", customerEmail: "a@b.co", mode: "live", eventId: "evt2", eventAt: "2026-10-26T10:00:00.000Z" });
   assert.equal(renewal.record.promoConsumed, true);
+});
+
+test("decideClaimGrant: same-claim retry after partial attach is idempotent - record untouched, term not reset", async () => {
+  const { decideClaimGrant } = await import("../src/lib/billing/entitlement.ts");
+  const grant = { provider: "promo", plan: "trial", interval: "weekly", amount: 0, orderId: "promo_GOTHREADLY100", claimId: "clm_A", customerEmail: "a@b.co", mode: "live", periodEnd: "2026-11-02T00:00:00.000Z", now: new Date("2026-10-26T00:00:00Z") };
+  const first = decideClaimGrant(null, grant);
+  assert.equal(first.ok, true);
+  // Retry with a LATER clock (recovery attempt minutes later): same record back, periodEnd preserved.
+  const retry = decideClaimGrant(first.record, { ...grant, now: new Date("2026-10-26T01:00:00Z") });
+  assert.equal(retry.ok, true);
+  assert.equal(retry.record.periodEnd, "2026-11-02T00:00:00.000Z");
+  assert.equal(retry.record.updatedAt, first.record.updatedAt);
+  assert.equal(retry.record.claimId, "clm_A");
+  // A DIFFERENT claim for the same workspace still aborts.
+  const other = decideClaimGrant(first.record, { ...grant, claimId: "clm_B" });
+  assert.equal(other.ok, false);
+  assert.equal(other.reason, "active_plan");
+});
+
+test("reservationTransition: first claim reserves, same claim re-enters idempotently, other claim is taken", async () => {
+  const { reservationTransition } = await import("../src/lib/billing/claims.ts");
+  const first = reservationTransition(null, "clm_A", "uid1", new Date("2026-10-26T00:00:00Z"));
+  assert.equal(first.action, "reserve");
+  assert.equal(first.value.claimId, "clm_A");
+  assert.equal(reservationTransition(first.value, "clm_A", "uid1").action, "yours");
+  assert.equal(reservationTransition(first.value, "clm_B", "uid2").action, "taken");
+  // Same claim from the same identity recovers after a partial attach.
+  assert.equal(reservationTransition({ claimId: "clm_A" }, "clm_A", "uid1").action, "yours");
 });

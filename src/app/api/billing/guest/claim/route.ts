@@ -4,7 +4,7 @@ import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
 
 import { periodEndFor, razorpayCheckoutAllowed, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
-import { hashClaimSecret, loadClaim, reconcileClaimWithProvider, transitionClaim } from "@/lib/billing/claims";
+import { hashClaimSecret, loadClaim, reconcileClaimWithProvider, releasePromoIdentity, reservePromoIdentity, transitionClaim } from "@/lib/billing/claims";
 import { decideClaimGrant } from "@/lib/billing/entitlement";
 import { getAdminDatabase } from "@/lib/geo/admin-store";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
@@ -101,6 +101,31 @@ export async function POST(request: Request) {
     // untouched (still claimable after the winner's term ends). An existing
     // active/grace plan is never overwritten, and a lapsed promo blocks a
     // second promo via promoConsumed while still allowing paid purchases.
+    // Promo consumption bound to VERIFIED identity, atomically, across
+    // accounts: reserve the claimant's verified email + phone BEFORE granting.
+    // Reservations keyed by this claim are idempotent (a retry continues) and
+    // released if the grant aborts, so nothing leaks eligibility.
+    let reservedEmail = false;
+    let reservedPhone = false;
+    if (claim.provider === "promo") {
+      const emailRes = await reservePromoIdentity("email", claimantEmail, claim.id, access.workspaceUid);
+      if (emailRes === "taken") {
+        return Response.json(
+          { error: "This promotion has already been redeemed with this email address, so this claim has not been linked - your existing plan is unchanged." },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      reservedEmail = emailRes === "reserved";
+      const phoneRes = await reservePromoIdentity("phone", accountPhone as string, claim.id, access.workspaceUid);
+      if (phoneRes === "taken") {
+        if (reservedEmail) await releasePromoIdentity("email", claimantEmail, claim.id).catch(() => {});
+        return Response.json(
+          { error: "This promotion has already been redeemed with this mobile number, so this claim has not been linked - your existing plan is unchanged." },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      reservedPhone = phoneRes === "reserved";
+    }
     const database = await getAdminDatabase();
     if (!database) {
       return Response.json({ error: "Account status is temporarily unavailable - nothing was claimed. Try again shortly.", code: "status_unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
@@ -114,6 +139,7 @@ export async function POST(request: Request) {
         interval: claim.interval,
         amount: claim.amount,
         orderId: claim.orderId,
+        claimId: claim.id,
         customerEmail: access.identity.email || null,
         mode: claim.provider === "promo" ? "live" : razorpayTestMode() ? "test" : "live",
         periodEnd,
@@ -126,6 +152,8 @@ export async function POST(request: Request) {
       return decision.record;
     });
     if (!tx.committed) {
+      if (reservedEmail) await releasePromoIdentity("email", claimantEmail, claim.id).catch(() => {});
+      if (reservedPhone) await releasePromoIdentity("phone", accountPhone as string, claim.id).catch(() => {});
       if (abortReason === "promo_consumed") {
         return Response.json(
           { error: "This promotion has already been redeemed on this account, so this claim has not been linked - your existing plan is unchanged." },

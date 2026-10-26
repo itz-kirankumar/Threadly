@@ -18,6 +18,8 @@ export interface BillingRecord {
   /** Set when a promotional trial was granted to this workspace: one promo,
    * ever, even after the promo term ends. Carried across later plan changes. */
   promoConsumed?: boolean;
+  /** Guest claim that granted the current term: makes same-claim retries idempotent. */
+  claimId?: string | null;
   /** Dodo subscriptions: provider-reported next charge and scheduled cancel. */
   nextBillingDate?: string | null;
   cancelAtPeriodEnd?: boolean | null;

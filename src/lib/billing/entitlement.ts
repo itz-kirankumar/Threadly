@@ -112,12 +112,20 @@ export function decideClaimGrant(
     interval: BillingRecord["interval"];
     amount: number;
     orderId: string;
+    claimId: string;
     customerEmail: string | null;
     mode: "test" | "live";
     periodEnd: string | null;
     now: Date;
   },
 ): ClaimGrantDecision {
+  // Same claim already granted this term: idempotent no-op. A retry after a
+  // partial attach (billing committed, plan record or claim marker failed)
+  // completes the remaining steps instead of being rejected as active_plan,
+  // and the committed record - including its periodEnd - is never rewritten.
+  if (current && current.claimId === grant.claimId && current.status === "active") {
+    return { ok: true, record: current };
+  }
   if (current && (current.status === "active" || current.status === "grace")) {
     return { ok: false, reason: "active_plan" };
   }
@@ -139,6 +147,7 @@ export function decideClaimGrant(
       periodEnd: grant.periodEnd,
       orderId: grant.orderId,
       paidThisTerm: grant.amount,
+      claimId: grant.claimId,
       promoConsumed: grant.provider === "promo" ? true : current?.promoConsumed || undefined,
     },
   };

@@ -168,3 +168,53 @@ export async function listOpenClaims(limit = 25): Promise<BillingClaim[]> {
 export async function listPromoClaims(): Promise<BillingClaim[]> {
   return (await listAllClaims()).filter((c) => c.provider === "promo");
 }
+
+// ---- promo identity reservations (verified identity, transaction-safe) ----
+// One promo per verified email / verified phone, enforced atomically across
+// accounts: the key is derived from the VERIFIED claimant identity (never
+// from unauthenticated redeem input) and the value binds the claim that owns
+// the reservation, so retries and partial-attach recovery are idempotent.
+const PROMO_ID_ROOT = "geo/promoIdentities";
+
+export type ReservationTransition =
+  | { action: "reserve"; value: { claimId: string; uid: string; at: string } }
+  | { action: "yours" }
+  | { action: "taken" };
+
+export function reservationTransition(
+  current: { claimId?: string } | null,
+  claimId: string,
+  uid: string,
+  now: Date = new Date(),
+): ReservationTransition {
+  if (!current) return { action: "reserve", value: { claimId, uid, at: now.toISOString() } };
+  if (current.claimId === claimId) return { action: "yours" };
+  return { action: "taken" };
+}
+
+function promoIdentityKey(kind: "email" | "phone", value: string): string {
+  return `${kind}_${createHash("sha256").update(`threadly-promo:${kind}:${value}`).digest("hex")}`;
+}
+
+export async function reservePromoIdentity(
+  kind: "email" | "phone",
+  value: string,
+  claimId: string,
+  uid: string,
+): Promise<"reserved" | "yours" | "taken"> {
+  const ref = (await db()).ref(`${PROMO_ID_ROOT}/${promoIdentityKey(kind, value)}`);
+  let outcome: "reserved" | "yours" | "taken" = "taken";
+  const tx = await ref.transaction((current) => {
+    const t = reservationTransition(current, claimId, uid);
+    outcome = t.action === "reserve" ? "reserved" : t.action;
+    return t.action === "reserve" ? t.value : undefined;
+  });
+  return tx.committed ? outcome : outcome;
+}
+
+/** Best-effort release of OUR reservation only (claimId must match), used
+ * when a grant aborts after reserving so eligibility is not leaked. */
+export async function releasePromoIdentity(kind: "email" | "phone", value: string, claimId: string): Promise<void> {
+  const ref = (await db()).ref(`${PROMO_ID_ROOT}/${promoIdentityKey(kind, value)}`);
+  await ref.transaction((current) => (current && current.claimId === claimId ? null : undefined));
+}
