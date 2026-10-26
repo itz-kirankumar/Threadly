@@ -586,38 +586,45 @@ test("consent: undecided/declined/malformed never allow analytics; only explicit
   assert.equal(CONSENT_STORAGE_KEY, "threadly_cookie_consent"); // matches the banner's key
 });
 
-// ---- PostHog before_send: sensitive routes dropped, the rest reduced to origin+pathname ----
-test("posthog sanitize: auth/payment/claim/invite/app routes are dropped entirely", async () => {
-  const { isSensitivePath, sanitizeTrackedUrl, sanitizeAnalyticsEvent } = await import("../src/lib/analytics-sanitize.ts");
-  for (const p of ["/invite", "/invite/clm_secret_token_here", "/checkout", "/checkout?claim=clm_x&order=order_y", "/portal", "/portal/login", "/portal/account", "/preview/claim-states", "/api/geo/scan"]) {
-    assert.equal(isSensitivePath(new URL("https://www.gothreadly.live" + p).pathname), true, p);
+// ---- PostHog before_send: ALLOWLISTED public routes only, everything else dropped ----
+test("posthog sanitize: allowlisted public pages kept, every other route dropped", async () => {
+  const { isAllowedPath, sanitizeTrackedUrl } = await import("../src/lib/analytics-sanitize.ts");
+  for (const p of ["/", "/pricing", "/demo", "/blog", "/blog/what-is-geo", "/docs", "/docs/intro", "/security", "/privacy", "/terms", "/refund", "/shipping", "/contact"]) {
+    assert.equal(isAllowedPath(p), true, p);
+  }
+  for (const p of ["/billing/claim/clm_secretid123", "/invite/tok_abc", "/checkout", "/portal", "/portal/login", "/portal/account", "/preview/claim-states", "/api/geo/scan", "/unknown-future-page", "/blogx", "/docsify", "/account"]) {
+    assert.equal(isAllowedPath(p), false, p);
     assert.equal(sanitizeTrackedUrl("https://www.gothreadly.live" + p), null, p);
   }
-  for (const p of ["/", "/pricing", "/blog/what-is-geo", "/docs/intro", "/demo", "/security"]) {
-    assert.equal(isSensitivePath(p), false, p);
-  }
-});
-
-test("posthog sanitize: kept pages lose query/hash; sensitive referrer and search scrubbed; tokenish titles redacted", async () => {
-  const { sanitizeTrackedUrl, sanitizeAnalyticsEvent } = await import("../src/lib/analytics-sanitize.ts");
   assert.equal(sanitizeTrackedUrl("https://www.gothreadly.live/pricing?utm=x&token=secret#frag"), "https://www.gothreadly.live/pricing");
   assert.equal(sanitizeTrackedUrl("not a url"), null);
   assert.equal(sanitizeTrackedUrl(undefined), null);
-  // Event on a public page referred from an invite link: event kept, referrer scrubbed.
+});
+
+test("posthog sanitize: every URL-like property scrubbed; sensitive referrer deleted; event on sensitive page dropped", async () => {
+  const { sanitizeAnalyticsEvent } = await import("../src/lib/analytics-sanitize.ts");
   const evt = sanitizeAnalyticsEvent({ properties: {
-    $current_url: "https://www.gothreadly.live/pricing",
-    $referrer: "https://www.gothreadly.live/invite/super_secret_token_value",
+    $current_url: "https://www.gothreadly.live/pricing?utm=x",
+    $pathname: "/pricing",
+    $referrer: "https://www.gothreadly.live/billing/claim/clm_super_secret_token",
+    $initial_current_url: "https://www.gothreadly.live/invite/tok_secret",
+    $entry_current_url: "https://www.gothreadly.live/blog/what-is-geo?ref=x",
+    $session_entry_url: "https://www.gothreadly.live/checkout?order=order_secret",
+    $external_referrer: "https://google.com/search?q=threadly",
     $search: "?claim=clm_secret",
     $title: "Claim clm_ab12cd34ef56gh78ij90 ready",
-    $pathname: "/pricing",
   } });
   assert.ok(evt);
-  assert.equal(evt.properties["$current_url"], "https://www.gothreadly.live/pricing");
-  assert.equal("$referrer" in evt.properties, false);
-  assert.equal("$search" in evt.properties, false);
-  assert.equal(evt.properties["$title"].includes("clm_ab12"), false);
-  assert.equal(evt.properties["$pathname"], "/pricing");
-  // Event ON a sensitive page: dropped wholesale.
+  const p = evt.properties;
+  assert.equal(p["$current_url"], "https://www.gothreadly.live/pricing");
+  assert.equal("$referrer" in p, false);
+  assert.equal("$initial_current_url" in p, false);
+  assert.equal(p["$entry_current_url"], "https://www.gothreadly.live/blog/what-is-geo");
+  assert.equal("$session_entry_url" in p, false);
+  assert.equal("$search" in p, false);
+  assert.equal(String(p["$title"]).includes("clm_ab12"), false);
+  // $pathname disagreeing with an allowlisted current_url drops the event.
+  assert.equal(sanitizeAnalyticsEvent({ properties: { $current_url: "https://www.gothreadly.live/pricing", $pathname: "/checkout" } }), null);
   assert.equal(sanitizeAnalyticsEvent({ properties: { $current_url: "https://www.gothreadly.live/invite/abc" } }), null);
-  assert.equal(sanitizeAnalyticsEvent({ properties: { $current_url: "https://www.gothreadly.live/checkout" } }), null);
+  assert.equal(sanitizeAnalyticsEvent({ properties: { $current_url: "https://www.gothreadly.live/billing/claim/clm_x9" } }), null);
 });
