@@ -23,12 +23,6 @@ export async function POST(request: Request) {
     if (access.role !== "owner") {
       return Response.json({ error: "Only the workspace owner can manage billing." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
-    if (!canCheckout(access.identity.email)) {
-      return Response.json(
-        { error: "Billing is in test mode while launch is prepared - checkout is not open yet." },
-        { status: 403, headers: { "Cache-Control": "no-store" } },
-      );
-    }
     if (access.identity.idToken === "demo-token") {
       return Response.json(
         { error: "The demo workspace cannot check out. Sign in with Google to subscribe." },
@@ -45,6 +39,26 @@ export async function POST(request: Request) {
     const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://www.gothreadly.live";
     const requested: "auto" | BillingProvider = body.provider === "dodo" || body.provider === "razorpay" ? body.provider : "auto";
 
+    // Provider order: explicit choice, or Dodo primary only when Dodo is live
+    // (+ Razorpay backup only when failover is explicitly enabled). While Dodo
+    // is in test mode, auto routes to live Razorpay so signed-in public users
+    // can actually check out.
+    const providers: BillingProvider[] =
+      requested === "auto"
+        ? billingConfigured() && !billingTestMode()
+          ? failoverEnabled() && razorpayOperational()
+            ? ["dodo", "razorpay"]
+            : ["dodo"]
+          : ["razorpay"]
+        : [requested];
+    // The test-mode allowlist gates Dodo only - never the live Razorpay path.
+    if (providers.includes("dodo") && billingTestMode() && !canCheckout(access.identity.email)) {
+      return Response.json(
+        { error: "Billing is in test mode while launch is prepared - checkout is not open yet." },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     // Never open a checkout while a subscription is live or in dunning.
     const existing = await inWorkspace(access, () => loadBilling());
     if (existing && (existing.status === "active" || existing.status === "grace")) {
@@ -57,7 +71,7 @@ export async function POST(request: Request) {
     const now = new Date();
     const attempt: CheckoutAttempt = {
       id: `att_${now.getTime().toString(36)}`,
-      provider: requested === "auto" ? "dodo" : requested,
+      provider: providers[0],
       plan: body.plan,
       interval: body.interval,
       state: "pending",
@@ -84,15 +98,6 @@ export async function POST(request: Request) {
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
-
-    // Provider order: explicit choice, or Dodo primary (+ Razorpay backup only
-    // when failover is explicitly enabled).
-    const providers: BillingProvider[] =
-      requested === "auto"
-        ? failoverEnabled() && razorpayOperational()
-          ? ["dodo", "razorpay"]
-          : ["dodo"]
-        : [requested];
 
     let lastError = "No payment provider is available right now. Please try again shortly.";
     for (const provider of providers) {

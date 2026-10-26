@@ -1,5 +1,15 @@
-import { readData, writeData } from "@/lib/portal-db";
 import type { ScanRun } from "./types";
+
+// Dynamic portal-db access: keeps the pure lapse decision below loadable in
+// standalone unit tests (node strip-types cannot resolve the "@/" alias).
+async function readData<T>(path: string): Promise<T | null> {
+  const { readData: read } = await import("@/lib/portal-db");
+  return read<T>(path);
+}
+async function writeData(path: string, value: unknown): Promise<void> {
+  const { writeData: write } = await import("@/lib/portal-db");
+  return write(path, value);
+}
 
 export type PlanId = "none" | "trial" | "pro" | "growth" | "enterprise";
 
@@ -34,24 +44,34 @@ export const PLAN_LABELS: Record<PlanId, string> = {
 
 const PLAN_ROOT = "geo/plan";
 
+/** Pure lapse decision: an expired one-time Razorpay term (trial included)
+ * drops to no-plan - a paid term never falls back to free access. Dodo
+ * subscriptions renew via webhook and carry no periodEnd. */
+export function lapsedPlan(
+  stored: PlanId,
+  billing: { provider?: string; status?: string; periodEnd?: string | null } | null,
+  now: Date = new Date(),
+): { plan: PlanId; lapsed: boolean } {
+  if (
+    billing?.provider === "razorpay" &&
+    billing.status === "active" &&
+    billing.periodEnd &&
+    Date.parse(billing.periodEnd) < now.getTime()
+  ) {
+    return { plan: "none", lapsed: true };
+  }
+  return { plan: stored, lapsed: false };
+}
+
 export async function loadPlan(email?: string): Promise<PlanId> {
   const stored = await readData<PlanId>(PLAN_ROOT);
   if (stored && stored in PLAN_LIMITS) {
-    // One-time Razorpay purchases grant a fixed term; lapse it when the term
-    // ends. Dodo subscriptions renew via webhook and carry no periodEnd.
     try {
       const billing = await readData<{ provider?: string; status?: string; periodEnd?: string | null }>("geo/billing");
-      if (
-        billing?.provider === "razorpay" &&
-        billing.status === "active" &&
-        billing.periodEnd &&
-        Date.parse(billing.periodEnd) < Date.now()
-      ) {
-        // Paid terms (trial included) lapse to no-plan: the trial is a paid
-        // product, so an expired term never falls back to free access.
+      const { plan, lapsed } = lapsedPlan(stored, billing);
+      if (lapsed) {
         await savePlan("none");
-        const { writeData: write } = await import("@/lib/portal-db");
-        await write("geo/billing", { ...billing, status: "ended", updatedAt: new Date().toISOString() });
+        await writeData("geo/billing", { ...billing, status: "ended", updatedAt: new Date().toISOString() });
         return "none";
       }
     } catch {

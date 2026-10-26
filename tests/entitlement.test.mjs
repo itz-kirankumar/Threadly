@@ -298,3 +298,44 @@ test("paid trial pricing: $7 weekly only, period ends in 7 days", async () => {
   const start = new Date("2026-10-26T10:00:00.000Z");
   assert.equal(periodEndFor("weekly", start), "2026-11-02T10:00:00.000Z");
 });
+
+test("trial expiry: lapsedPlan enforces 7-day term server-side", async () => {
+  const { lapsedPlan } = await import("../src/lib/geo/plan.ts");
+  const now = new Date("2026-11-10T10:00:00.000Z");
+  // Active paid trial whose 7-day term has ended lapses to no-plan.
+  assert.deepEqual(
+    lapsedPlan("trial", { provider: "razorpay", status: "active", periodEnd: "2026-11-09T10:00:00.000Z" }, now),
+    { plan: "none", lapsed: true },
+  );
+  // Same for an expired paid Pro term.
+  assert.deepEqual(
+    lapsedPlan("pro", { provider: "razorpay", status: "active", periodEnd: "2026-11-01T10:00:00.000Z" }, now),
+    { plan: "none", lapsed: true },
+  );
+  // Trial still inside its 7 days keeps access.
+  assert.deepEqual(
+    lapsedPlan("trial", { provider: "razorpay", status: "active", periodEnd: "2026-11-12T10:00:00.000Z" }, now),
+    { plan: "trial", lapsed: false },
+  );
+  // One second before expiry still counts as active.
+  assert.deepEqual(
+    lapsedPlan("trial", { provider: "razorpay", status: "active", periodEnd: "2026-11-10T10:00:01.000Z" }, now),
+    { plan: "trial", lapsed: false },
+  );
+  // Dodo subscriptions renew via webhook and never lapse on periodEnd.
+  assert.deepEqual(
+    lapsedPlan("pro", { provider: "dodo", status: "active", periodEnd: "2026-11-01T10:00:00.000Z" }, now),
+    { plan: "pro", lapsed: false },
+  );
+  // A Razorpay record without a period end, or already ended, never re-lapses.
+  assert.deepEqual(
+    lapsedPlan("pro", { provider: "razorpay", status: "active", periodEnd: null }, now),
+    { plan: "pro", lapsed: false },
+  );
+  assert.deepEqual(
+    lapsedPlan("trial", { provider: "razorpay", status: "ended", periodEnd: "2026-11-01T10:00:00.000Z" }, now),
+    { plan: "trial", lapsed: false },
+  );
+  // No billing record at all: stored plan stands (grandfathered free-trial users).
+  assert.deepEqual(lapsedPlan("trial", null, now), { plan: "trial", lapsed: false });
+});
