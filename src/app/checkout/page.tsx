@@ -3,7 +3,9 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { onAuthStateChanged } from "firebase/auth";
 import SupportLink from "@/components/SupportLink";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 
 declare global {
   interface Window {
@@ -36,6 +38,42 @@ function CheckoutInner() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testMode, setTestMode] = useState<boolean | null>(null);
+  const [activePlanLabel, setActivePlanLabel] = useState<string | null>(null);
+  const [checkingPlan, setCheckingPlan] = useState(true);
+
+  // A signed-in visitor who already has a paid plan must not buy a second one
+  // here: route them to manage/upgrade before any payment happens.
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), async (user) => {
+      if (cancelled) return;
+      if (!user) {
+        setCheckingPlan(false);
+        return;
+      }
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/billing/status", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (!cancelled && res.ok) {
+          const data = (await res.json()) as { plan?: string; planLabel?: string };
+          if (data.plan && data.plan !== "trial") {
+            setActivePlanLabel(data.planLabel || "paid");
+          }
+        }
+      } catch {
+        // Status check failed - leave the guest flow usable rather than blocking it.
+      } finally {
+        if (!cancelled) setCheckingPlan(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     fetch("/api/billing/guest/order", { cache: "no-store" })
@@ -119,14 +157,29 @@ function CheckoutInner() {
           <SupportLink reference={undefined} />
         </div>
       )}
-      <button
-        type="button"
-        onClick={pay}
-        disabled={busy}
-        className="mt-6 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200 disabled:opacity-50"
-      >
-        {busy ? "Opening secure checkout…" : `Pay $${price} securely`}
-      </button>
+      {activePlanLabel ? (
+        <div className="mt-6 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+          <p className="font-semibold">You already have an active {activePlanLabel} plan.</p>
+          <p className="mt-1 text-emerald-200/80">
+            You are signed in, so this checkout is disabled - a second purchase would not add anything. Manage or upgrade your plan from your billing settings instead.
+          </p>
+          <Link
+            href="/portal"
+            className="mt-3 inline-block rounded-lg bg-emerald-400 px-4 py-2 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-300"
+          >
+            Go to billing settings
+          </Link>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={pay}
+          disabled={busy || checkingPlan}
+          className="mt-6 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200 disabled:opacity-50"
+        >
+          {busy ? "Opening secure checkout…" : checkingPlan ? "Checking your account…" : `Pay $${price} securely`}
+        </button>
+      )}
       <p className="mt-3 text-center text-[11px] text-zinc-600">
         Payments by Razorpay.
       </p>
