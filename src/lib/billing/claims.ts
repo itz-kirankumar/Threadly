@@ -153,8 +153,18 @@ export async function reconcileClaimWithProvider(claim: BillingClaim): Promise<C
 }
 
 // Pending claims for the reconciliation sweep (bounded).
-export async function listOpenClaims(limit = 25): Promise<BillingClaim[]> {
-  const snap = await (await db()).ref(CLAIMS_ROOT).orderByChild("status").equalTo("pending").limitToFirst(limit).get();
+async function listAllClaims(): Promise<BillingClaim[]> {
+  // Plain read + in-code filter: orderByChild would require an RTDB .indexOn
+  // rules deploy we cannot make from here, and the claims set is small.
+  const snap = await (await db()).ref(CLAIMS_ROOT).get();
   if (!snap.exists()) return [];
   return Object.values(snap.val() as Record<string, BillingClaim>);
+}
+
+export async function listOpenClaims(limit = 25): Promise<BillingClaim[]> {
+  return (await listAllClaims()).filter((c) => c.status === "pending").slice(0, limit);
+}
+
+export async function listPromoClaims(): Promise<BillingClaim[]> {
+  return (await listAllClaims()).filter((c) => c.provider === "promo");
 }

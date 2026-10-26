@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
 import { loadBilling } from "@/lib/billing/store";
 import { normalizeE164 } from "@/lib/billing/identity";
-import { newClaimSecret, saveClaim, listOpenClaims, type BillingClaim } from "@/lib/billing/claims";
+import { newClaimSecret, saveClaim, listPromoClaims, type BillingClaim } from "@/lib/billing/claims";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -67,11 +67,12 @@ export async function POST(request: Request) {
         );
       }
     }
-    const existing = await listOpenClaims(100);
+    // Any prior promo claim with the same details - pending, unclaimed, or
+    // already claimed - blocks a repeat redemption.
+    const existing = await listPromoClaims();
     const clash = existing.find(
       (c) =>
-        c.provider === "promo" &&
-        ((c.checkoutEmail || "").toLowerCase() === email || normalizeE164(c.checkoutContact) === contact),
+        (c.checkoutEmail || "").toLowerCase() === email || normalizeE164(c.checkoutContact) === contact,
     );
     if (clash) {
       return Response.json(
