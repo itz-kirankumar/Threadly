@@ -29,6 +29,7 @@ export default function PostHogProvider() {
           disable_session_recording: true,
           person_profiles: "identified_only",
           opt_out_capturing_by_default: false,
+          debug: true,
           before_send: (event) => {
             try {
               const result = sanitizeAnalyticsEvent(event);
