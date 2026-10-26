@@ -30,7 +30,7 @@ export default function ClaimView({ status, message, plan, periodEnd, email, cla
         </>
       ) : status === "working" || status === "error" ? (
         <>
-          <h1 className="text-2xl font-semibold text-white">Linking your purchase…</h1>
+          <h1 className="text-2xl font-semibold text-white">{status === "error" ? "Purchase needs review" : "Linking your purchase…"}</h1>
           {status === "error" && (
             <div className="mt-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-200">
               <p>{message}</p>

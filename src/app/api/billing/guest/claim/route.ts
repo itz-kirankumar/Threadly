@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     if (!checkoutEmail || !claimantEmail || checkoutEmail !== claimantEmail) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(
-        { error: `The email on the payment does not match this account, so the claim is paused for review - no entitlement was granted. Reference ${claim.id} at hello@gothreadly.live.` },
+        { error: `The email on the payment does not match this account, so the claim is paused for review - your plan has not been activated. Reference ${claim.id} at hello@gothreadly.live.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     if (!checkoutPhone) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(
-        { error: `The payment record has no verifiable mobile number, so the claim is paused for review - no entitlement was granted. Reference ${claim.id} at hello@gothreadly.live.` },
+        { error: `The payment record has no verifiable mobile number, so the claim is paused for review - your plan has not been activated. Reference ${claim.id} at hello@gothreadly.live.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     if (checkoutPhone !== accountPhone) {
       await transitionClaim(claim.id, ["paid_unclaimed"], () => ({ status: "uncertain" }));
       return Response.json(
-        { error: `The mobile number on the payment does not match this account, so the claim is paused for review - no entitlement was granted. Reference ${claim.id} at hello@gothreadly.live.` },
+        { error: `The mobile number on the payment does not match this account, so the claim is paused for review - your plan has not been activated. Reference ${claim.id} at hello@gothreadly.live.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
       // give a safe reference (claim ID alone grants nothing) for support
       // reconciliation. No promise of outcome - it is pending review.
       return Response.json(
-        { error: `This account already has an active plan, so the purchase was not attached. The payment was captured and the purchase remains unclaimed - no second charge happened. Reconciliation is pending: contact hello@gothreadly.live with reference ${claim.id}.` },
+        { error: `This account already has an active plan, so this purchase has not been linked. Do not pay again - contact hello@gothreadly.live with reference ${claim.id} and the purchase will be reviewed.` },
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }

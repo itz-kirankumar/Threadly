@@ -16,15 +16,15 @@ const STATES: { label: string; props: Parameters<typeof ClaimView>[0] }[] = [
     label: "3 - error: contact mismatch paused",
     props: {
       status: "error",
-      message: "The mobile number on the payment does not match this account, so the claim is paused for review - no entitlement was granted. Reference clm_preview0001 at hello@gothreadly.live.",
+      message: "The mobile number on the payment does not match this account, so the claim is paused for review - your plan has not been activated. Reference clm_preview0001 at hello@gothreadly.live.",
       claimRef: "clm_preview0001",
     },
   },
   {
-    label: "4 - error: existing plan, captured/unclaimed",
+    label: "4 - error: existing plan, purchase not linked",
     props: {
       status: "error",
-      message: "This account already has an active plan, so the purchase was not attached. The payment was captured and the purchase remains unclaimed - no second charge happened. Reconciliation is pending: contact hello@gothreadly.live with reference clm_preview0002.",
+      message: "This account already has an active plan, so this purchase has not been linked. Do not pay again - contact hello@gothreadly.live with reference clm_preview0002 and the purchase will be reviewed.",
       claimRef: "clm_preview0002",
     },
   },
