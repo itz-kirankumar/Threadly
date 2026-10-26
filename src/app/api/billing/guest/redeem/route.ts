@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
 import { loadBilling } from "@/lib/billing/store";
 import { normalizeE164 } from "@/lib/billing/identity";
-import { newClaimSecret, saveClaim, listPromoClaims, transitionClaim, type BillingClaim } from "@/lib/billing/claims";
+import { newClaimSecret, saveClaim, listPromoClaims, type BillingClaim } from "@/lib/billing/claims";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -68,11 +68,13 @@ export async function POST(request: Request) {
       }
     }
     // Eligibility is consumed at VERIFIED redemption (claim time), not here:
-    // checkout details are typed, unverified signals, so an unclaimed claim
-    // must never lock the real owner out. A promo already CLAIMED with these
-    // details is real consumption and blocks a repeat; still-unclaimed promo
-    // claims with the same details are superseded (expired) so a mistyped or
-    // squatted claim cannot hold the slot - the newest redeem link wins.
+    // checkout details are typed, unverified signals. Redemptions coexist -
+    // each creates an independent claim with its own secret, so no submission
+    // can ever invalidate someone else's in-flight link. A promo already
+    // CLAIMED with these details is real consumption and blocks a repeat;
+    // claim-time enforcement (one promo per account / verified email /
+    // verified phone) plus the claim-secret requirement make unclaimed
+    // duplicates harmless. Rate limit above caps clutter.
     const promos = await listPromoClaims();
     const consumed = promos.find(
       (c) =>
@@ -85,15 +87,6 @@ export async function POST(request: Request) {
         { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
-    await Promise.all(
-      promos
-        .filter(
-          (c) =>
-            c.status === "paid_unclaimed" &&
-            ((c.checkoutEmail || "").toLowerCase() === email || normalizeE164(c.checkoutContact) === contact),
-        )
-        .map((c) => transitionClaim(c.id, ["paid_unclaimed"], () => ({ status: "expired" as const }))),
-    );
     const now = new Date();
     const { secret, hash } = newClaimSecret();
     const claim: BillingClaim = {
