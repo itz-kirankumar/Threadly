@@ -167,16 +167,34 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
             )}
             {tier.monthly === 0 && <p className="mt-1 text-xs text-zinc-500">Free, no card needed</p>}
             <p className="mt-3 text-sm leading-relaxed text-zinc-400">{tier.blurb}</p>
-            <Link
-              href="/portal"
-              className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition ${
-                tier.highlight
-                  ? "bg-white text-zinc-950 hover:bg-zinc-200"
-                  : "border border-white/15 text-white hover:bg-white/[0.06]"
-              }`}
-            >
-              {tier.cta}
-            </Link>
+            {tier.name === "Pro" || tier.name === "Growth" ? (
+              <>
+                <Link
+                  href={`/checkout?plan=${tier.name.toLowerCase()}&interval=${annual ? "annual" : "monthly"}`}
+                  className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition ${
+                    tier.highlight
+                      ? "bg-white text-zinc-950 hover:bg-zinc-200"
+                      : "border border-white/15 text-white hover:bg-white/[0.06]"
+                  }`}
+                >
+                  Buy now - no sign-in needed
+                </Link>
+                <Link href="/portal" className="mt-2 block rounded-lg py-1.5 text-center text-xs text-zinc-500 transition hover:text-zinc-300">
+                  or start free first
+                </Link>
+              </>
+            ) : (
+              <Link
+                href="/portal"
+                className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition ${
+                  tier.highlight
+                    ? "bg-white text-zinc-950 hover:bg-zinc-200"
+                    : "border border-white/15 text-white hover:bg-white/[0.06]"
+                }`}
+              >
+                {tier.cta}
+              </Link>
+            )}
             {!compact && (
               <ul className="mt-6 space-y-2.5 text-sm text-zinc-300">
                 {tier.features.map((feature) => (
