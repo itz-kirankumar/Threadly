@@ -1,8 +1,8 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
 import { loadBilling } from "@/lib/billing/store";
-import { billingTestMode, isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { ORDER_PRICES, razorpayConfigured, razorpayCreateOrder, razorpayKeyId } from "@/lib/billing/razorpay";
+import { isInterval, isPaidPlan } from "@/lib/billing/dodo";
+import { ORDER_PRICES, razorpayCreateOrder, razorpayKeyId, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
 import { newClaimSecret, saveClaim, type BillingClaim } from "@/lib/billing/claims";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // GET /api/billing/guest/order - public pre-payment disclosure probe.
 export async function GET() {
   return Response.json(
-    { testMode: billingTestMode(), available: razorpayConfigured() },
+    { testMode: razorpayTestMode(), available: razorpayOperational() },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -21,7 +21,7 @@ export async function GET() {
 // is returned once and is the only proof of purchase authority.
 export async function POST(request: Request) {
   try {
-    if (!razorpayConfigured()) {
+    if (!razorpayOperational()) {
       return Response.json({ error: "Checkout is not available yet." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
     const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown };
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     };
     await saveClaim(claim);
     return Response.json(
-      { orderId: order.id, amount: price.amount, currency: price.currency, keyId: razorpayKeyId(), claimId: claim.id, claimSecret: secret, testMode: billingTestMode() },
+      { orderId: order.id, amount: price.amount, currency: price.currency, keyId: razorpayKeyId(), claimId: claim.id, claimSecret: secret, testMode: razorpayTestMode() },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

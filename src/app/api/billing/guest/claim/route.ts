@@ -2,8 +2,8 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
-import { billingTestMode, canCheckout } from "@/lib/billing/dodo";
-import { periodEndFor, razorpayConfigured } from "@/lib/billing/razorpay";
+
+import { periodEndFor, razorpayCheckoutAllowed, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
 import { hashClaimSecret, loadClaim, transitionClaim } from "@/lib/billing/claims";
 import { loadBilling, saveBilling } from "@/lib/billing/store";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
@@ -17,14 +17,14 @@ export const dynamic = "force-dynamic";
 // verified email, the claim fails closed to uncertain for reconciliation.
 export async function POST(request: Request) {
   try {
-    if (!razorpayConfigured()) {
+    if (!razorpayOperational()) {
       return Response.json({ error: "Checkout is not available yet." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
     if (access.role !== "owner") {
       return Response.json({ error: "Only the workspace owner can claim a purchase." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
-    if (billingTestMode() && !canCheckout(access.identity.email)) {
+    if (!razorpayCheckoutAllowed(access.identity.email)) {
       // Test mode: sandbox payments must not grant the public paid features.
       return Response.json({ error: "Billing is in test mode - claiming is limited right now." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
         subscriptionId: null,
         customerId: null,
         customerEmail: access.identity.email || null,
-        mode: billingTestMode() ? "test" : "live",
+        mode: razorpayTestMode() ? "test" : "live",
         updatedAt: now.toISOString(),
         periodEnd,
         orderId: claim.orderId,
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
       await appendAudit({
         actor: access.identity.email || access.identity.uid,
         action: "billing.guest_claim_applied",
-        detail: `${claim.plan} (${claim.interval}) until ${periodEnd} - order ${claim.orderId}${billingTestMode() ? " - test mode" : ""}`,
+        detail: `${claim.plan} (${claim.interval}) until ${periodEnd} - order ${claim.orderId}${razorpayTestMode() ? " - test mode" : ""}`,
       });
     } catch { /* audit is best-effort */ }
     return Response.json({ claimed: true, plan: claim.plan, periodEnd }, { headers: { "Cache-Control": "no-store" } });

@@ -5,6 +5,42 @@ export function razorpayConfigured(): boolean {
   return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 }
 
+// Provider-specific mode, DERIVED FROM THE KEY ITSELF (never from another
+// provider's env): test keys can only run test charges. Live keys alone do
+// NOT enable charging - live operation additionally requires the explicit
+// RAZORPAY_LIVE_ENABLED=true gate, so a live key deployed by accident fails
+// closed instead of silently charging real cards.
+export function razorpayKeyMode(): "test" | "live" | null {
+  const id = process.env.RAZORPAY_KEY_ID ?? "";
+  if (id.startsWith("rzp_test_")) return "test";
+  if (id.startsWith("rzp_live_")) return "live";
+  return null;
+}
+
+export function razorpayTestMode(): boolean {
+  return razorpayKeyMode() === "test";
+}
+
+export function razorpayLiveEnabled(): boolean {
+  return razorpayKeyMode() === "live" && process.env.RAZORPAY_LIVE_ENABLED === "true";
+}
+
+/** Configured AND allowed to create orders right now. */
+export function razorpayOperational(): boolean {
+  return razorpayConfigured() && (razorpayTestMode() || razorpayLiveEnabled());
+}
+
+/** Test mode limits checkout to the allowlist; gated live mode is open. */
+export function razorpayCheckoutAllowed(email: string | null | undefined): boolean {
+  if (razorpayLiveEnabled()) return true;
+  if (!razorpayTestMode()) return false;
+  const allowed = (process.env.BILLING_TEST_EMAILS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  return Boolean(email) && allowed.includes(email!.toLowerCase());
+}
+
 function authHeader(): string {
   return `Basic ${Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString("base64")}`;
 }

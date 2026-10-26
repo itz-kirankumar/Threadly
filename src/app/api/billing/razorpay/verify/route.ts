@@ -2,8 +2,9 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { savePlan } from "@/lib/geo/plan";
 import { appendAudit } from "@/lib/geo/store";
-import { billingTestMode, canCheckout, isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { ORDER_PRICES, periodEndFor, razorpayConfigured, razorpayFetchPayment, resolvePaidThisTerm, verifyPaymentSignature } from "@/lib/billing/razorpay";
+import { isInterval, isPaidPlan } from "@/lib/billing/dodo";
+import { razorpayCheckoutAllowed } from "@/lib/billing/razorpay";
+import { ORDER_PRICES, periodEndFor, razorpayFetchPayment, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, verifyPaymentSignature } from "@/lib/billing/razorpay";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 import { loadBilling, loadCheckoutAttempt, saveBilling, saveCheckoutAttempt } from "@/lib/billing/store";
 
@@ -17,14 +18,14 @@ export const dynamic = "force-dynamic";
 // mark anything paid.
 export async function POST(request: Request) {
   try {
-    if (!razorpayConfigured()) {
+    if (!razorpayOperational()) {
       return Response.json({ error: "Razorpay is not available yet." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
     if (access.role !== "owner") {
       return Response.json({ error: "Only the workspace owner can manage billing." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
-    if (!canCheckout(access.identity.email)) {
+    if (!razorpayCheckoutAllowed(access.identity.email)) {
       return Response.json({ error: "Billing is not open yet." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
     const body = (await readJsonBody(request, 4 * 1024)) as {
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
         subscriptionId: null,
         customerId: null,
         customerEmail: access.identity.email || null,
-        mode: billingTestMode() ? "test" : "live",
+        mode: razorpayTestMode() ? "test" : "live",
         updatedAt: now.toISOString(),
         periodEnd,
         orderId: body.orderId as string,
@@ -149,7 +150,7 @@ export async function POST(request: Request) {
       await appendAudit({
         actor: access.identity.email || access.identity.uid,
         action: "billing.razorpay_payment_verified",
-        detail: `${plan} (${interval}) until ${periodEnd} - order ${body.orderId}${billingTestMode() ? " - test mode" : ""}`,
+        detail: `${plan} (${interval}) until ${periodEnd} - order ${body.orderId}${razorpayTestMode() ? " - test mode" : ""}`,
       });
     } catch { /* audit is best-effort */ }
     return Response.json({ received: true, plan, periodEnd }, { headers: { "Cache-Control": "no-store" } });

@@ -3,7 +3,7 @@ import { savePlan } from "@/lib/geo/plan";
 import { adminConfigured } from "@/lib/geo/admin-store";
 import { appendAudit } from "@/lib/geo/store";
 import { billingTestMode, isInterval, isPaidPlan, type BillingInterval, type PaidPlanId } from "@/lib/billing/dodo";
-import { razorpayPlanFromPlanId, verifyRazorpaySignature } from "@/lib/billing/razorpay";
+import { razorpayPlanFromPlanId, razorpayTestMode, verifyRazorpaySignature } from "@/lib/billing/razorpay";
 import { decideTransition, type IncomingStatus } from "@/lib/billing/entitlement";
 import { loadBilling, loadCheckoutAttempt, recordWebhookEvent, saveBilling, saveCheckoutAttempt, webhookEventProcessed } from "@/lib/billing/store";
 
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
           plan,
           interval,
           status,
-          mode: billingTestMode() ? "test" : "live",
+          mode: razorpayTestMode() ? "test" : "live",
         });
         if (decision.action === "ignore") return `ignored: ${decision.reason}`;
         if (decision.action === "downgrade") await savePlan("trial");
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
           await appendAudit({
             actor: notes.email ?? "razorpay webhook",
             action: `billing.${type.replace(".", "_")}`,
-            detail: `${plan} -> ${decision.action} (${decision.note}) via razorpay${billingTestMode() ? " - test mode" : ""}`,
+            detail: `${plan} -> ${decision.action} (${decision.note}) via razorpay${razorpayTestMode() ? " - test mode" : ""}`,
           });
         } catch {
           // audit is best-effort

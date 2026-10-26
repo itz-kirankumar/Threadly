@@ -1,8 +1,8 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
-import { billingTestMode, canCheckout, isInterval, isPaidPlan } from "@/lib/billing/dodo";
-import { ORDER_PRICES, razorpayConfigured, razorpayCreateOrder, razorpayKeyId, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
+import { isInterval, isPaidPlan } from "@/lib/billing/dodo";
+import { ORDER_PRICES, razorpayCheckoutAllowed, razorpayCreateOrder, razorpayKeyId, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, saveCheckoutAttempt } from "@/lib/billing/store";
@@ -15,14 +15,14 @@ export const dynamic = "force-dynamic";
 // plan + interval only.
 export async function POST(request: Request) {
   try {
-    if (!razorpayConfigured()) {
+    if (!razorpayOperational()) {
       return Response.json({ error: "Razorpay is not available yet." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
     if (access.role !== "owner") {
       return Response.json({ error: "Only the workspace owner can manage billing." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
-    if (!canCheckout(access.identity.email)) {
+    if (!razorpayCheckoutAllowed(access.identity.email)) {
       return Response.json(
         { error: "Billing is in test mode while launch is prepared - checkout is not open yet." },
         { status: 403, headers: { "Cache-Control": "no-store" } },
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
         await appendAudit({
           actor: access.identity.email || access.identity.uid,
           action: "billing.razorpay_order_created",
-          detail: `${body.plan} (${body.interval}) ${order.id}${billingTestMode() ? " - test mode" : ""}`,
+          detail: `${body.plan} (${body.interval}) ${order.id}${razorpayTestMode() ? " - test mode" : ""}`,
         });
       } catch { /* audit is best-effort */ }
       const price = ORDER_PRICES[body.plan][body.interval];
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
         );
       }
       return Response.json(
-        { orderId: order.id, amount: quote ? quote.due : price.amount, currency: price.currency, keyId: razorpayKeyId(), provider: "razorpay", testMode: billingTestMode(), quote, prefill: { email: access.identity.email || null, contact: prefillPhone } },
+        { orderId: order.id, amount: quote ? quote.due : price.amount, currency: price.currency, keyId: razorpayKeyId(), provider: "razorpay", testMode: razorpayTestMode(), quote, prefill: { email: access.identity.email || null, contact: prefillPhone } },
         { headers: { "Cache-Control": "no-store" } },
       );
     } catch (error) {

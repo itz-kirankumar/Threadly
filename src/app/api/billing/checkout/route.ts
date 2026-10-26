@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess, inWorkspace } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { billingConfigured, billingTestMode, canCheckout, dodoClient, isInterval, isPaidPlan, productFor } from "@/lib/billing/dodo";
-import { razorpayConfigured, razorpayCreateSubscription } from "@/lib/billing/razorpay";
+import { razorpayCreateSubscription, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, loadCheckoutAttempt, saveCheckoutAttempt } from "@/lib/billing/store";
 import type { BillingProvider } from "@/lib/billing/store";
@@ -16,7 +16,7 @@ function failoverEnabled(): boolean {
 
 export async function POST(request: Request) {
   try {
-    if (!billingConfigured() && !razorpayConfigured()) {
+    if (!billingConfigured() && !razorpayOperational()) {
       return Response.json({ error: "Billing is not available yet." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     // when failover is explicitly enabled).
     const providers: BillingProvider[] =
       requested === "auto"
-        ? failoverEnabled() && razorpayConfigured()
+        ? failoverEnabled() && razorpayOperational()
           ? ["dodo", "razorpay"]
           : ["dodo"]
         : [requested];
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     let lastError = "No payment provider is available right now. Please try again shortly.";
     for (const provider of providers) {
       if (provider === "dodo" && !billingConfigured()) continue;
-      if (provider === "razorpay" && !razorpayConfigured()) continue;
+      if (provider === "razorpay" && !razorpayOperational()) continue;
       const attemptForProvider: CheckoutAttempt = { ...attempt, provider, updatedAt: new Date().toISOString() };
       await saveCheckoutAttempt(access.workspaceUid, attemptForProvider);
       try {
@@ -146,11 +146,11 @@ export async function POST(request: Request) {
           await appendAudit({
             actor: access.identity.email || access.identity.uid,
             action: "billing.checkout_started",
-            detail: `${body.plan} (${body.interval}) via razorpay${billingTestMode() ? " - test mode" : ""}`,
+            detail: `${body.plan} (${body.interval}) via razorpay${razorpayTestMode() ? " - test mode" : ""}`,
           });
         } catch { /* audit is best-effort */ }
         return Response.json(
-          { checkoutUrl: subscription.short_url, provider: "razorpay", testMode: billingTestMode() },
+          { checkoutUrl: subscription.short_url, provider: "razorpay", testMode: razorpayTestMode() },
           { headers: { "Cache-Control": "no-store" } },
         );
       } catch (error) {
