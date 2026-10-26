@@ -628,3 +628,19 @@ test("posthog sanitize: every URL-like property scrubbed; sensitive referrer del
   assert.equal(sanitizeAnalyticsEvent({ properties: { $current_url: "https://www.gothreadly.live/invite/abc" } }), null);
   assert.equal(sanitizeAnalyticsEvent({ properties: { $current_url: "https://www.gothreadly.live/billing/claim/clm_x9" } }), null);
 });
+
+// ---- social gate: documented PLAN_LIMITS semantics, no guessed fallbacks ----
+test("social gate: 0 blocks, null means unlimited (no rate check), finite caps preserved", async () => {
+  const { socialGate, PLAN_LIMITS } = await import("../src/lib/geo/plan.ts");
+  assert.deepEqual(socialGate("none"), { kind: "blocked" });
+  for (const plan of ["trial", "pro", "growth", "enterprise"]) {
+    assert.deepEqual(socialGate(plan), { kind: "unlimited" }, plan);
+    assert.equal(PLAN_LIMITS[plan].socialHourly, null, plan);
+  }
+  assert.equal(PLAN_LIMITS.none.socialHourly, 0);
+  // A finite cap must survive as a cap, never be replaced by a guessed default.
+  const original = PLAN_LIMITS.pro.socialHourly;
+  PLAN_LIMITS.pro.socialHourly = 25;
+  assert.deepEqual(socialGate("pro"), { kind: "capped", hourly: 25 });
+  PLAN_LIMITS.pro.socialHourly = original;
+});

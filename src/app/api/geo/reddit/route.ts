@@ -1,6 +1,6 @@
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadBrand } from "@/lib/geo/store";
-import { loadPlan, PLAN_LIMITS, planBlockResponse } from "@/lib/geo/plan";
+import { loadPlan, socialGate, planBlockResponse } from "@/lib/geo/plan";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -111,13 +111,16 @@ export async function POST(request: Request) {
       // Plan reads need the workspace context, so gating happens inside it.
       if (user.idToken !== "demo-token") {
         const plan = await loadPlan(user.email);
-        const cap = PLAN_LIMITS[plan].socialHourly;
-        if (cap === 0) {
+        const gate = socialGate(plan);
+        if (gate.kind === "blocked") {
           return planBlockResponse("Reddit intelligence is part of the paid plans - start the 7-day trial for $7 to use it.", plan);
         }
-        const limit = await checkRateLimit(`reddit:${user.uid}`, cap ?? 6, 3600, user);
-        if (limit && !limit.allowed) {
-          return Response.json({ error: "Too many requests. Try again shortly." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
+        // null cap = unlimited per PLAN_LIMITS; only finite caps rate-check.
+        if (gate.kind === "capped") {
+          const limit = await checkRateLimit(`reddit:${user.uid}`, gate.hourly, 3600, user);
+          if (limit && !limit.allowed) {
+            return Response.json({ error: "Too many requests. Try again shortly." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
+          }
         }
       }
       const brand = await loadBrand();

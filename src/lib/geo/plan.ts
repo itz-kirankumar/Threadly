@@ -34,6 +34,16 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   enterprise: { scans: null, queries: null, historyDays: null, seats: null, socialHourly: null },
 };
 
+// Social-feature gate, exactly as PLAN_LIMITS documents: 0 = plan-blocked,
+// null = unlimited (no rate check at all), a finite number = per-hour cap.
+export type SocialGate = { kind: "blocked" } | { kind: "unlimited" } | { kind: "capped"; hourly: number };
+export function socialGate(plan: PlanId): SocialGate {
+  const cap = PLAN_LIMITS[plan].socialHourly;
+  if (cap === 0) return { kind: "blocked" };
+  if (cap === null) return { kind: "unlimited" };
+  return { kind: "capped", hourly: cap };
+}
+
 export const PLAN_RANK: Record<PlanId, number> = { none: 0, trial: 1, pro: 2, growth: 3, enterprise: 4 };
 
 /** Tier ordering for feature gates ("Pro and above", "Growth and above"). */
