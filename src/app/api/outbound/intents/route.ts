@@ -10,7 +10,11 @@ export const dynamic = "force-dynamic";
 // The enterprise outbound surface ships dark: OUTBOUND_ENABLED must be set to
 // "true" explicitly, and no sender/provider call exists in this route.
 function outboundEnabled(): boolean {
-  return process.env.OUTBOUND_ENABLED === "true";
+  if (process.env.OUTBOUND_ENABLED !== "true") return false;
+  // Refuse to enable against the implicit default root: enabling requires an
+  // explicit data-root decision so a stray flag can never silently target
+  // production tenant data.
+  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
 }
 
 // POST /api/outbound/intents - create (idempotently) one send intent.

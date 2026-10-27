@@ -8,7 +8,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function outboundEnabled(): boolean {
-  return process.env.OUTBOUND_ENABLED === "true";
+  if (process.env.OUTBOUND_ENABLED !== "true") return false;
+  // Refuse to enable against the implicit default root: enabling requires an
+  // explicit data-root decision so a stray flag can never silently target
+  // production tenant data.
+  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
 }
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;

@@ -61,3 +61,15 @@ test("rtdb path helper rejects unsafe tenant ids", async () => {
   assert.throws(() => tenantRoot(""));
   assert.equal(tenantRoot("ws_abc-123"), "outbound/ws_abc-123");
 });
+
+test("data root: explicit OUTBOUND_DATA_ROOT changes paths, default is outbound, unsafe rejected", async () => {
+  const { tenantRoot, outboundDataRoot } = await import("../src/lib/outbound/rtdb-store.ts");
+  delete process.env.OUTBOUND_DATA_ROOT;
+  assert.equal(outboundDataRoot(), "outbound");
+  assert.equal(tenantRoot("ws1"), "outbound/ws1");
+  process.env.OUTBOUND_DATA_ROOT = "outbound-test";
+  assert.equal(tenantRoot("ws1"), "outbound-test/ws1");
+  process.env.OUTBOUND_DATA_ROOT = "bad/root";
+  assert.throws(() => tenantRoot("ws1"));
+  delete process.env.OUTBOUND_DATA_ROOT;
+});

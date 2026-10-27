@@ -67,7 +67,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           Approval-gated campaign workflow. Nothing is sent from this surface: planning creates drafted intents only.
         </p>
       </div>
-      {error && <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
+      {error && <p className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
 
       <div className={card}>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">New campaign</h3>

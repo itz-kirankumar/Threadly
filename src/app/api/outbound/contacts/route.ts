@@ -10,7 +10,11 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 const VSTATES: ContactVerificationState[] = ["valid", "invalid", "unknown", "stale", "catch_all"];
 
 function enabled(): boolean {
-  return process.env.OUTBOUND_ENABLED === "true";
+  if (process.env.OUTBOUND_ENABLED !== "true") return false;
+  // Refuse to enable against the implicit default root: enabling requires an
+  // explicit data-root decision so a stray flag can never silently target
+  // production tenant data.
+  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
 }
 
 // Creates a contact and (optionally) its rights record. The planner still

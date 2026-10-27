@@ -11,7 +11,11 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 const REASONS: SuppressionReason[] = ["opt_out", "hard_bounce", "complaint", "manual", "legal"];
 
 function enabled(): boolean {
-  return process.env.OUTBOUND_ENABLED === "true";
+  if (process.env.OUTBOUND_ENABLED !== "true") return false;
+  // Refuse to enable against the implicit default root: enabling requires an
+  // explicit data-root decision so a stray flag can never silently target
+  // production tenant data.
+  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
 }
 
 export async function POST(request: Request) {

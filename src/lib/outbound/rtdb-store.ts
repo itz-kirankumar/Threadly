@@ -16,11 +16,20 @@ export function intentKeyHash(uniqueKey: string): string {
   return createHash("sha256").update(uniqueKey).digest("hex").slice(0, 40);
 }
 
+export function outboundDataRoot(): string {
+  // Isolation invariant: test/preview contexts must set OUTBOUND_DATA_ROOT to
+  // a non-production root (e.g. "outbound-test") so enabled writes can never
+  // touch production tenant data. Production rollout sets it explicitly too.
+  const root = process.env.OUTBOUND_DATA_ROOT ?? "outbound";
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(root)) throw new Error("invalid OUTBOUND_DATA_ROOT");
+  return root;
+}
+
 export function tenantRoot(tenantId: string): string {
   // RTDB keys cannot contain . $ # [ ] / ; tenant ids here are workspace uids
   // (safe charset), but validate defensively.
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(tenantId)) throw new Error("invalid tenant id");
-  return `outbound/${tenantId}`;
+  return `${outboundDataRoot()}/${tenantId}`;
 }
 
 async function db() {
