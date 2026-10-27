@@ -104,12 +104,13 @@ function okDispatch(patch = {}) {
   return {
     intent: okIntent(), campaign: okCampaign(), approval: okApproval(), sender: okSender(),
     contactSuppressed: false, enrollmentStatus: "active", humanReplySeen: false,
-    senderAcceptedToday: 0, tenantCostToDate: 0, now: NOW, ...patch,
+    senderAcceptedToday: 0, tenantCostToDate: 0, tenantCostComplete: true, now: NOW, ...patch,
   };
 }
 
 test("dispatch allowed when every gate passes", () => {
   assert.equal(checkDispatch(okDispatch()).allow, true);
+  assert.ok(checkDispatch(okDispatch({ tenantCostComplete: false })).reasons.includes("tenant_cost_unknown"));
 });
 
 const dispatchBlocks = [

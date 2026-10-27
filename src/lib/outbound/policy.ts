@@ -75,7 +75,8 @@ export interface DispatchInput {
   enrollmentStatus: string;
   humanReplySeen: boolean;
   senderAcceptedToday: number; // provider-accepted sends by this sender today
-  tenantCostToDate: number; // minor units
+  tenantCostToDate: number; // minor units; a lower bound unless tenantCostComplete
+  tenantCostComplete: boolean; // false when unpriced usage events exist
   now: Date;
 }
 
@@ -100,6 +101,7 @@ export function checkDispatch(input: DispatchInput): Decision {
   if (input.enrollmentStatus !== "active") reasons.push(`enrollment_not_active:${input.enrollmentStatus}`);
   if (input.humanReplySeen) reasons.push("human_reply_seen_stops_followups");
 
+  if (!input.tenantCostComplete) reasons.push("tenant_cost_unknown");
   if (campaign && input.tenantCostToDate >= campaign.costCeiling.amount) reasons.push("tenant_cost_ceiling_reached");
 
   if (campaign && campaign.sendWindows.length > 0) {

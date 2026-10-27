@@ -23,9 +23,14 @@ export async function GET(request: Request) {
     const store = new RtdbUsageStore();
     const events = await store.listUsage(access.workspaceUid);
     const total = await store.sumCostMinorUnits(access.workspaceUid);
+    const unpriced = events.filter((e) => e.costMinorUnits === null).length;
     return Response.json({
       totalCostMinorUnits: total,
-      unpricedEvents: events.filter((e) => e.costMinorUnits === null).length,
+      // true 0 vs unknown: when unpriced events exist the total is a lower
+      // bound, not a total. Spend decisions must not key off an incomplete
+      // total; dispatch denies when costComplete is false.
+      costComplete: unpriced === 0,
+      unpricedEvents: unpriced,
       events,
     }, { headers: NO_STORE });
   } catch (error) {
