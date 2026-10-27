@@ -1,5 +1,7 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { assertSignupAllowed } from "@/lib/geo/team";
+import { NEW_SIGNUP_BLOCK_MESSAGE } from "@/lib/geo/signup-gate";
 import { loadBilling } from "@/lib/billing/store";
 import { isInterval, isRazorpayPlan } from "@/lib/billing/dodo";
 import { orderPrice, razorpayCreateOrder, razorpayKeyId, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
@@ -28,6 +30,16 @@ export async function POST(request: Request) {
     if (!isRazorpayPlan(body.plan) || !isInterval(body.interval) || !orderPrice(body.plan, body.interval)) {
       return Response.json({ error: "Choose a plan (trial, pro or growth) with a valid term." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
+    // New-signup gate (owner-requested 27 Oct 2026): guest checkout is closed
+    // while the gate is on. A guest payment could only be claimed by a
+    // brand-new account, which the gate blocks - taking payment first would
+    // strand the buyer. Signed-in existing users can still buy.
+    if (!(request.headers.get("authorization") || "").trim()) {
+      return Response.json(
+        { error: NEW_SIGNUP_BLOCK_MESSAGE, code: "signup_gate" },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     // Server-side duplicate guard. Only a genuinely ABSENT token means guest:
     // a supplied token that fails verification, or an account lookup that
     // errors, fails CLOSED - no order is created in either case.
@@ -53,6 +65,9 @@ export async function POST(request: Request) {
           { status: 503, headers: { "Cache-Control": "no-store" } },
         );
       }
+      // Signed-in but brand-new account: it could not claim the purchase under
+      // the signup gate, so no order is created for it either.
+      await assertSignupAllowed(identity);
       if (existing && (existing.status === "active" || existing.status === "grace")) {
         return Response.json(
           { error: "This account already has an active plan - manage or upgrade it from billing settings instead of buying again.", code: "active_plan" },

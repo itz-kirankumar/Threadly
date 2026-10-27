@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-type FirebaseIdentity = { uid: string; email: string; name: string; idToken: string };
+export type FirebaseIdentity = { uid: string; email: string; name: string; idToken: string };
 type WorkspaceAuth = { uid: string; idToken: string; useAdmin?: boolean };
 const workspaceAuth = new AsyncLocalStorage<WorkspaceAuth>();
 
