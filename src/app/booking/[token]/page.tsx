@@ -72,9 +72,9 @@ export default function BookingPage({ params }: { params: Promise<{ token: strin
       {error && <p className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
       {confirmation ? (
         <div className="mt-6 rounded-xl border border-teal-500/40 bg-teal-500/10 p-4">
-          <p className="text-sm font-medium text-teal-300">Confirmed</p>
+          <p className="text-sm font-medium text-teal-300">{confirmation.synthetic ? "Test booking confirmed" : "Confirmed"}</p>
           <p className="mt-1 text-sm text-zinc-300">
-            {new Date(confirmation.startsAt).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })} ({confirmation.timezone}), {confirmation.durationMinutes} minutes.
+            {new Date(confirmation.startsAt).toLocaleString(undefined, { timeZone: confirmation.timezone, dateStyle: "full", timeStyle: "short" })} ({confirmation.timezone}), {confirmation.durationMinutes} minutes.
           </p>
           {confirmation.synthetic && (
             <p className="mt-2 text-xs text-amber-300">{confirmation.notice ?? "Confirmed by the mock calendar adapter: no real calendar event was created."}</p>
@@ -94,7 +94,7 @@ export default function BookingPage({ params }: { params: Promise<{ token: strin
                   disabled={busy}
                   onClick={() => book(s.startISO)}
                 >
-                  {new Date(s.startISO).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {new Date(s.startISO).toLocaleString(undefined, { timeZone: offer.timezone, weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </button>
               </li>
             ))}

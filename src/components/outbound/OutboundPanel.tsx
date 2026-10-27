@@ -51,6 +51,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importResult, setImportResult] = useState<ImportCommit | null>(null);
   const [policyForm, setPolicyForm] = useState({ durationMinutes: "30", startHour: "9", endHour: "17", timezone: "Asia/Kolkata" });
+  const [hostSenderId, setHostSenderId] = useState<string>("");
   const [policyId, setPolicyId] = useState<string>("");
   const [bookingLink, setBookingLink] = useState<BookingLinkResult | null>(null);
   const [bookingContactId, setBookingContactId] = useState("");
@@ -423,19 +424,35 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           <div className={card}>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Meeting booking</h3>
             <p className="mb-2 text-xs text-zinc-500">
-              Step 1 saves a booking policy whose host pool is the first registered sender. Step 2 creates a single-use booking link for a contact. Slot claims are atomic; a provider timeout quarantines the claim instead of retrying. The mock calendar adapter confirms without creating a real event and says so.
+              Step 1 saves a booking policy for the host sender you explicitly select below. Step 2 creates a single-use booking link for a contact. Slot claims are atomic; a provider timeout quarantines the claim instead of retrying. The mock calendar adapter confirms without creating a real event and says so.
             </p>
             <div className="grid gap-2 md:grid-cols-4">
-              <input className={input} placeholder="Minutes" value={policyForm.durationMinutes} onChange={(e) => setPolicyForm({ ...policyForm, durationMinutes: e.target.value })} />
-              <input className={input} placeholder="Start hour" value={policyForm.startHour} onChange={(e) => setPolicyForm({ ...policyForm, startHour: e.target.value })} />
-              <input className={input} placeholder="End hour" value={policyForm.endHour} onChange={(e) => setPolicyForm({ ...policyForm, endHour: e.target.value })} />
-              <input className={input} placeholder="Timezone" value={policyForm.timezone} onChange={(e) => setPolicyForm({ ...policyForm, timezone: e.target.value })} />
+              <label className="grid gap-1 text-xs text-zinc-400">Duration (minutes)
+                <input className={input} inputMode="numeric" value={policyForm.durationMinutes} onChange={(e) => setPolicyForm({ ...policyForm, durationMinutes: e.target.value })} />
+              </label>
+              <label className="grid gap-1 text-xs text-zinc-400">Start hour (0-23)
+                <input className={input} inputMode="numeric" value={policyForm.startHour} onChange={(e) => setPolicyForm({ ...policyForm, startHour: e.target.value })} />
+              </label>
+              <label className="grid gap-1 text-xs text-zinc-400">End hour (0-23)
+                <input className={input} inputMode="numeric" value={policyForm.endHour} onChange={(e) => setPolicyForm({ ...policyForm, endHour: e.target.value })} />
+              </label>
+              <label className="grid gap-1 text-xs text-zinc-400">Timezone (IANA)
+                <input className={input} value={policyForm.timezone} onChange={(e) => setPolicyForm({ ...policyForm, timezone: e.target.value })} />
+              </label>
             </div>
+            <label className="mt-2 grid gap-1 text-xs text-zinc-400">Host sender (deliberate selection - no default is assumed)
+              <select className={input} value={hostSenderId} onChange={(e) => setHostSenderId(e.target.value)}>
+                <option value="" disabled>Select host sender</option>
+                {senders.map((snd) => (
+                  <option key={snd.senderId} value={snd.senderId}>{snd.email} · {snd.status}</option>
+                ))}
+              </select>
+            </label>
             <div className="mt-2 flex items-center gap-2">
-              <button className={btn} disabled={busy || !senders.length} onClick={() => act(async () => {
+              <button className={btn} disabled={busy || !hostSenderId} onClick={() => act(async () => {
                 const res = (await authedFetch("/api/outbound/meetings", { method: "POST", body: JSON.stringify({
                   action: "save-policy",
-                  hostPool: [senders[0].senderId],
+                  hostPool: [hostSenderId],
                   durationMinutes: Number(policyForm.durationMinutes) || 30,
                   startHour: Number(policyForm.startHour) || 9,
                   endHour: Number(policyForm.endHour) || 17,
@@ -447,11 +464,11 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
             </div>
             <div className="mt-3 flex gap-2">
               <input className={input} placeholder="Contact id for the booking link" value={bookingContactId} onChange={(e) => setBookingContactId(e.target.value)} />
-              <button className={btn} disabled={busy || !policyId || !bookingContactId.trim() || !senders.length} onClick={() => act(async () => {
+              <button className={btn} disabled={busy || !policyId || !bookingContactId.trim() || !hostSenderId} onClick={() => act(async () => {
                 const res = (await authedFetch("/api/outbound/meetings", { method: "POST", body: JSON.stringify({
                   action: "create-booking-link",
                   contactId: bookingContactId.trim(),
-                  organizerSenderId: senders[0].senderId,
+                  organizerSenderId: hostSenderId,
                   policyId,
                 })})) as BookingLinkResult;
                 setBookingLink(res);
@@ -504,7 +521,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
               <ul className="grid gap-1 text-sm text-zinc-300">
                 {meetings.map((m) => (
                   <li key={m.meetingId} className="rounded-lg border border-white/10 px-3 py-2">
-                    {m.startsAt} ({m.timezone}) · {m.booked ? "booked" : "not booked"}{m.synthetic ? " · synthetic (mock calendar, no real event)" : ""} · held: {(m.held ?? null) === null ? "unknown" : m.held ? "yes" : "no"}
+                    {(() => { try { return new Date(m.startsAt).toLocaleString(undefined, { timeZone: m.timezone || "UTC", dateStyle: "medium", timeStyle: "short" }); } catch { return m.startsAt; } })()} ({m.timezone}) · {m.booked ? "booked" : "not booked"}{m.synthetic ? " · synthetic (mock calendar, no real event)" : ""} · held: {(m.held ?? null) === null ? "unknown" : m.held ? "yes" : "no"}
                   </li>
                 ))}
               </ul>
