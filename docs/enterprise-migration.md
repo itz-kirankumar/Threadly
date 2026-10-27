@@ -97,3 +97,26 @@ touches provider accounts, or spends money:
 - Branch pushes create preview deployments that are dark for outbound routes
   by default (no flag set). The flag is created only for a scoped validation
   window and removed with the enabled deployments afterwards.
+
+## Continuation, 28 October 2026 (second overnight session)
+
+Built on enterprise-outbound after main's correction that activation gates are not implementation gates:
+
+- Provider adapters (Gmail + Microsoft): real consent URL/token/send implementations with accepted/rejected/unknown outcome mapping (Graph 202 = accepted, not delivered; timeout/5xx = unknown, never blind-retried). OAuth consent flow is the ONLY sender-activation path: HMAC-signed state, provider-verified mailbox identity must match the registered sender, AES-256-GCM token storage, disconnect deletes tokens + revokes trace. Inactive everywhere: needs provider client envs (OUTBOUND_GMAIL_*/OUTBOUND_MS_*, absent), real consent execution, and OUTBOUND_PROVIDERS_LIVE for live sends (never set). Dispatch routes through RoutingDispatchProvider; synthetic marking is now per-outcome.
+- Meetings (F18): BookingPolicy (host pool, IANA-timezone working hours, buffers), recipient booking links (sha256-hashed tokens, expiry, single-use), slot commit with free/busy recheck immediately before provider event creation. Calendar adapters: mock (synthetic) + real Google/Microsoft, live-gated; live flag without calendar-scope consent refuses. booked vs attendeeAccepted vs held stay separate outcomes; cancel updates the same record.
+- CSV import (F02/F03): preview/commit, rightsConfirmed required (unlicensed source blocked), SourceEvidence + RightsRecord per contact, re-import reconciles by normalized email, accounts deduped by domain, emails indexed by sha256.
+- CRM (F19): HubSpot adapter (search-before-create upsert, note logging; refuses without OUTBOUND_HUBSPOT_TOKEN) + contacts CSV export with rights provenance.
+- Experiments (F10): deterministic sha256 bucket assignment (no cross-variant recipients), holdouts never planned, active experiments require variantsApprovedBy, small samples labeled.
+- LLM personalization: scoped adapter enforcing allowlisted+evidenced variables only, explicit template fallback with recorded reason, prompt rules against invented familiarity/testimonials. Mock provider = zero-spend synthetic; HttpLLMProvider configured by env (absent). Real-LLM generation records cost UNKNOWN, which blocks dispatch until priced. Decoupled from the Gemini prepay decision.
+- Audit trail: append-only events (push-only store) for sender.consent_completed, sender.consent_revoked, booking.committed.
+
+### Verified model pricing (28 Oct 2026, sources below; re-verify at selection)
+- Gemini API: free tier uses content to improve products - disqualified for tenant content; usable only for synthetic fixtures. Paid: gemini-3.8-flash $0.75 in / $3.75 out per 1M tokens through 2026-12-31, $1.50/$7.50 from 2027-01-01; other listed models $1/$5 and up. Prepaid and pay-as-you-go both exist. Source: https://ai.google.dev/gemini-api/docs/pricing
+- Anthropic: Sonnet 5 $2 in / $10 out per MTok; Opus 5 $5/$25; Fable 5.1 $10/$50. Source: https://docs.anthropic.com/en/docs/about-claude/pricing
+
+### Still open
+- Reply-ingestion webhook scaffolding (F15 restricted scopes = separate consent decision).
+- Audit wiring for the remaining routes (import, experiments, dispatch, plan).
+- UI surfaces for senders-consent, booking, import, experiments + a validation run with pixel passes.
+- D06 architecture decision record (Firebase-first vs managed PostgreSQL) - writable without the owner; the choice itself is D06.
+- Owner decisions: D01-D10 as reported to main; sender OAuth consent on real accounts; any spend; G3/G4 release.
