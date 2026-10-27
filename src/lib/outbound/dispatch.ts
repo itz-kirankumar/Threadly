@@ -83,7 +83,12 @@ export async function runDispatch(
   const tenantCostToDate = events.reduce((sum, e) => sum + (e.costMinorUnits ?? 0), 0);
 
   const intents = (await campaigns.listIntentsByCampaign(tenantId, campaignId)).filter(
-    (i) => i.status === "approved" || i.status === "scheduled"
+    (i) =>
+      i.status === "approved" ||
+      i.status === "scheduled" ||
+      // Crash recovery: a reservation with no lease owner belongs to a run
+      // that died mid-flight; reclaim it and re-evaluate the gates.
+      (i.status === "reserved" && !i.leaseOwner)
   );
   for (const intent of intents) {
     const draft = await drafts.getDraftForIntent(tenantId, intent.intentId);
@@ -93,7 +98,9 @@ export async function runDispatch(
     }
     // Reserve (CAS each edge; another runner may hold the intent).
     let current = intent;
-    if (current.status === "approved") {
+    if (current.status === "reserved") {
+      // Reclaimed stale reservation: evaluate gates directly.
+    } else if (current.status === "approved") {
       const next = transition(current, "scheduled", { actor, now });
       if (!(await ledger.compareAndSetStatus(tenantId, intent.intentId, "approved", next))) {
         result.skipped.push({ intentId: intent.intentId, reason: "reservation_conflict" });
@@ -102,13 +109,15 @@ export async function runDispatch(
       current = next;
       await campaigns.saveIntent(current);
     }
-    const reserved = transition(current, "reserved", { actor, now });
-    if (!(await ledger.compareAndSetStatus(tenantId, intent.intentId, "scheduled", reserved))) {
-      result.skipped.push({ intentId: intent.intentId, reason: "reservation_conflict" });
-      continue;
+    if (current.status !== "reserved") {
+      const reserved = transition(current, "reserved", { actor, now });
+      if (!(await ledger.compareAndSetStatus(tenantId, intent.intentId, "scheduled", reserved))) {
+        result.skipped.push({ intentId: intent.intentId, reason: "reservation_conflict" });
+        continue;
+      }
+      current = reserved;
+      await campaigns.saveIntent(current);
     }
-    current = reserved;
-    await campaigns.saveIntent(current);
 
     const sender = intent.senderId ? await senders.getSender(tenantId, intent.senderId) : null;
     const acceptedToday = await countAcceptedToday(ledger, tenantId, campaignId, intent.senderId, campaigns, now);
