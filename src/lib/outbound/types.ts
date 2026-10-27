@@ -264,6 +264,12 @@ export interface BookingLink extends CreationMeta {
   expiresAt: ISODate;
   usedAt: ISODate | null;
   meetingId: string | null;
+  // Exactly-one-provider-attempt claim. "claiming" = a commit is in flight
+  // (a provider call may happen); "claim_unknown" = provider outcome after a
+  // call attempt could not be determined - reconciliation required, the link
+  // never retries automatically, so duplicate invites are impossible by
+  // construction. "claimed" = committed.
+  claimState?: "claiming" | "claimed" | "claim_unknown" | null;
 }
 
 export interface CRMMapping extends CreationMeta {

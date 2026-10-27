@@ -21,6 +21,16 @@ export interface BookingLinkStore {
   saveLink(l: BookingLink): Promise<void>;
   getLinkByTokenHash(tokenHash: string): Promise<BookingLink | null>;
   updateLink(l: BookingLink): Promise<void>;
+  // Atomic claim: succeeds only when the link is unused and unclaimed. This
+  // is the concurrency lock that makes double redemption (and therefore
+  // duplicate provider events) impossible; a free/busy recheck alone is not.
+  claimLink(l: BookingLink): Promise<boolean>;
+  // Release after a failure where NO provider call happened (e.g. slot
+  // conflict at the commit-time recheck). The link becomes usable again.
+  releaseLinkClaim(l: BookingLink): Promise<void>;
+  // Mark after a provider call whose outcome is unknown: never retried
+  // automatically; requires reconciliation, like provider_unknown sends.
+  markClaimUnknown(l: BookingLink): Promise<void>;
 }
 
 export interface BookingStores {
@@ -70,6 +80,7 @@ export async function createBookingLink(
     expiresAt,
     usedAt: null,
     meetingId: null,
+    claimState: null,
     createdAt: now.toISOString(),
     createdBy: input.actor,
   };
@@ -134,20 +145,36 @@ export async function selectSlot(
   const busy = await calendar.adapter.getFreeBusy({ accessToken: calendar.accessToken, windowStartISO: input.now.toISOString(), windowEndISO: windowEnd });
   const valid = computeSlots(policy, busy, input.now, 14).some((s) => s.startISO === new Date(input.startISO).toISOString());
   if (!valid) return { ok: false, status: 409, error: "Selected start is not an available slot." };
-  // Second recheck happens inside commitBooking immediately before creation.
-  const committed = await commitBooking(calendar.adapter, calendar.accessToken, {
-    tenantId: link.tenantId,
-    policy,
-    conversationId: link.conversationId,
-    contactId: link.contactId,
-    contactEmail: contact.email,
-    organizerSenderId: link.organizerSenderId,
-    startISO: input.startISO,
-    actor: input.actor,
-  });
-  if (!committed.ok) return { ok: false, status: 409, error: committed.error };
+  // Atomic claim BEFORE the provider call: simultaneous redemptions cannot
+  // both reach event creation. Exactly one provider attempt per link, ever.
+  const claimed = await stores.links.claimLink(link);
+  if (!claimed) return { ok: false, status: 409, error: "booking_in_progress_or_used: this link is being or has been redeemed." };
+  let committed;
+  try {
+    // Second recheck happens inside commitBooking immediately before creation.
+    committed = await commitBooking(calendar.adapter, calendar.accessToken, {
+      tenantId: link.tenantId,
+      policy,
+      conversationId: link.conversationId,
+      contactId: link.contactId,
+      contactEmail: contact.email,
+      organizerSenderId: link.organizerSenderId,
+      startISO: input.startISO,
+      actor: input.actor,
+    });
+  } catch (error) {
+    // Provider call attempted, outcome unknown: quarantine, never blind-retry.
+    await stores.links.markClaimUnknown(link);
+    return { ok: false, status: 502, error: "provider_outcome_unknown: the calendar call outcome is uncertain; reconciliation is required and no automatic retry will happen (duplicate-invite risk is not taken)." };
+  }
+  if (!committed.ok) {
+    // Conflict found before the provider call: no event attempt happened, so
+    // the claim is safely released for another slot choice.
+    await stores.links.releaseLinkClaim(link);
+    return { ok: false, status: 409, error: committed.error };
+  }
   await stores.conversations.saveMeeting(committed.meeting);
-  await stores.links.updateLink({ ...link, usedAt: new Date().toISOString(), meetingId: committed.meeting.meetingId });
+  await stores.links.updateLink({ ...link, usedAt: new Date().toISOString(), meetingId: committed.meeting.meetingId, claimState: "claimed" });
   await input.audit?.append(auditEvent({
     tenantId: link.tenantId, actor: input.actor, action: "booking.committed",
     target: `meeting:${committed.meeting.meetingId}`, outcome: "success",

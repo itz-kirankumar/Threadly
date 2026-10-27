@@ -5,7 +5,7 @@
 // an active sender, which keeps live dispatch unreachable until then.
 
 import type { Sender } from "./types.ts";
-import { tenantRoot } from "./rtdb-store.ts";
+import { rtdbCasPut, tenantRoot } from "./rtdb-store.ts";
 
 async function db() {
   const { getAdminDatabase } = await import("../geo/admin-store.ts");
@@ -46,8 +46,14 @@ export class RtdbSenderStore {
       throw new Error(`cannot activate sender in status ${sender.status}`);
     }
     const updated: Sender = { ...sender, status: "active", consentTraceId, scopes };
-    const database = await db();
-    await database.ref(`${tenantRoot(tenantId)}/senders/${safeKey(senderId)}`).set(updated);
+    // CAS: two simultaneous consent callbacks for the same sender cannot both
+    // activate; the loser sees a real conflict.
+    const ok = await rtdbCasPut<Sender>(
+      `${tenantRoot(tenantId)}/senders/${safeKey(senderId)}`,
+      (current) => !!current && current.tenantId === tenantId && (current.status === "pending_consent" || current.status === "revoked"),
+      updated
+    );
+    if (!ok) throw new Error("sender_activation_conflict");
     return updated;
   }
 

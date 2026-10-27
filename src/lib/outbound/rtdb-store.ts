@@ -25,6 +25,39 @@ export function outboundDataRoot(): string {
   return root;
 }
 
+// Generic ETag compare-and-put over the RTDB REST API: genuinely atomic,
+// independent of the client SDK's local transaction cache (which aborts on a
+// stale empty cache in fresh serverless processes). check() decides whether
+// the CURRENT server state allows the write; returns false on real conflict.
+export async function rtdbCasPut<T>(path: string, check: (current: T | null) => boolean, next: T): Promise<boolean> {
+  const { getAdminDatabase } = await import("../geo/admin-store.ts");
+  const database = await getAdminDatabase();
+  if (!database) throw new Error("RTDB admin not configured");
+  const app = (database as unknown as { app: { options: { databaseURL?: string } } }).app;
+  const base = (app.options.databaseURL ?? "").replace(/\/$/, "");
+  if (!base) throw new Error("RTDB databaseURL missing");
+  const credential = (app as unknown as { options: { credential?: { getAccessToken(): Promise<{ access_token: string }> } } }).options.credential;
+  if (!credential) throw new Error("RTDB admin credential missing");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const token = (await credential.getAccessToken()).access_token;
+    const getRes = await fetch(`${base}/${path}.json?access_token=${encodeURIComponent(token)}`, { cache: "no-store", headers: { "X-Firebase-ETag": "true" } });
+    if (!getRes.ok) throw new Error(`cas_read_failed:${getRes.status}`);
+    const etag = getRes.headers.get("ETag") ?? getRes.headers.get("etag");
+    const current = (await getRes.json()) as T | null;
+    if (!check(current)) return false;
+    if (!etag) throw new Error("cas_etag_missing");
+    const putRes = await fetch(`${base}/${path}.json?access_token=${encodeURIComponent(token)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "if-match": etag },
+      body: JSON.stringify(next),
+    });
+    if (putRes.ok) return true;
+    if (putRes.status === 412) continue;
+    throw new Error(`cas_write_failed:${putRes.status}`);
+  }
+  return false;
+}
+
 export function tenantRoot(tenantId: string): string {
   // RTDB keys cannot contain . $ # [ ] / ; tenant ids here are workspace uids
   // (safe charset), but validate defensively.

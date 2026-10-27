@@ -32,6 +32,14 @@ function stores({ busyLink = null } = {}) {
       async saveLink(l) { links.set(l.tokenHash, l); },
       async getLinkByTokenHash(h) { return links.get(h) ?? null; },
       async updateLink(l) { links.set(l.tokenHash, l); },
+      async claimLink(l) {
+        const current = links.get(l.tokenHash);
+        if (!current || current.usedAt !== null || current.claimState) return false;
+        links.set(l.tokenHash, { ...current, claimState: "claiming" });
+        return true;
+      },
+      async releaseLinkClaim(l) { links.set(l.tokenHash, { ...links.get(l.tokenHash), claimState: null }); },
+      async markClaimUnknown(l) { links.set(l.tokenHash, { ...links.get(l.tokenHash), claimState: "claim_unknown" }); },
     },
     contacts: {
       async getContact(t, id) {
@@ -142,4 +150,59 @@ test("organizer must be in the policy host pool", async () => {
     tenantId: "t1", conversationId: null, contactId: "ct_1", organizerSenderId: "snd_other", policyId: "bpo_1", actor: "u1",
   });
   assert.equal(result.status, 400);
+});
+
+test("double redemption race: exactly one provider attempt per link", async () => {
+  const s = stores();
+  let creates = 0;
+  const countingAdapter = new MockCalendarAdapter();
+  const origCreate = countingAdapter.createEvent.bind(countingAdapter);
+  countingAdapter.createEvent = async (...args) => { creates++; return origCreate(...args); };
+  const calendar = { adapter: countingAdapter, accessToken: null };
+  const created = await createBookingLink(s, {
+    tenantId: "t1", conversationId: null, contactId: "ct_1", organizerSenderId: "snd_1", policyId: "bpo_1", actor: "u1",
+  });
+  const first = await selectSlot(s, calendar, { token: created.token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  assert.equal(first.ok, true);
+  // Simultaneous/second redemption: claim already taken, no second provider call
+  const second = await selectSlot(s, calendar, { token: created.token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  assert.equal(second.status, 410); // usedAt set after first
+  assert.equal(creates, 1);
+});
+
+test("provider timeout after claim: claim_unknown, never auto-retried", async () => {
+  const s = stores();
+  let creates = 0;
+  const failingAdapter = new MockCalendarAdapter();
+  failingAdapter.createEvent = async () => { creates++; throw new Error("timeout"); };
+  const calendar = { adapter: failingAdapter, accessToken: null };
+  const created = await createBookingLink(s, {
+    tenantId: "t1", conversationId: null, contactId: "ct_1", organizerSenderId: "snd_1", policyId: "bpo_1", actor: "u1",
+  });
+  const result = await selectSlot(s, calendar, { token: created.token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  assert.equal(result.status, 502);
+  assert.match(result.error, /provider_outcome_unknown/);
+  const stored = await s.links.getLinkByTokenHash(hashBookingToken(created.token));
+  assert.equal(stored.claimState, "claim_unknown");
+  // No retry: any further attempt is refused without a provider call
+  const retry = await selectSlot(s, calendar, { token: created.token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  assert.notEqual(retry.status, 201);
+  assert.equal(creates, 1);
+});
+
+test("slot conflict at commit-time recheck releases the claim for another slot", async () => {
+  const s = stores();
+  // busy appears between offer and commit
+  const adapter = new MockCalendarAdapter([{ start: "2026-11-02T09:00:00Z", end: "2026-11-02T09:30:00Z" }]);
+  const calendar = { adapter, accessToken: null };
+  const created = await createBookingLink(s, {
+    tenantId: "t1", conversationId: null, contactId: "ct_1", organizerSenderId: "snd_1", policyId: "bpo_1", actor: "u1",
+  });
+  const conflict = await selectSlot(s, calendar, { token: created.token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  // not a valid slot at all (busy at offer time) -> 409 before claim
+  assert.equal(conflict.status, 409);
+  const stored = await s.links.getLinkByTokenHash(hashBookingToken(created.token));
+  assert.equal(stored.claimState ?? null, null); // still redeemable
+  const okPick = await selectSlot(s, calendar, { token: created.token, startISO: "2026-11-02T10:00:00.000Z", actor: "recipient", now: NOW });
+  assert.equal(okPick.ok, true);
 });

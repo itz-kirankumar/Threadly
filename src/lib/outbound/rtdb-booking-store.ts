@@ -4,7 +4,7 @@
 // the sha256 of the token, never the token itself.
 
 import type { BookingLink, BookingPolicy } from "./types.ts";
-import { outboundDataRoot, tenantRoot } from "./rtdb-store.ts";
+import { outboundDataRoot, rtdbCasPut, tenantRoot } from "./rtdb-store.ts";
 import type { BookingLinkStore, BookingPolicyStore } from "./booking-flow.ts";
 
 async function db() {
@@ -53,5 +53,22 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
 
   async updateLink(l: BookingLink): Promise<void> {
     await this.saveLink(l);
+  }
+
+  async claimLink(l: BookingLink): Promise<boolean> {
+    const claimed: BookingLink = { ...l, claimState: "claiming" };
+    return rtdbCasPut<BookingLink>(
+      `${outboundDataRoot()}/bookingLinksByToken/${safeKey(l.tokenHash)}`,
+      (current) => !!current && current.usedAt === null && !current.claimState,
+      claimed
+    );
+  }
+
+  async releaseLinkClaim(l: BookingLink): Promise<void> {
+    await this.saveLink({ ...l, claimState: null });
+  }
+
+  async markClaimUnknown(l: BookingLink): Promise<void> {
+    await this.saveLink({ ...l, claimState: "claim_unknown" });
   }
 }

@@ -188,3 +188,25 @@ test("revokeConsent deletes tokens, revokes trace and sender", async () => {
   assert.equal(records.tokens.has("snd_1"), false);
   assert.ok(records.traces.get("ctc_1").revokedAt);
 });
+
+test("replayed consent state cannot activate twice", async () => {
+  process.env.OUTBOUND_GMAIL_CLIENT_ID = "cid";
+  process.env.OUTBOUND_GMAIL_CLIENT_SECRET = "sec";
+  process.env.OUTBOUND_GMAIL_REDIRECT_URI = "https://app/cb";
+  const { state } = createOAuthState({ tenantId: "t1", senderId: "snd_1" });
+  const goodFetch = async (url) => {
+    if (url.includes("oauth2.googleapis.com/token")) {
+      return new Response(JSON.stringify({ access_token: "at", refresh_token: "rt", expires_in: 3600, scope: "https://www.googleapis.com/auth/gmail.send" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ emailAddress: "rep@example.com" }), { status: 200 });
+  };
+  const senders = memorySenders([sender()]);
+  const first = await completeConsent(senders, memoryRecords(), { expectedTenantId: "t1", state, code: "code1", fetchImpl: goodFetch });
+  assert.equal(first.ok, true);
+  const replay = await completeConsent(senders, memoryRecords(), { expectedTenantId: "t1", state, code: "code1", fetchImpl: goodFetch });
+  assert.equal(replay.ok, false);
+  assert.equal(replay.status, 409); // sender already active: replay rejected
+  delete process.env.OUTBOUND_GMAIL_CLIENT_ID;
+  delete process.env.OUTBOUND_GMAIL_CLIENT_SECRET;
+  delete process.env.OUTBOUND_GMAIL_REDIRECT_URI;
+});
