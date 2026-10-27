@@ -116,7 +116,9 @@ export async function POST(request: Request) {
             { headers: { "Cache-Control": "no-store" } },
           );
         }
-        const amountMatches = (prior.amount == null || order.amount == null || prior.amount === order.amount) && (prior.currency == null || order.currency == null || prior.currency === order.currency);
+        // Fail closed: reconcile only when BOTH sides are present and equal;
+        // an unknown amount/currency can never confirm exact intent.
+        const amountMatches = prior.amount != null && order.amount != null && prior.amount === order.amount && prior.currency != null && order.currency != null && prior.currency === order.currency;
         if (order.status === "paid" && amountMatches) {
           await saveCheckoutAttempt(access.workspaceUid, { ...prior, state: "reconciled", updatedAt: new Date().toISOString() });
           return Response.json(
@@ -216,7 +218,10 @@ export async function POST(request: Request) {
       );
     } catch (error) {
       const status = (error as { status?: number }).status ?? 0;
-      if (status >= 400 && status < 500) {
+      // Definitive no-resource only: auth rejection (request never processed)
+      // or Razorpay's documented BAD_REQUEST_ERROR validation failure.
+      const code = (error as { code?: string }).code ?? "";
+      if (status === 401 || status === 403 || code === "BAD_REQUEST_ERROR") {
         await saveCheckoutAttempt(access.workspaceUid, { ...attempt, state: "failed", updatedAt: new Date().toISOString() });
         return Response.json(
           { error: error instanceof Error ? error.message : "Razorpay rejected the order." },
