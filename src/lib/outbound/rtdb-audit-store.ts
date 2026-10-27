@@ -100,10 +100,16 @@ export class RtdbAuditStore implements AuditStore {
     return purged;
   }
 
+  // Reads the whole node and sorts in memory: an orderByChild query needs a
+  // rules-side .indexOn we deliberately do not add (rules are shared,
+  // admin-only infra). Prototype scale only; revisit before real volume.
   async list(tenantId: string, limit = 200): Promise<AuditEvent[]> {
     const database = await db();
-    const snap = await database.ref(`${tenantRoot(tenantId)}/audit`).orderByChild("at").limitToLast(limit).get();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/audit`).get();
     if (!snap.exists()) return [];
-    return Object.values(snap.val() as Record<string, AuditEvent>).filter((e) => e.tenantId === tenantId);
+    return Object.values(snap.val() as Record<string, AuditEvent>)
+      .filter((e) => e && e.tenantId === tenantId)
+      .sort((a, b) => (a.at < b.at ? 1 : -1))
+      .slice(0, limit);
   }
 }
