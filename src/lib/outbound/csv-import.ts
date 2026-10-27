@@ -91,6 +91,12 @@ export interface ImportStores {
   accounts: {
     findByDomain(tenantId: string, domain: string): Promise<Account | null>;
     saveAccount(a: Account): Promise<void>;
+    getAccount?(tenantId: string, accountId: string): Promise<Account | null>;
+  };
+  // Optional explicit domain -> account assignments (F03 subsidiary and
+  // shared-domain corrections), consulted before the index/auto-create.
+  domainAssignments?: {
+    getAssignment(tenantId: string, domain: string): Promise<string | null>;
   };
   contacts: {
     findByEmail(tenantId: string, email: string): Promise<Contact | null>;
@@ -139,7 +145,12 @@ export async function commitImport(
   let reconciled = 0;
   let accountsCreated = 0;
   for (const row of input.rows) {
-    let account = await stores.accounts.findByDomain(input.tenantId, row.accountDomain);
+    let account: Account | null = null;
+    const assignedId = stores.domainAssignments ? await stores.domainAssignments.getAssignment(input.tenantId, row.accountDomain) : null;
+    if (assignedId && stores.accounts.getAccount) {
+      account = await stores.accounts.getAccount(input.tenantId, assignedId); // explicit correction wins
+    }
+    if (!account) account = await stores.accounts.findByDomain(input.tenantId, row.accountDomain);
     if (!account) {
       account = {
         tenantId: input.tenantId, accountId: `acc_${crypto.randomUUID()}`,

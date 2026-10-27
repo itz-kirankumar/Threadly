@@ -31,6 +31,18 @@ export class RtdbAccountStore {
     return val.tenantId === tenantId ? val : null;
   }
 
+  async getAssignment(tenantId: string, domain: string): Promise<string | null> {
+    const database = await db();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/domainAssignments/${safeKey(domain.trim().toLowerCase())}`).get();
+    if (!snap.exists()) return null;
+    return snap.val() as string;
+  }
+
+  async saveAssignment(tenantId: string, domain: string, accountId: string): Promise<void> {
+    const database = await db();
+    await database.ref(`${tenantRoot(tenantId)}/domainAssignments/${safeKey(domain.trim().toLowerCase())}`).set(accountId);
+  }
+
   async findByDomain(tenantId: string, domain: string): Promise<Account | null> {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/accountsByDomain/${safeKey(domain)}`).get();

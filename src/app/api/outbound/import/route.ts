@@ -76,6 +76,7 @@ export async function POST(request: Request) {
           contacts: new RtdbContactStore(),
           evidence: new RtdbEvidenceStore(),
           rights: new RtdbContactStore(),
+          domainAssignments: new RtdbAccountStore(),
         },
         {
           tenantId: access.workspaceUid,
