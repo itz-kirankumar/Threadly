@@ -47,6 +47,11 @@ export async function POST(request: Request) {
       { status: 200, headers: NO_STORE }
     );
   } catch (error) {
+    // Temporary diagnostics for the isolated test context: surface the raw
+    // error only when running against the non-production data root.
+    if (process.env.OUTBOUND_DATA_ROOT === "outbound-test") {
+      return Response.json({ error: "debug", debug: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }, { status: 500 });
+    }
     return errorResponse(error, "outbound plan");
   }
 }
