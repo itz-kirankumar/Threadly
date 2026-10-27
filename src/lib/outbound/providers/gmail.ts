@@ -16,16 +16,20 @@ function base64url(value: string): string {
 function buildMime(request: SendRequest): string {
   const subject = `=?UTF-8?B?${Buffer.from(request.subject, "utf8").toString("base64")}?=`;
   const body = Buffer.from(request.bodyText, "utf8").toString("base64");
-  return [
+  const headers = [
     `To: ${request.to}`,
     `From: ${request.fromEmail}`,
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: base64",
-    "",
-    body,
-  ].join("\r\n");
+  ];
+  if (request.listUnsubscribeUrl) {
+    headers.push(`List-Unsubscribe: <${request.listUnsubscribeUrl}>`);
+    headers.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
+  }
+  headers.push("", body);
+  return headers.join("\r\n");
 }
 
 async function tokenRequest(fetchImpl: FetchImpl, params: Record<string, string>): Promise<ProviderTokens> {

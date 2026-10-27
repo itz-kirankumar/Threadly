@@ -7,6 +7,7 @@ const { MemoryContactStore, planCampaignIntents } = await import("../src/lib/out
 const { MemoryDraftStore, renderTemplate, templateVariables, contactEvidence } = await import("../src/lib/outbound/drafts.ts");
 const { MemoryUsageStore } = await import("../src/lib/outbound/usage.ts");
 const { generateDrafts } = await import("../src/lib/outbound/draft-run.ts");
+const UNSUB = { baseUrl: "https://app.test", secret: "test-secret" };
 
 const NOW = new Date("2026-10-27T12:00:00Z");
 const ISO = NOW.toISOString();
@@ -65,12 +66,16 @@ test("renders a draft for an allowed, evidence-backed variable", async () => {
     [{ step: 1, subject: "Hi {{first_name}}", body: "Hello {{full_name}}, welcome." }],
     ["first_name", "full_name"]
   );
-  const res = await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  const res = await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(res.rendered.length, 1);
   assert.equal(res.skipped.length, 0);
   const draft = await drafts.listDrafts("t1").then((d) => d[0]);
   assert.equal(draft.subject, "Hi Ada");
-  assert.equal(draft.body, "Hello Ada Lovelace, welcome.");
+  // F14: the approved body carries the visible opt-out footer; dispatch
+  // builds one-click headers from the stored URL.
+  assert.ok(draft.body.startsWith("Hello Ada Lovelace, welcome."));
+  assert.match(draft.body, /\n--\nUnsubscribe: https:\/\/app\.test\/api\/outbound\/unsubscribe\?/);
+  assert.equal(draft.unsubscribeUrl.includes("t=t1"), true);
   assert.equal(draft.engine, "template");
   assert.equal(res.usageRecorded.length, 1);
   const events = await usage.listUsage("t1");
@@ -82,7 +87,7 @@ test("fails closed on a variable outside allowedPersonalization", async () => {
     [{ step: 1, subject: "Hi", body: "About {{secret_thing}}" }],
     []
   );
-  const res = await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  const res = await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(res.rendered.length, 0);
   assert.deepEqual(res.skipped.map((s) => s.reason), ["variable_not_allowed:secret_thing"]);
   assert.equal((await drafts.listDrafts("t1")).length, 0);
@@ -95,7 +100,7 @@ test("fails closed when an allowed variable has no evidence value", async () => 
     ["title"]
   );
   // contact has no title in contactEvidence
-  const res = await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  const res = await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(res.rendered.length, 0);
   assert.deepEqual(res.skipped.map((s) => s.reason), ["evidence_missing:title"]);
 });
@@ -105,9 +110,9 @@ test("idempotent: a second run renders nothing and records no new usage", async 
     [{ step: 1, subject: "Hi {{first_name}}", body: "Body" }],
     ["first_name"]
   );
-  const first = await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  const first = await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(first.rendered.length, 1);
-  const second = await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  const second = await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(second.rendered.length, 0);
   assert.deepEqual(second.skipped.map((s) => s.reason), ["draft_exists"]);
   assert.equal((await usage.listUsage("t1")).length, 1);
@@ -120,7 +125,7 @@ test("skips intents not in drafted status", async () => {
   const intents = await campaigns.listIntentsByCampaign("t1", "c1");
   const cancelled = { ...intents[0], status: "cancelled" };
   await campaigns.saveIntent(cancelled);
-  const res = await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  const res = await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(res.rendered.length, 0);
   assert.equal(res.skipped.length, 0);
 });

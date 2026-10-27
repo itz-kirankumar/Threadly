@@ -10,6 +10,7 @@ const { generateDrafts, approveDraft } = await import("../src/lib/outbound/draft
 const { MockDispatchProvider, runDispatch } = await import("../src/lib/outbound/dispatch.ts");
 const { MemoryKillSwitchStore } = await import("../src/lib/outbound/kill-switches.ts");
 const { MemoryPreflightStore } = await import("../src/lib/outbound/preflight.ts");
+const UNSUB = { baseUrl: "https://app.test", secret: "test-secret" };
 function passingPreflight(domain) {
   return {
     tenantId: "t1", domain, spf: "pass", dkim: "pass", dkimSelector: "google", dmarc: "pass", dmarcPolicy: "reject",
@@ -81,7 +82,7 @@ async function setup(senderList, contactId = "k1") {
   const intent = { ...planned[0], senderId: senderList[0].senderId };
   await campaigns.saveIntent(intent);
   await ledger.createIntentIfAbsent(intent).catch(() => {});
-  const gen = await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  const gen = await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(gen.rendered.length, 1);
   const draft = (await drafts.listDrafts("t1"))[0];
   const senders = new StaticSenderReader(senderList);

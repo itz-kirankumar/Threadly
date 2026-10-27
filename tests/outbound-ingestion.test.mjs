@@ -140,7 +140,7 @@ test("dispatch defers when sender sync is stale or never synced", async () => {
     await campaigns.saveIntent(approved);
     await ledger.compareAndSetStatus("t1", i.intentId, i.status, approved);
   }
-  await drafts.saveDraft({ tenantId: "t1", draftId: "dr_x", intentId: intents[0].intentId, subject: "s", body: "b", reviewState: "approved", createdAt: NOW.toISOString(), createdBy: "u1" });
+  await drafts.saveDraft({ tenantId: "t1", draftId: "dr_x", intentId: intents[0].intentId, subject: "s", body: "b", reviewState: "approved", unsubscribeUrl: "https://app.test/api/outbound/unsubscribe?t=t1&e=YRWA&f=c1&sig=00", createdAt: NOW.toISOString(), createdBy: "u1" });
 
   const ingestion = new MemoryIngestionStore();
   const preflight = new MemoryPreflightStore();

@@ -97,6 +97,14 @@ export class MicrosoftAdapter implements MailProviderAdapter {
             subject: input.request.subject,
             body: { contentType: "Text", content: input.request.bodyText },
             toRecipients: [{ emailAddress: { address: input.request.to } }],
+            ...(input.request.listUnsubscribeUrl
+              ? {
+                  internetMessageHeaders: [
+                    { name: "List-Unsubscribe", value: `<${input.request.listUnsubscribeUrl}>` },
+                    { name: "List-Unsubscribe-Post", value: "List-Unsubscribe=One-Click" },
+                  ],
+                }
+              : {}),
           },
           saveToSentItems: true,
         }),

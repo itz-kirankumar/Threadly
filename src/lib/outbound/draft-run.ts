@@ -10,6 +10,8 @@ import type { LedgerStore } from "./ledger.ts";
 import { contactEvidence, renderTemplate, type Draft, type DraftStore } from "./drafts.ts";
 import type { MessageIntent } from "./types.ts";
 import type { UsageStore } from "./usage.ts";
+import type { UnsubscribeConfig } from "./unsubscribe.ts";
+import { buildUnsubscribeUrl, unsubscribeFooter } from "./unsubscribe.ts";
 
 export interface DraftRunResult {
   rendered: string[];
@@ -18,10 +20,15 @@ export interface DraftRunResult {
 }
 
 export async function generateDrafts(
-  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; drafts: DraftStore; usage: UsageStore; experiments?: import("./experiments.ts").ExperimentStore; llm?: import("./llm/types.ts").PersonalizationProvider },
+  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; drafts: DraftStore; usage: UsageStore; experiments?: import("./experiments.ts").ExperimentStore; llm?: import("./llm/types.ts").PersonalizationProvider; unsubscribe: UnsubscribeConfig },
   input: { tenantId: string; campaignId: string; actor: string; now: Date }
 ): Promise<DraftRunResult> {
   const { campaigns, ledger, contacts, drafts, usage } = stores;
+  // F14 fail-closed: without unsubscribe configuration no draft may render,
+  // because every approved body must carry a working opt-out path.
+  if (!stores.unsubscribe || !stores.unsubscribe.baseUrl || !stores.unsubscribe.secret) {
+    throw new Error("unsubscribe config required: refusing to render drafts without an opt-out path");
+  }
   const { tenantId, campaignId, actor, now } = input;
   const campaign = await campaigns.latestCampaignVersion(tenantId, campaignId);
   if (!campaign) throw new Error("campaign_version_missing");
@@ -88,13 +95,21 @@ export async function generateDrafts(
       for (const reason of rendered.reasons) result.skipped.push({ intentId: intent.intentId, reason });
       continue;
     }
+    // F14: the opt-out footer is part of the body the reviewer approves;
+    // dispatch later builds one-click headers from this same stored URL.
+    const unsubscribeUrl = buildUnsubscribeUrl(stores.unsubscribe, {
+      tenantId,
+      email: contact.email,
+      campaignId: intent.campaignId,
+    });
     const draft: Draft = {
       tenantId,
       draftId: `dr_${intent.intentId.replace(/^mi_/, "")}`,
       intentId: intent.intentId,
       step: intent.step,
       subject: rendered.subject!,
-      body: rendered.body!,
+      body: rendered.body! + unsubscribeFooter(unsubscribeUrl),
+      unsubscribeUrl,
       engine,
       ...(fallbackReason ? { fallbackReason } : {}),
       renderedAt: now.toISOString(),

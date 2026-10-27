@@ -3,6 +3,7 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { approveDraft, generateDrafts } from "@/lib/outbound/draft-run";
 import { RtdbDraftStore } from "@/lib/outbound/drafts-rtdb";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
+import { unsubscribeConfigFromEnv } from "@/lib/outbound/unsubscribe";
 import { HttpLLMProvider } from "@/lib/outbound/llm/http";
 import { MockLLMProvider } from "@/lib/outbound/llm/mock";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
@@ -59,6 +60,10 @@ export async function POST(request: Request) {
     }
     const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
     if (!campaignId) return Response.json({ error: "campaignId is required." }, { status: 400 });
+    const unsubscribe = unsubscribeConfigFromEnv();
+    if (!unsubscribe) {
+      return Response.json({ error: "Unsubscribe is not configured on this deployment (OUTBOUND_PUBLIC_BASE_URL / OUTBOUND_UNSUBSCRIBE_SECRET)." }, { status: 400, headers: NO_STORE });
+    }
     const result = await generateDrafts(
       {
         campaigns: new RtdbCampaignStore(),
@@ -67,6 +72,7 @@ export async function POST(request: Request) {
         drafts: new RtdbDraftStore(),
         usage: new RtdbUsageStore(),
         experiments: new RtdbExperimentStore(),
+        unsubscribe,
         // llm-assisted engine: use the real endpoint when configured,
         // otherwise the mock (synthetic, clearly marked) so the path is
         // exercisable without supplier selection or spend.

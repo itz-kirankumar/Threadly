@@ -51,7 +51,7 @@ export class LiveDispatchProvider implements DispatchProvider {
     }
   }
 
-  async send(input: { sender: Sender; intent: MessageIntent; subject: string; body: string; to: string }) {
+  async send(input: { sender: Sender; intent: MessageIntent; subject: string; body: string; to: string; listUnsubscribeUrl?: string }) {
     if (!input.to) {
       return { outcome: "unknown" as const, correlationId: null, statusCode: null, detail: "recipient email missing; no provider call made", synthetic: false };
     }
@@ -70,6 +70,7 @@ export class LiveDispatchProvider implements DispatchProvider {
         fromEmail: input.sender.email,
         subject: input.subject,
         bodyText: input.body,
+        ...(input.listUnsubscribeUrl ? { listUnsubscribeUrl: input.listUnsubscribeUrl } : {}),
       },
     });
     return {
@@ -93,7 +94,7 @@ export class RoutingDispatchProvider implements DispatchProvider {
     this.live = new LiveDispatchProvider(consentStore, fetchImpl);
   }
 
-  async send(input: { sender: Sender; intent: MessageIntent; subject: string; body: string; to: string }) {
+  async send(input: { sender: Sender; intent: MessageIntent; subject: string; body: string; to: string; listUnsubscribeUrl?: string }) {
     if (input.sender.status === "active" && liveProvidersEnabled()) {
       return this.live.send(input);
     }

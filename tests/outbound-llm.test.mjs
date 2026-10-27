@@ -70,6 +70,7 @@ test("llm-assisted campaign falls back to approved template with recorded reason
   const { MemoryDraftStore } = await import("../src/lib/outbound/drafts.ts");
   const { MemoryUsageStore } = await import("../src/lib/outbound/usage.ts");
   const { generateDrafts } = await import("../src/lib/outbound/draft-run.ts");
+const UNSUB = { baseUrl: "https://app.test", secret: "test-secret" };
   const NOW = new Date("2026-10-27T12:00:00Z");
   const campaigns = new MemoryCampaignStore();
   const campaign = {
@@ -103,7 +104,7 @@ test("llm-assisted campaign falls back to approved template with recorded reason
   await planCampaignIntents({ campaigns, ledger, contacts }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
 
   // No provider injected: explicit fallback, reason recorded
-  let result = await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  let result = await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(result.rendered.length, 1);
   const draft = [...drafts.drafts.values()][0];
   assert.equal(draft.engine, "template-fallback");
@@ -116,7 +117,7 @@ test("llm-assisted campaign falls back to approved template with recorded reason
   const campaigns2 = campaigns;
   const intents = await campaigns2.listIntentsByCampaign("t1", "c1");
   for (const i of intents) await campaigns2.saveIntent({ ...i, status: "drafted" });
-  result = await generateDrafts({ campaigns: campaigns2, ledger, contacts, drafts: drafts2, usage: usage2, llm: new MockLLMProvider() }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  result = await generateDrafts({ campaigns: campaigns2, ledger, contacts, drafts: drafts2, usage: usage2, llm: new MockLLMProvider() , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(result.rendered.length, 1);
   const draft2 = [...drafts2.drafts.values()][0];
   assert.equal(draft2.engine, "mock-llm");

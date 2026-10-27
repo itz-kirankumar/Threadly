@@ -27,7 +27,9 @@ export interface SenderReader {
 
 export interface DispatchProvider {
   name: string;
-  send(input: { sender: Sender; intent: MessageIntent; subject: string; body: string; to: string }): Promise<{
+  // listUnsubscribeUrl: the exact opt-out URL rendered into the approved
+  // body; adapters emit RFC 8058 List-Unsubscribe(+Post) headers from it.
+  send(input: { sender: Sender; intent: MessageIntent; subject: string; body: string; to: string; listUnsubscribeUrl?: string }): Promise<{
     outcome: "accepted" | "rejected" | "unknown";
     correlationId: string | null;
     statusCode: number | null;
@@ -139,6 +141,12 @@ export async function runDispatch(
       result.skipped.push({ intentId: intent.intentId, reason: "draft_missing" });
       continue;
     }
+    if (!draft.unsubscribeUrl) {
+      // Rendered before F14: the approved body has no opt-out path, so this
+      // draft can never dispatch. Re-render a new draft instead.
+      result.skipped.push({ intentId: intent.intentId, reason: "unsubscribe_url_missing" });
+      continue;
+    }
     // Reserve (CAS each edge; another runner may hold the intent).
     let current = intent;
     if (current.status === "reserved") {
@@ -214,7 +222,7 @@ export async function runDispatch(
     await ledger.compareAndSetStatus(tenantId, intent.intentId, "reserved", dispatching);
     await campaigns.saveIntent(dispatching);
 
-    const sendResult = await provider.send({ sender: sender!, intent: dispatching, subject: draft.subject, body: draft.body, to: contact ? contact.email : "" });
+    const sendResult = await provider.send({ sender: sender!, intent: dispatching, subject: draft.subject, body: draft.body, to: contact ? contact.email : "", listUnsubscribeUrl: draft.unsubscribeUrl });
     const attempt: DeliveryAttempt = {
       tenantId,
       attemptId: `at_${intent.intentId.replace(/^mi_/, "")}`,

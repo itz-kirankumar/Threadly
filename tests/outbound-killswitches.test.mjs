@@ -111,9 +111,10 @@ test("sender/domain scopes are enforced at dispatch (not planning)", async () =>
 
   // draft + approve, then dispatch with an active sender on that domain
   const { generateDrafts, approveDraft } = await import("../src/lib/outbound/draft-run.ts");
+const UNSUB = { baseUrl: "https://app.test", secret: "test-secret" };
   const drafts = new MemoryDraftStore();
   const usage = new MemoryUsageStore();
-  await generateDrafts({ campaigns: stores.campaigns, ledger: stores.ledger, contacts: stores.contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  await generateDrafts({ campaigns: stores.campaigns, ledger: stores.ledger, contacts: stores.contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   const draft = (await drafts.listDrafts("t1"))[0];
   await approveDraft({ ledger: stores.ledger, campaigns: stores.campaigns, drafts }, { tenantId: "t1", draftId: draft.draftId, actor: "u1", now: NOW });
   const senders = { async getSender() {

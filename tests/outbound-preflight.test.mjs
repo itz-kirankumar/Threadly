@@ -11,6 +11,7 @@ const { generateDrafts, approveDraft } = await import("../src/lib/outbound/draft
 const { MemoryUsageStore } = await import("../src/lib/outbound/usage.ts");
 const { MemoryIngestionStore } = await import("../src/lib/outbound/ingestion.ts");
 const { MemoryKillSwitchStore } = await import("../src/lib/outbound/kill-switches.ts");
+const UNSUB = { baseUrl: "https://app.test", secret: "test-secret" };
 
 const NOW = new Date("2026-10-28T12:00:00Z");
 
@@ -98,7 +99,7 @@ async function dispatchSetup(preflightRecord) {
   await planCampaignIntents({ campaigns, ledger, contacts }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   const drafts = new MemoryDraftStore();
   const usage = new MemoryUsageStore();
-  await generateDrafts({ campaigns, ledger, contacts, drafts, usage }, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  await generateDrafts({ campaigns, ledger, contacts, drafts, usage , unsubscribe: UNSUB}, { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   const draft = (await drafts.listDrafts("t1"))[0];
   await approveDraft({ ledger, campaigns, drafts }, { tenantId: "t1", draftId: draft.draftId, actor: "u1", now: NOW });
   const senders = { async getSender() {

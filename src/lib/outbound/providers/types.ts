@@ -26,6 +26,9 @@ export interface SendRequest {
   fromEmail: string;
   subject: string;
   bodyText: string;
+  // RFC 8058: adapters emit List-Unsubscribe + List-Unsubscribe-Post headers
+  // from this URL (the same capability link rendered into the body).
+  listUnsubscribeUrl?: string;
 }
 
 export interface MailProviderAdapter {

@@ -17,6 +17,10 @@ export interface Draft {
   // instead; records exactly why (F06 fallback is explicit, never silent).
   fallbackReason?: string;
   renderedAt: string;
+  // F14: the exact opt-out link rendered into the approved body footer.
+  // Dispatch builds RFC 8058 headers from this stored URL and defers drafts
+  // that lack one (rendered before this field existed).
+  unsubscribeUrl: string;
   createdAt: string;
   createdBy: string;
 }
