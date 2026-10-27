@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       await audit(access.workspaceUid, access.identity.uid, "booking_link.created", `booking_link:${result.bookingLinkId}`, "success", `contact=${input.contactId} organizer=${input.organizerSenderId}`);
       const url = new URL(request.url);
       return Response.json(
-        { bookingLinkId: result.bookingLinkId, expiresAt: result.expiresAt, bookingUrl: `${url.origin}/api/outbound/booking/${result.token}` },
+        { bookingLinkId: result.bookingLinkId, expiresAt: result.expiresAt, bookingUrl: `${url.origin}/booking/${result.token}` },
         { status: 201, headers: NO_STORE }
       );
     }

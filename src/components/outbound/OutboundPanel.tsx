@@ -20,6 +20,11 @@ type UsageEvent = { usageId: string; kind: string; units: number; costMinorUnits
 type UsageSummary = { totalCostMinorUnits: number; costComplete: boolean; unpricedEvents: number; events: UsageEvent[] };
 type Conversation = { conversationId: string; contactId: string; humanReplySeenAt: string | null; classification: string | null; classifiedBy: string | null };
 type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: boolean; attendeeAccepted: boolean | null; held: boolean | null };
+type Experiment = { experimentId: string; campaignId: string; status: string; holdoutPercent: number; variants: { key: string }[]; variantsApprovedBy: string | null };
+type ImportPreview = { validCount: number; invalidCount: number; invalid: { row: number; reason: string }[]; sample: { email: string }[] };
+type ImportCommit = { importId: string; created: number; reconciled: number; invalid: { row: number; reason: string }[] };
+type ConsentStart = { senderId: string; consentUrl?: string; expiresAt?: string; notice?: string; error?: string; requiredEnvs?: string[] };
+type BookingLinkResult = { bookingLinkId: string; expiresAt: string; bookingUrl: string };
 
 export default function OutboundPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -39,6 +44,16 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   const [senders, setSenders] = useState<Sender[]>([]);
   const [senderEmail, setSenderEmail] = useState("");
   const [form, setForm] = useState({ campaignId: "", subject: "", body: "", contactEmail: "", contactName: "" });
+  const [consent, setConsent] = useState<ConsentStart | null>(null);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [expForm, setExpForm] = useState({ holdoutPercent: "10", variantKey: "b", subject: "", body: "" });
+  const [importForm, setImportForm] = useState({ csv: "", sourceName: "", acquiredAt: "", country: "", subscriberClass: "corporate", rightsConfirmed: false });
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importResult, setImportResult] = useState<ImportCommit | null>(null);
+  const [policyForm, setPolicyForm] = useState({ durationMinutes: "30", startHour: "9", endHour: "17", timezone: "Asia/Kolkata" });
+  const [policyId, setPolicyId] = useState<string>("");
+  const [bookingLink, setBookingLink] = useState<BookingLinkResult | null>(null);
+  const [bookingContactId, setBookingContactId] = useState("");
 
   const refresh = useCallback(async () => {
     const data = (await authedFetch("/api/outbound/campaigns")) as { campaigns: Campaign[] };
@@ -59,6 +74,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
       authedFetch(`/api/outbound/intents?campaignId=${campaignId}`) as Promise<{ intents: Intent[] }>,
       authedFetch(`/api/outbound/drafts?campaignId=${campaignId}`) as Promise<{ drafts: Draft[] }>,
     ]);
+    authedFetch(`/api/outbound/experiments?campaignId=${campaignId}`).then((x) => setExperiments((x as { experiments: Experiment[] }).experiments)).catch(() => setExperiments([]));
     setApproval(detail.approval);
     setEnrollments(enr.enrollments);
     setInts(ints.intents);
@@ -119,9 +135,37 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
         {!senders.length && <p className="text-sm text-zinc-500">None registered.</p>}
         <ul className="mb-2 grid gap-1 text-sm text-zinc-300">
           {senders.map((sd) => (
-            <li key={sd.senderId} className="rounded-lg border border-white/10 px-3 py-2">{sd.email} · {sd.provider} · {sd.status}</li>
+            <li key={sd.senderId} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2">
+              <span>{sd.email} · {sd.provider} · {sd.status}</span>
+              {sd.status === "pending_consent" && (
+                <button className="text-xs text-teal-700 hover:underline dark:text-teal-300" disabled={busy} onClick={() => act(async () => {
+                  try {
+                    const res = (await authedFetch("/api/outbound/senders/consent", { method: "POST", body: JSON.stringify({ senderId: sd.senderId }) })) as ConsentStart;
+                    setConsent({ ...res, senderId: sd.senderId });
+                  } catch (e) {
+                    setConsent({ senderId: sd.senderId, error: e instanceof Error ? e.message : "Consent flow unavailable." });
+                  }
+                })}>Start consent</button>
+              )}
+            </li>
           ))}
         </ul>
+        {consent && (
+          <div className="mb-2 rounded-lg border border-white/10 p-3 text-xs text-zinc-400">
+            {consent.consentUrl ? (
+              <>
+                <p className="text-zinc-300">Consent link for sender {consent.senderId.slice(0, 12)}... (expires {consent.expiresAt?.slice(0, 10)}):</p>
+                <a className="mt-1 block break-all text-teal-700 underline dark:text-teal-300" href={consent.consentUrl} target="_blank" rel="noreferrer">{consent.consentUrl}</a>
+                <p className="mt-1">{consent.notice}</p>
+              </>
+            ) : (
+              <p className="text-amber-700 dark:text-amber-300/80">
+                {consent.error ?? "Consent flow is not active on this deployment."}
+                {consent.requiredEnvs ? ` Required configuration: ${consent.requiredEnvs.join(", ")}.` : ""}
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex gap-2">
           <input className={input} placeholder="Sender mailbox" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} />
           <button className={btn} disabled={busy || !senderEmail.includes("@")} onClick={() => act(async () => {
@@ -130,6 +174,53 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
             await refresh();
           })}>Register</button>
         </div>
+      </div>
+
+      <div className={card}>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Import contacts (CSV)</h3>
+        <p className="mb-2 text-xs text-zinc-500">
+          Columns required: email, fullName, accountName, accountDomain. Commit is blocked unless you confirm the source permits B2B marketing use; suppressed and previously imported contacts are reconciled, never resurrected.
+        </p>
+        <textarea className={input} rows={4} placeholder={"email,fullName,accountName,accountDomain\nada@acme.com,Ada Lovelace,Acme,acme.com"} value={importForm.csv} onChange={(e) => setImportForm({ ...importForm, csv: e.target.value })} />
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          <input className={input} placeholder="Source name (required for commit)" value={importForm.sourceName} onChange={(e) => setImportForm({ ...importForm, sourceName: e.target.value })} />
+          <input className={input} placeholder="Acquired at (YYYY-MM-DD)" value={importForm.acquiredAt} onChange={(e) => setImportForm({ ...importForm, acquiredAt: e.target.value })} />
+          <input className={input} placeholder="Country (optional)" value={importForm.country} onChange={(e) => setImportForm({ ...importForm, country: e.target.value })} />
+          <select className={input} value={importForm.subscriberClass} onChange={(e) => setImportForm({ ...importForm, subscriberClass: e.target.value })}>
+            <option value="corporate">Corporate subscriber</option>
+            <option value="individual">Individual subscriber</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </div>
+        <label className="mt-2 flex items-start gap-2 text-xs text-zinc-400">
+          <input type="checkbox" className="mt-0.5" checked={importForm.rightsConfirmed} onChange={(e) => setImportForm({ ...importForm, rightsConfirmed: e.target.checked })} />
+          I confirm this source&apos;s license permits B2B marketing use of these contacts.
+        </label>
+        <div className="mt-2 flex gap-2">
+          <button className={btn} disabled={busy || !importForm.csv.trim()} onClick={() => act(async () => {
+            const res = (await authedFetch("/api/outbound/import", { method: "POST", body: JSON.stringify({
+              action: "preview", csv: importForm.csv,
+              mapping: { email: "email", fullName: "fullName", accountName: "accountName", accountDomain: "accountDomain" },
+            })})) as ImportPreview;
+            setImportPreview(res);
+            setImportResult(null);
+          })}>Preview</button>
+          <button className={btn} disabled={busy || !importForm.csv.trim() || !importForm.sourceName.trim() || !importForm.acquiredAt.trim() || !importForm.rightsConfirmed} onClick={() => act(async () => {
+            const res = (await authedFetch("/api/outbound/import", { method: "POST", body: JSON.stringify({
+              action: "commit", csv: importForm.csv,
+              mapping: { email: "email", fullName: "fullName", accountName: "accountName", accountDomain: "accountDomain" },
+              sourceName: importForm.sourceName, acquiredAt: importForm.acquiredAt,
+              country: importForm.country || undefined, subscriberClass: importForm.subscriberClass, rightsConfirmed: true,
+            })})) as ImportCommit;
+            setImportResult(res);
+          })}>Commit import</button>
+        </div>
+        {importPreview && (
+          <p className="mt-2 text-xs text-zinc-400">{importPreview.validCount} valid row(s), {importPreview.invalidCount} invalid.{importPreview.invalid.length > 0 ? ` First issues: ${importPreview.invalid.slice(0, 3).map((i) => `row ${i.row}: ${i.reason}`).join("; ")}` : ""}</p>
+        )}
+        {importResult && (
+          <p className="mt-2 text-xs text-teal-700 dark:text-teal-300">Imported {importResult.created} contact(s), reconciled {importResult.reconciled}, {importResult.invalid.length} invalid (import {importResult.importId.slice(0, 12)}...).</p>
+        )}
       </div>
 
       <div className={card}>
@@ -298,6 +389,80 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
                 );
               })}
             </ul>
+          </div>
+
+          <div className={card}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Experiments and holdout</h3>
+            {!experiments.length && <p className="text-sm text-zinc-500">None for this campaign.</p>}
+            <ul className="mb-2 grid gap-1 text-sm text-zinc-300">
+              {experiments.map((x) => (
+                <li key={x.experimentId} className="rounded-lg border border-white/10 px-3 py-2">
+                  {x.experimentId.slice(0, 14)}... · {x.status} · holdout {x.holdoutPercent}% · variants: a (campaign default){x.variants.map((v) => `, ${v.key}`).join("")} · {x.variantsApprovedBy ? "variants approved" : "variants not approved"}
+                </li>
+              ))}
+            </ul>
+            <p className="mb-2 text-xs text-zinc-500">Creates a draft experiment with variant b against the campaign default (variant a). Holdout contacts receive nothing.</p>
+            <div className="grid gap-2 md:grid-cols-2">
+              <input className={input} placeholder="Holdout percent (0-50)" value={expForm.holdoutPercent} onChange={(e) => setExpForm({ ...expForm, holdoutPercent: e.target.value })} />
+              <input className={input} placeholder="Variant b subject" value={expForm.subject} onChange={(e) => setExpForm({ ...expForm, subject: e.target.value })} />
+              <textarea className={input + " md:col-span-2"} rows={2} placeholder="Variant b body" value={expForm.body} onChange={(e) => setExpForm({ ...expForm, body: e.target.value })} />
+            </div>
+            <button className={btn + " mt-2"} disabled={busy || !expForm.subject || !expForm.body} onClick={() => act(async () => {
+              const c = campaigns.find((x) => x.campaignId === selected);
+              const pct = Number(expForm.holdoutPercent);
+              await authedFetch("/api/outbound/experiments", { method: "POST", body: JSON.stringify({
+                campaignId: selected, campaignVersion: c?.version,
+                holdoutPercent: Number.isFinite(pct) ? pct : 0,
+                variants: [{ key: expForm.variantKey || "b", templates: [{ step: 1, subject: expForm.subject, body: expForm.body }] }],
+              })});
+              setExpForm({ ...expForm, subject: "", body: "" });
+              await refreshDetail(selected);
+            })}>Create draft experiment</button>
+          </div>
+
+          <div className={card}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Meeting booking</h3>
+            <p className="mb-2 text-xs text-zinc-500">
+              Step 1 saves a booking policy whose host pool is the first registered sender. Step 2 creates a single-use booking link for a contact. Slot claims are atomic; a provider timeout quarantines the claim instead of retrying. The mock calendar adapter confirms without creating a real event and says so.
+            </p>
+            <div className="grid gap-2 md:grid-cols-4">
+              <input className={input} placeholder="Minutes" value={policyForm.durationMinutes} onChange={(e) => setPolicyForm({ ...policyForm, durationMinutes: e.target.value })} />
+              <input className={input} placeholder="Start hour" value={policyForm.startHour} onChange={(e) => setPolicyForm({ ...policyForm, startHour: e.target.value })} />
+              <input className={input} placeholder="End hour" value={policyForm.endHour} onChange={(e) => setPolicyForm({ ...policyForm, endHour: e.target.value })} />
+              <input className={input} placeholder="Timezone" value={policyForm.timezone} onChange={(e) => setPolicyForm({ ...policyForm, timezone: e.target.value })} />
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <button className={btn} disabled={busy || !senders.length} onClick={() => act(async () => {
+                const res = (await authedFetch("/api/outbound/meetings", { method: "POST", body: JSON.stringify({
+                  action: "save-policy",
+                  hostPool: [senders[0].senderId],
+                  durationMinutes: Number(policyForm.durationMinutes) || 30,
+                  startHour: Number(policyForm.startHour) || 9,
+                  endHour: Number(policyForm.endHour) || 17,
+                  timezone: policyForm.timezone || "UTC",
+                })})) as { policy: { policyId: string } };
+                setPolicyId(res.policy.policyId);
+              })}>Save policy</button>
+              {policyId && <span className="text-xs text-teal-700 dark:text-teal-300">Policy {policyId.slice(0, 14)}...</span>}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input className={input} placeholder="Contact id for the booking link" value={bookingContactId} onChange={(e) => setBookingContactId(e.target.value)} />
+              <button className={btn} disabled={busy || !policyId || !bookingContactId.trim() || !senders.length} onClick={() => act(async () => {
+                const res = (await authedFetch("/api/outbound/meetings", { method: "POST", body: JSON.stringify({
+                  action: "create-booking-link",
+                  contactId: bookingContactId.trim(),
+                  organizerSenderId: senders[0].senderId,
+                  policyId,
+                })})) as BookingLinkResult;
+                setBookingLink(res);
+              })}>Create booking link</button>
+            </div>
+            {bookingLink && (
+              <div className="mt-2 rounded-lg border border-white/10 p-3 text-xs text-zinc-400">
+                <p className="text-zinc-300">Single-use link (expires {bookingLink.expiresAt.slice(0, 10)}):</p>
+                <a className="mt-1 block break-all text-teal-700 underline dark:text-teal-300" href={bookingLink.bookingUrl} target="_blank" rel="noreferrer">{bookingLink.bookingUrl}</a>
+              </div>
+            )}
           </div>
 
           <div className={card}>
