@@ -20,6 +20,7 @@ import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import CrmOutreachPanel from "@/components/crm/CrmOutreachPanel";
 import GeoFlowOptimizerPanel from "./GeoFlowOptimizerPanel";
+import ThemeToggle from "./ThemeToggle";
 import {
   buildCitationLeaderboard,
   buildCompetitorComparison,
@@ -99,6 +100,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   );
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [runDetails, setRunDetails] = useState<Record<string, { queries: TrackedQuery[]; results: QueryResult[] } | "loading" | "error">>({});
 
@@ -156,6 +158,37 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       setLoading(false);
     }
   }, [authedFetch, readOnly]);
+
+
+  // Dashboard theme: apply the class only while the dashboard is mounted so
+  // public pages always stay dark. localStorage applies instantly on the next
+  // visit; the account preference (API) is authoritative once loaded.
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("threadly-theme") : null;
+    if (stored === "light" || stored === "dark") setTheme(stored);
+    authedFetch("/api/geo/ui-prefs")
+      .then((p) => {
+        const t = (p as { theme?: string }).theme;
+        if (t === "light" || t === "dark") setTheme(t);
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("light", theme === "light");
+    return () => root.classList.remove("light");
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      try { window.localStorage.setItem("threadly-theme", next); } catch { /* private mode */ }
+      authedFetch("/api/geo/ui-prefs", { method: "PUT", body: JSON.stringify({ theme: next }) }).catch(() => undefined);
+      return next;
+    });
+  }, [authedFetch]);
 
   useEffect(() => {
     if (!readOnly) void refresh();
@@ -490,6 +523,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
                 7-day trial - 1 scan included
               </span>
             )}
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <button
               type="button"
               data-tour="run-scan"
