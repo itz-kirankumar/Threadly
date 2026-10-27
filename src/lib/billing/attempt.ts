@@ -38,7 +38,10 @@ export type AttemptVerdict =
 export function evaluateAttempt(existing: CheckoutAttempt | null, now: Date): AttemptVerdict {
   if (!existing) return { open: true };
   if (existing.state === "failed" || existing.state === "expired" || existing.state === "reconciled") return { open: true };
-  const age = now.getTime() - Date.parse(existing.createdAt);
-  if (age > ATTEMPT_EXPIRY_MS[existing.provider]) return { open: true };
+  // Freeze invariant: local age NEVER reopens a pending/uncertain/issued
+  // attempt. A provider-side payable may outlive any local TTL (Razorpay
+  // orders have no documented expiry; a Dodo session can hold a payment).
+  // Only provider-backed resolution (resume/reconcile/retrieve-expired) or an
+  // explicit owner/support action may clear these states.
   return { open: false, state: existing.state, checkoutUrl: existing.checkoutUrl };
 }

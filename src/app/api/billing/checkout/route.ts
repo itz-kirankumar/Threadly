@@ -95,6 +95,25 @@ export async function POST(request: Request) {
     // One durable attempt per workspace, claimed atomically. A blocked claim
     // means an earlier attempt is unresolved - no new link is created anywhere.
     let claim = await claimCheckoutAttempt(access.workspaceUid, attempt, now);
+    if (!claim.claimed && claim.existing?.provider === "dodo" && claim.existing.state === "issued" && claim.existing.providerRef) {
+      // Issued Dodo session: provider-backed resolution only. "completed" on
+      // the exact session id this attempt created is exact intent -> reconcile.
+      // Every other status (incl. "expired": link death does not prove the
+      // underlying payment/subscription cannot settle) -> stay blocked.
+      const priorDodo = claim.existing;
+      const priorSessionId = priorDodo.providerRef;
+      if (priorSessionId) try {
+        const sess = (await dodoClient().checkoutSessions.retrieve(priorSessionId)) as unknown as { status?: string };
+        if (sess.status === "completed") {
+          // "completed" on the session is not captured-payment proof: hold the
+          // attempt blocked; the webhook/entitlement authority owns activation.
+          return Response.json(
+            { error: "This checkout recorded a payment and your plan is being applied - no new checkout was created. If the plan does not activate shortly, contact support.", state: "payment_pending" },
+            { status: 409, headers: { "Cache-Control": "no-store" } },
+          );
+        }
+      } catch { /* retrieve failure stays blocked */ }
+    }
     if (!claim.claimed && claim.existing && claim.existing.provider === "dodo" && (claim.existing.state === "pending" || claim.existing.state === "uncertain")) {
       // Ambiguous Dodo session create: after the session TTL, a fresh session
       // is safe ONLY when a payments lookup finds nothing for this workspace
@@ -109,8 +128,11 @@ export async function POST(request: Request) {
         paymentFound = items.some((pay) => {
           const md = pay.metadata ?? {};
           if (md.workspace_uid !== access.workspaceUid) return false;
+          if (md.plan !== prior.plan || md.interval !== prior.interval) return false;
+          // Exact attempt proof only: payments carrying this attempt's id.
+          if (md.attempt_id !== prior.id) return false;
           const ts = pay.created_at ? Date.parse(pay.created_at) : NaN;
-          return Number.isNaN(ts) || ts >= since;
+          return !Number.isNaN(ts) && ts >= since;
         });
       } catch {
         paymentFound = null;
@@ -122,10 +144,6 @@ export async function POST(request: Request) {
           { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new checkout was created.", state: "reconciled" },
           { status: 409, headers: { "Cache-Control": "no-store" } },
         );
-      }
-      if (decision.action === "allow_new") {
-        await saveCheckoutAttempt(access.workspaceUid, { ...prior, state: "expired", updatedAt: new Date().toISOString() });
-        claim = await claimCheckoutAttempt(access.workspaceUid, attempt, new Date());
       }
     }
     if (!claim.claimed) {
@@ -159,13 +177,20 @@ export async function POST(request: Request) {
           { status: 503, headers: { "Cache-Control": "no-store" } },
         );
       }
+    const replaced = claim.claimed ? claim.existing : null;
+    if (replaced?.state === "reconciled" && replaced.plan === body.plan && replaced.interval === body.interval && !(existing && (existing.status === "active" || existing.status === "grace"))) {
+      return Response.json(
+        { error: "A payment for this plan was already recorded and is being applied - no new checkout was created.", state: "reconciled" },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
+      );
+    }
       try {
         if (provider === "dodo") {
           const session = await dodoClient().checkoutSessions.create({
             product_cart: [{ product_id: productFor(body.plan, body.interval), quantity: 1 }],
             customer: { email: access.identity.email, name: access.identity.name || undefined },
             return_url: `${origin}/portal?billing=success`,
-            metadata: { workspace_uid: access.workspaceUid, plan: body.plan, interval: body.interval },
+            metadata: { workspace_uid: access.workspaceUid, plan: body.plan, interval: body.interval, attempt_id: attemptForProvider.id },
           });
           if (!session.checkout_url) throw new Error("Dodo did not return a checkout link.");
           await saveCheckoutAttempt(access.workspaceUid, {

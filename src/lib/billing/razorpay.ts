@@ -180,8 +180,9 @@ export async function razorpayCreateOrder(params: {
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     const description = (payload as { error?: { description?: string } }).error?.description ?? `Razorpay returned HTTP ${response.status}`;
-    const err = new Error(description) as Error & { status?: number };
+    const err = new Error(description) as Error & { status?: number; code?: string };
     err.status = response.status;
+    err.code = (payload as { error?: { code?: string } }).error?.code;
     throw err;
   }
   return payload as unknown as { id: string; amount: number; currency: string };

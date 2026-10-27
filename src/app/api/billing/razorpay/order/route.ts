@@ -2,7 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { isInterval, isRazorpayPlan } from "@/lib/billing/dodo";
-import { orderPrice, razorpayCheckoutAllowed, razorpayCreateOrder, razorpayFindOrdersByReceipt, razorpayKeyId, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
+import { orderPrice, razorpayCheckoutAllowed, razorpayCreateOrder, razorpayFetchOrder, razorpayFindOrdersByReceipt, razorpayKeyId, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
 import { decideRazorpayBlockedAction } from "@/lib/billing/recovery";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
@@ -101,6 +101,33 @@ export async function POST(request: Request) {
       updatedAt: now.toISOString(),
     };
     let claim = await claimCheckoutAttempt(access.workspaceUid, attempt, now);
+    if (!claim.claimed && claim.existing?.state === "issued" && claim.existing.providerRef) {
+      // Issued Razorpay order: provider-backed resume only - fetch the exact
+      // order; still-open -> return it (same payable, never a duplicate);
+      // paid -> reconcile; anything else -> stay blocked.
+      const prior = claim.existing;
+      const priorRef = prior.providerRef;
+      if (priorRef) try {
+        const order = await razorpayFetchOrder(priorRef);
+        if (order.status === "created" || order.status === "attempted") {
+          const price = orderPrice(prior.plan, prior.interval);
+          return Response.json(
+            { orderId: priorRef, amount: prior.amount ?? price?.amount ?? null, currency: prior.currency ?? price?.currency ?? null, keyId: razorpayKeyId(), provider: "razorpay", testMode: razorpayTestMode(), resumed: true },
+            { headers: { "Cache-Control": "no-store" } },
+          );
+        }
+        // Fail closed: reconcile only when BOTH sides are present and equal;
+        // an unknown amount/currency can never confirm exact intent.
+        const amountMatches = prior.amount != null && order.amount != null && prior.amount === order.amount && prior.currency != null && order.currency != null && prior.currency === order.currency;
+        if (order.status === "paid" && amountMatches) {
+          await saveCheckoutAttempt(access.workspaceUid, { ...prior, state: "reconciled", updatedAt: new Date().toISOString() });
+          return Response.json(
+            { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new order was created.", state: "reconciled" },
+            { status: 409, headers: { "Cache-Control": "no-store" } },
+          );
+        }
+      } catch { /* fetch failure stays blocked */ }
+    }
     if (!claim.claimed && claim.existing && (claim.existing.state === "pending" || claim.existing.state === "uncertain")) {
       // Ambiguous prior attempt: reconcile against Razorpay by the attempt's
       // receipt (the create call is retried with the same receipt only after
@@ -128,16 +155,12 @@ export async function POST(request: Request) {
           { headers: { "Cache-Control": "no-store" } },
         );
       }
-      if (decision.action === "mark_reconciled_paid") {
+      if (decision.action === "mark_reconciled_paid" && (claim.existing.amount == null || orders?.find((o) => o.status === "paid")?.id)) {
         await saveCheckoutAttempt(access.workspaceUid, { ...claim.existing, state: "reconciled", updatedAt: new Date().toISOString() });
         return Response.json(
           { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new order was created.", state: "reconciled" },
           { status: 409, headers: { "Cache-Control": "no-store" } },
         );
-      }
-      if (decision.action === "mark_failed_allow_new") {
-        await saveCheckoutAttempt(access.workspaceUid, { ...claim.existing, state: "failed", updatedAt: new Date().toISOString() });
-        claim = await claimCheckoutAttempt(access.workspaceUid, attempt, new Date());
       }
     }
     if (!claim.claimed) {
@@ -195,7 +218,10 @@ export async function POST(request: Request) {
       );
     } catch (error) {
       const status = (error as { status?: number }).status ?? 0;
-      if (status >= 400 && status < 500) {
+      // Definitive no-resource only: auth rejection (request never processed)
+      // or Razorpay's documented BAD_REQUEST_ERROR validation failure.
+      const code = (error as { code?: string }).code ?? "";
+      if (status === 401 || status === 403 || code === "BAD_REQUEST_ERROR") {
         await saveCheckoutAttempt(access.workspaceUid, { ...attempt, state: "failed", updatedAt: new Date().toISOString() });
         return Response.json(
           { error: error instanceof Error ? error.message : "Razorpay rejected the order." },

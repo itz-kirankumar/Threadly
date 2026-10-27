@@ -8,42 +8,37 @@ export type RazorpayOrderLite = { id: string; status?: string | null };
 export type RazorpayBlockedAction =
   | { action: "resume"; orderId: string }
   | { action: "mark_reconciled_paid" }
-  | { action: "mark_failed_allow_new" }
   | { action: "keep_blocked" };
 
-// An order linked to the attempt's receipt is resumed, never duplicated.
-// Absence from the orders list is trusted only when the attempt is old enough
-// to outlive provider listing delays AND two independent reads agreed; anything
-// else stays blocked (fail closed). An orphan order that escaped detection can
-// never reach the customer: Standard Checkout only opens with the order id we
-// return, and a lost response never surfaced one.
+// Only UNAMBIGUOUS outcomes proceed: an open order on the attempt's receipt is
+// resumed (never duplicated), a paid order reconciles. Every other case -
+// including an empty listing - stays blocked: provider listing lag or a create
+// completing server-side after a lost response means absence is never proof of
+// no-resource. Frozen until an owning source establishes terminality.
 export function decideRazorpayBlockedAction(params: {
   existing: CheckoutAttempt;
   now: Date;
   orders: RazorpayOrderLite[] | null; // null = listing failed -> unknown
-  readsAgree: boolean;
-  minAgeMs?: number;
+  readsAgree: boolean; // retained for call-site clarity; absence never unblocks
 }): RazorpayBlockedAction {
   const { existing, now, orders, readsAgree } = params;
   if (orders === null) return { action: "keep_blocked" };
   const open = orders.filter((o) => o.status === "created" || o.status === "attempted");
-  if (open.length > 0) return { action: "resume", orderId: open[0].id };
+  // Resume only a unique open order; multiple matches are ambiguous.
+  if (open.length === 1) return { action: "resume", orderId: open[0].id };
+  if (open.length > 1) return { action: "keep_blocked" };
   if (orders.some((o) => o.status === "paid")) return { action: "mark_reconciled_paid" };
-  const ageMs = now.getTime() - Date.parse(existing.createdAt);
-  if (readsAgree && ageMs > (params.minAgeMs ?? 5 * 60 * 1000)) return { action: "mark_failed_allow_new" };
   return { action: "keep_blocked" };
 }
 
 export type DodoBlockedAction =
-  | { action: "allow_new" }
   | { action: "mark_reconciled_paid" }
   | { action: "keep_blocked" };
 
-// A Dodo checkout session expires after its TTL (24h default per Dodo docs:
-// developer-resources/checkout-session) and its link is single-use. A fresh
-// session is allowed only after the TTL AND a clean payments lookup for the
-// workspace; a payment found (incl. late settlement) reconciles instead; any
-// lookup failure stays blocked.
+// A payment found for the workspace reconciles. Everything else stays blocked:
+// session TTL plus a clean payments list does not prove a session-created
+// payment/subscription is terminal or that listing is eventually consistent.
+// Frozen until an owning source establishes terminality.
 export function decideDodoBlockedAction(params: {
   existing: CheckoutAttempt;
   now: Date;
@@ -52,7 +47,5 @@ export function decideDodoBlockedAction(params: {
 }): DodoBlockedAction {
   const { existing, now, paymentFound } = params;
   if (paymentFound === true) return { action: "mark_reconciled_paid" };
-  const ageMs = now.getTime() - Date.parse(existing.createdAt);
-  if (paymentFound === false && ageMs > (params.sessionTtlMs ?? 24 * 60 * 60 * 1000)) return { action: "allow_new" };
   return { action: "keep_blocked" };
 }
