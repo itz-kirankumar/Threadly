@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
   let message = "";
   try {
     const body = (await request.json()) as { message?: unknown };
-    if (typeof body.message === "string") message = body.message.slice(0, 800).trim();
+    if (typeof body.message === "string") message = body.message.trim();
+    if (Buffer.byteLength(message, "utf8") > 3200) return NextResponse.json({ error: "message_too_long" }, { status: 400 });
   } catch {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
@@ -65,7 +66,11 @@ export async function POST(request: NextRequest) {
   // KB miss: Claude path, only inside the reserved monthly budget.
   const monthKey = new Date().toISOString().slice(0, 7);
   const spendPath = `assistantUsage/monthly/${monthKey}`;
-  const reserveMicros = Math.round(RESERVE_USD * 1_000_000);
+  // Worst-case tokens: byte-level BPE fallback means tokens <= UTF-8 bytes.
+  // Bound covers the full payload actually sent (system + user) plus max_tokens.
+  const maxInTokens = Buffer.byteLength(ASSISTANT_SYSTEM_PROMPT, "utf8") + Buffer.byteLength(message, "utf8");
+  const worstCostMicros = Math.round(((maxInTokens * 0.1 + 300 * 0.5) / 1_000_000) * 1_000_000);
+  const reserveMicros = Math.max(Math.round(RESERVE_USD * 1_000_000), worstCostMicros * 10);
   if (process.env.ANTHROPIC_API_KEY && (await reserveSpend(spendPath, reserveMicros))) {
     try {
       const controller = new AbortController();

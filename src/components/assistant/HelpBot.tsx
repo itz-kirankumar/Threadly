@@ -86,7 +86,7 @@ export default function HelpBot() {
             <span className="assistant-pulse relative flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
             <div>
               <p className="text-sm font-semibold text-white">Threadly Assistant</p>
-              <p className="text-[11px] text-zinc-400">Answers from public docs and product info</p>
+              <p className="text-[11px] text-zinc-400">24/7 automated help</p>
             </div>
           </div>
 
