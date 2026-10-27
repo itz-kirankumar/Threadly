@@ -110,7 +110,7 @@ export async function runDispatch(
     current = reserved;
     await campaigns.saveIntent(current);
 
-    const sender = await senders.getSender(tenantId, intent.senderId);
+    const sender = intent.senderId ? await senders.getSender(tenantId, intent.senderId) : null;
     const acceptedToday = await countAcceptedToday(ledger, tenantId, campaignId, intent.senderId, campaigns, now);
     const enrollment = (await campaigns.listEnrollments(tenantId, campaignId)).find((e) => e.enrollmentId === intent.enrollmentId);
     const contact = await contacts.getContact(tenantId, intent.contactId);
