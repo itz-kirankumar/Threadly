@@ -86,9 +86,9 @@ export async function runDispatch(
     (i) =>
       i.status === "approved" ||
       i.status === "scheduled" ||
-      // Crash recovery: a reservation with no lease owner belongs to a run
-      // that died mid-flight; reclaim it and re-evaluate the gates.
-      (i.status === "reserved" && !i.leaseOwner)
+      // Crash recovery: a reservation whose lease has expired belongs to a
+      // run that died mid-flight; reclaim it and re-evaluate the gates.
+      (i.status === "reserved" && i.leaseExpiresAt !== null && Date.parse(i.leaseExpiresAt) <= now.getTime())
   );
   for (const intent of intents) {
     const draft = await drafts.getDraftForIntent(tenantId, intent.intentId);
