@@ -21,8 +21,13 @@ export interface AuditStore {
   list(tenantId: string, limit?: number): Promise<AuditEvent[]>;
   // Degraded-mode write used ONLY when append fails: the event plus the
   // failure cause land on a separate durable path so a required audit record
-  // is never silently lost. Implementations may share the primary store.
+  // is not silently lost. Implementations may share the primary store.
   appendDegraded?(event: AuditEvent, cause: string): Promise<void>;
+  // Recovery sweep: replay degraded records into the primary log and clear
+  // them from the fallback path. Replays are keyed by eventId so a retried
+  // sweep never duplicates an event in the primary log. Records that still
+  // fail stay on the fallback path for the next sweep.
+  recoverDegraded?(tenantId: string, limit?: number): Promise<{ recovered: number; remaining: number }>;
 }
 
 export class MemoryAuditStore implements AuditStore {
@@ -36,7 +41,16 @@ export class MemoryAuditStore implements AuditStore {
   }
   degraded: { event: AuditEvent; cause: string }[] = [];
   async appendDegraded(event: AuditEvent, cause: string): Promise<void> {
-    this.degraded.push({ event, cause });
+    if (!this.degraded.some((d) => d.event.eventId === event.eventId)) this.degraded.push({ event, cause });
+  }
+  async recoverDegraded(tenantId: string, limit = 25): Promise<{ recovered: number; remaining: number }> {
+    const mine = this.degraded.filter((d) => d.event.tenantId === tenantId);
+    const batch = mine.slice(0, limit);
+    for (const d of batch) {
+      if (!this.events.some((e) => e.eventId === d.event.eventId)) this.events.push(d.event);
+    }
+    this.degraded = this.degraded.filter((d) => !batch.includes(d));
+    return { recovered: batch.length, remaining: this.degraded.filter((d) => d.event.tenantId === tenantId).length };
   }
 }
 
