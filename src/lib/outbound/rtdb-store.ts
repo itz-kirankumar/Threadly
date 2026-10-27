@@ -94,11 +94,23 @@ export class RtdbLedgerStore implements LedgerStore {
   ): Promise<boolean> {
     const database = await db();
     const ref = database.ref(`${tenantRoot(tenantId)}/intents/${intentId}`);
-    const tx = await ref.transaction((current: MessageIntent | null) => {
-      if (!current || current.tenantId !== tenantId || current.status !== expected) return; // abort
-      return next;
-    });
-    return tx.committed;
+    // Prime the local cache: a transaction callback runs first against the
+    // locally-known value, which is null in a fresh serverless process; a
+    // bare abort there would falsely report a conflict.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await ref.get();
+      const tx = await ref.transaction((current: MessageIntent | null) => {
+        if (!current || current.tenantId !== tenantId || current.status !== expected) return; // abort
+        return next;
+      });
+      if (tx.committed) return true;
+      // Distinguish a real status conflict from a speculative-null abort.
+      const now = await ref.get();
+      const current = now.val() as MessageIntent | null;
+      if (current && current.tenantId === tenantId && current.status === expected) continue; // retry once
+      return false;
+    }
+    return false;
   }
 
   async appendAttempt(attempt: DeliveryAttempt): Promise<void> {
