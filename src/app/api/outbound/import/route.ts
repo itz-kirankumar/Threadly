@@ -1,6 +1,8 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { commitImport, mapRows, parseCsv, type CsvMapping } from "@/lib/outbound/csv-import";
+import { requireLicensedSource } from "@/lib/outbound/discovery";
+import { RtdbLicensedSourceStore } from "@/lib/outbound/rtdb-source-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbAccountStore, RtdbEvidenceStore } from "@/lib/outbound/rtdb-import-store";
 import { auditEvent } from "@/lib/outbound/audit";
@@ -61,6 +63,13 @@ export async function POST(request: Request) {
         );
       }
       const subscriberClass = body.subscriberClass === "corporate" || body.subscriberClass === "individual" ? body.subscriberClass : "unknown";
+      // Rows sourced from a licensed discovery API must name a registered,
+      // permitting, unrevoked source; anything else is blocked (PRD F02).
+      let licensedSource: { sourceName: string; sourceId: string } | undefined;
+      if (body.sourceKind === "licensed_api") {
+        const sources = await new RtdbLicensedSourceStore().list(access.workspaceUid);
+        licensedSource = requireLicensedSource(sources, access.workspaceUid, sourceName);
+      }
       const result = await commitImport(
         {
           accounts: new RtdbAccountStore(),
@@ -79,6 +88,7 @@ export async function POST(request: Request) {
           country: typeof body.country === "string" ? body.country : null,
           actor: access.identity.uid,
           now: new Date(),
+          ...(licensedSource ? { licensedSource: { sourceName: licensedSource.sourceName, sourceId: licensedSource.sourceId } } : {}),
         }
       );
       await audit(access.workspaceUid, access.identity.uid, "import.committed", `import:${result.importId ?? sourceName}`, "success", `created=${result.created} reconciled=${result.reconciled} invalid=${result.invalid.length}`);

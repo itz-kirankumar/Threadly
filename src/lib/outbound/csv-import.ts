@@ -121,11 +121,18 @@ export async function commitImport(
     country: string | null;
     actor: string;
     now: Date;
+    // For rows sourced from a licensed discovery API (evidence kind
+    // licensed_api): the caller must have already gated the source through
+    // requireLicensedSource and passes the verified record here. Omitted
+    // means a plain CSV import (evidence kind csv_import).
+    licensedSource?: { sourceName: string; sourceId: string };
   }
 ): Promise<CommitResult> {
   if (!input.rightsConfirmed) {
     throw new Error("unlicensed_source: rightsConfirmed is required; importing without a declared marketing-use right is blocked");
   }
+  const evidenceKind: "csv_import" | "licensed_api" = input.licensedSource ? "licensed_api" : "csv_import";
+  const evidenceSource = input.licensedSource ? input.licensedSource.sourceName : input.sourceName;
   const nowISO = input.now.toISOString();
   const importId = `imp_${crypto.randomUUID()}`;
   let created = 0;
@@ -142,11 +149,18 @@ export async function commitImport(
       await stores.accounts.saveAccount(account);
       accountsCreated++;
     }
+    const existing = await stores.contacts.findByEmail(input.tenantId, row.email);
+    const contactId = existing ? existing.contactId : `ct_${crypto.randomUUID()}`;
+    // F02 acceptance: source, acquisition time, rights and intended use on
+    // EVERY contact - the evidence record is linked to the contact and
+    // account, including on re-import (each acquisition is recorded).
     const evidence: SourceEvidence = {
       tenantId: input.tenantId,
       evidenceId: `ev_${crypto.randomUUID()}`,
-      kind: "csv_import",
-      sourceName: input.sourceName,
+      contactId,
+      accountId: account.accountId,
+      kind: evidenceKind,
+      sourceName: evidenceSource,
       acquiredAt: input.acquiredAt,
       observedAt: input.acquiredAt,
       inference: `imported in ${importId}`,
@@ -155,7 +169,24 @@ export async function commitImport(
       createdBy: input.actor,
     };
     await stores.evidence.saveEvidence(evidence);
-    const existing = await stores.contacts.findByEmail(input.tenantId, row.email);
+    if (row.title) {
+      // Field-tagged evidence so the F04 fit score can date the title.
+      await stores.evidence.saveEvidence({
+        tenantId: input.tenantId,
+        evidenceId: `ev_${crypto.randomUUID()}`,
+        contactId,
+        accountId: account.accountId,
+        kind: evidenceKind,
+        sourceName: evidenceSource,
+        acquiredAt: input.acquiredAt,
+        observedAt: input.acquiredAt,
+        inference: `title imported in ${importId}`,
+        uncertainty: "fact",
+        field: "title",
+        createdAt: nowISO,
+        createdBy: input.actor,
+      });
+    }
     if (existing) {
       // Reconcile: refresh name/title against the same record, never re-enroll.
       await stores.contacts.saveContact({ ...existing, fullName: row.fullName, ...(row.title ? { title: row.title } : {}) });
@@ -163,7 +194,7 @@ export async function commitImport(
     } else {
       const contact: Contact = {
         tenantId: input.tenantId,
-        contactId: `ct_${crypto.randomUUID()}`,
+        contactId,
         accountId: account.accountId,
         email: row.email,
         fullName: row.fullName,

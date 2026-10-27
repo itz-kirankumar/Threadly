@@ -69,9 +69,18 @@ test("commitImport creates evidence+rights and reconciles on re-import", async (
   assert.equal(first.created, 2);
   assert.equal(first.reconciled, 0);
   assert.equal(first.accountsCreated, 2);
-  assert.equal(stores._evidence.length, 2);
+  // One row-level evidence per contact, plus a field:"title" evidence for
+  // the row that has a title (F04 dating); every record linked to contact.
+  assert.equal(stores._evidence.length, 3);
+  assert.equal(stores._evidence.filter((e) => e.field === "title").length, 1);
+  const ada = stores._contacts.get("t1:ada@acme.com");
+  for (const e of stores._evidence.filter((e) => e.sourceName === "list")) {
+    assert.ok(e.contactId);
+    assert.ok(e.accountId);
+  }
+  assert.equal(stores._evidence.find((e) => e.field === "title").contactId, ada.contactId);
   assert.equal(stores._rights.length, 2);
-  assert.equal(stores._contacts.get("t1:ada@acme.com").verification.state, "unknown");
+  assert.equal(ada.verification.state, "unknown");
 
   // Re-import same file: reconciles, never duplicates
   const second = await commitImport(stores, {
@@ -82,6 +91,9 @@ test("commitImport creates evidence+rights and reconciles on re-import", async (
   assert.equal(second.reconciled, 2);
   assert.equal(second.accountsCreated, 0);
   assert.equal(stores._contacts.size, 2);
+  // The re-import's acquisitions are recorded too, linked to the same contacts.
+  assert.equal(stores._evidence.length, 6);
+  assert.ok(stores._evidence.slice(3).every((e) => e.acquiredAt === "2026-10-15T00:00:00Z"));
 });
 
 test("HubSpot adapter refuses without token and upserts with stub fetch", async () => {
