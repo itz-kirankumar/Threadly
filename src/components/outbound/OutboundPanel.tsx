@@ -16,6 +16,8 @@ type Sender = { senderId: string; email: string; provider: string; status: strin
 type Draft = { draftId: string; intentId: string; step: number; subject: string; body: string; engine: string; renderedAt: string };
 type DraftRunResult = { renderedCount: number; rendered: string[]; skipped: { intentId: string; reason: string }[]; usageRecorded: string[] };
 type DispatchResult = { dispatchedCount: number; dispatched: { intentId: string; outcome: string }[]; deferred: { intentId: string; reasons: string[] }[]; skipped: { intentId: string; reason: string }[] };
+type UsageEvent = { usageId: string; kind: string; units: number; costMinorUnits: number | null; currency: string | null; synthetic?: boolean; createdAt: string };
+type UsageSummary = { totalCostMinorUnits: number; costComplete: boolean; unpricedEvents: number; events: UsageEvent[] };
 type Conversation = { conversationId: string; contactId: string; humanReplySeenAt: string | null; classification: string | null; classifiedBy: string | null };
 type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: boolean; attendeeAccepted: boolean | null; held: boolean | null };
 
@@ -30,6 +32,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
   const [draftResult, setDraftResult] = useState<DraftRunResult | null>(null);
   const [dispatchResult, setDispatchResult] = useState<DispatchResult | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -45,6 +48,8 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
     const conv = (await authedFetch("/api/outbound/conversations")) as { conversations: Conversation[]; meetings: Meeting[] };
     setConversations(conv.conversations);
     setMeetings(conv.meetings);
+    const usg = (await authedFetch("/api/outbound/usage")) as UsageSummary;
+    setUsage(usg);
   }, [authedFetch]);
 
   const refreshDetail = useCallback(async (campaignId: string) => {
@@ -293,6 +298,27 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
                 );
               })}
             </ul>
+          </div>
+
+          <div className={card}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Usage</h3>
+            {!usage && <p className="text-sm text-zinc-500">Loading...</p>}
+            {usage && (
+              <>
+                <p className="text-sm text-zinc-300">
+                  {usage.costComplete
+                    ? `Total: $${(usage.totalCostMinorUnits / 100).toFixed(2)}`
+                    : `Total is a lower bound: $${(usage.totalCostMinorUnits / 100).toFixed(2)} - ${usage.unpricedEvents} event(s) have unknown cost. Dispatch is blocked while cost is unknown.`}
+                </p>
+                <ul className="mt-2 grid gap-1 text-xs text-zinc-400">
+                  {usage.events.map((e) => (
+                    <li key={e.usageId} className="rounded-lg border border-white/10 px-3 py-2">
+                      {e.kind} · {e.units} unit(s) · {e.costMinorUnits === null ? "cost unknown" : `$${(e.costMinorUnits / 100).toFixed(2)} ${e.currency ?? ""}`}{e.synthetic ? " · synthetic" : ""}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
