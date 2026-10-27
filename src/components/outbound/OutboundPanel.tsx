@@ -20,7 +20,7 @@ type UsageEvent = { usageId: string; kind: string; units: number; costMinorUnits
 type UsageSummary = { totalCostMinorUnits: number; costComplete: boolean; unpricedEvents: number; events: UsageEvent[] };
 type Conversation = { conversationId: string; contactId: string; humanReplySeenAt: string | null; classification: string | null; classifiedBy: string | null };
 type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: boolean; attendeeAccepted: boolean | null; held: boolean | null; synthetic?: boolean };
-type Experiment = { experimentId: string; campaignId: string; status: string; holdoutPercent: number; variants: { key: string }[]; variantsApprovedBy: string | null };
+type Experiment = { experimentId: string; campaignId: string; status: string; holdoutPercent: number; variants: { key: string; templates: { step: number; subject: string; body: string }[] }[]; variantsApprovedBy: string | null };
 type ImportPreview = { validCount: number; invalidCount: number; invalid: { row: number; reason: string }[]; sample: { email: string }[] };
 type ImportCommit = { importId: string; created: number; reconciled: number; invalid: { row: number; reason: string }[] };
 type ConsentStart = { senderId: string; consentUrl?: string; expiresAt?: string; notice?: string; error?: string; requiredEnvs?: string[] };
@@ -395,10 +395,25 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           <div className={card}>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Experiments and holdout</h3>
             {!experiments.length && <p className="text-sm text-zinc-500">None for this campaign.</p>}
-            <ul className="mb-2 grid gap-1 text-sm text-zinc-300">
+            <ul className="mb-2 grid gap-2 text-sm text-zinc-300">
               {experiments.map((x) => (
                 <li key={x.experimentId} className="rounded-lg border border-white/10 px-3 py-2">
-                  {x.experimentId.slice(0, 14)}... · {x.status} · holdout {x.holdoutPercent}% · variants: a (campaign default){x.variants.map((v) => `, ${v.key}`).join("")} · {x.variantsApprovedBy ? "variants approved" : "variants not approved"}
+                  <div>
+                    {x.experimentId.slice(0, 14)}... · {x.status} · holdout {x.holdoutPercent}% · variants: a (campaign default){x.variants.map((v) => `, ${v.key}`).join("")} · {x.variantsApprovedBy ? `variants approved by ${x.variantsApprovedBy.slice(0, 10)}...` : "variants not approved"}
+                  </div>
+                  {x.variants.map((v) => (
+                    <div key={v.key} className="mt-1 rounded border border-white/5 px-2 py-1 text-xs text-zinc-400">
+                      {v.templates.map((t, i) => (
+                        <p key={i}>variant {v.key} · step {t.step} · subject: {t.subject || "(empty)"} · body: {(t.body || "").slice(0, 120) || "(empty)"}</p>
+                      ))}
+                    </div>
+                  ))}
+                  {x.status === "draft" && (
+                    <button className="mt-2 text-xs text-teal-700 hover:underline dark:text-teal-300" disabled={busy} onClick={() => act(async () => {
+                      await authedFetch("/api/outbound/experiments", { method: "POST", body: JSON.stringify({ action: "activate", experimentId: x.experimentId }) });
+                      await refreshDetail(selected);
+                    })}>Approve the variant templates shown above and activate</button>
+                  )}
                 </li>
               ))}
             </ul>

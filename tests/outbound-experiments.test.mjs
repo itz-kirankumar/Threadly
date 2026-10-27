@@ -93,3 +93,21 @@ test("planner skips holdouts and tags variants", async () => {
     assert.equal(a.key, i.experimentVariant);
   }
 });
+
+test("activation validation: draft-only, variant integrity, one active per campaign+version", async () => {
+  const { validateActivation } = await import("../src/lib/outbound/experiments.ts");
+  const draft = {
+    tenantId: "t1", experimentId: "exp_1", campaignId: "c1", campaignVersion: 1,
+    variants: [{ key: "b", templates: [{ step: 1, subject: "s", body: "b" }] }],
+    holdoutPercent: 10, status: "draft", variantsApprovedBy: null, createdAt: "2026-10-26T00:00:00Z", createdBy: "u1",
+  };
+  assert.deepEqual(validateActivation(draft, null), []);
+  // already active cannot re-activate
+  assert.ok(validateActivation({ ...draft, status: "active", variantsApprovedBy: "u1" }, null).includes("not_draft"));
+  // another active experiment for the same campaign+version blocks
+  const other = { ...draft, experimentId: "exp_2", status: "active", variantsApprovedBy: "u1" };
+  assert.ok(validateActivation(draft, other).includes("another_active_experiment"));
+  // variant integrity is re-checked at activation time
+  assert.ok(validateActivation({ ...draft, variants: [{ key: "b", templates: [] }] }, null).some((e) => e.startsWith("variant_without_templates")));
+  assert.ok(validateActivation({ ...draft, variants: [] }, null).includes("no_variants"));
+});

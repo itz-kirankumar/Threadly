@@ -11,6 +11,7 @@ import type { Experiment } from "./types.ts";
 
 export interface ExperimentStore {
   saveExperiment(e: Experiment): Promise<void>;
+  getExperiment(tenantId: string, experimentId: string): Promise<Experiment | null>;
   getActiveExperiment(tenantId: string, campaignId: string, campaignVersion: number): Promise<Experiment | null>;
   listExperiments(tenantId: string, campaignId: string): Promise<Experiment[]>;
 }
@@ -20,6 +21,9 @@ export class MemoryExperimentStore implements ExperimentStore {
 
   async saveExperiment(e: Experiment): Promise<void> {
     this.experiments.set(`${e.tenantId}:${e.experimentId}`, e);
+  }
+  async getExperiment(tenantId: string, experimentId: string): Promise<Experiment | null> {
+    return this.experiments.get(`${tenantId}:${experimentId}`) ?? null;
   }
   async getActiveExperiment(tenantId: string, campaignId: string, campaignVersion: number): Promise<Experiment | null> {
     return (
@@ -66,4 +70,16 @@ export function experimentSummary(
 ): { variant: Record<string, number>; holdout: number; totalSample: number; smallSample: boolean } {
   const totalSample = Object.values(counts.variant).reduce((a, b) => a + b, 0) + counts.holdout;
   return { variant: counts.variant, holdout: counts.holdout, totalSample, smallSample: totalSample < 100 };
+}
+
+// Activation is a deliberate two-step: variants are reviewed in the UI, then
+// an admin approves and activates. Only draft experiments can activate, the
+// active-form validation must pass (variants present, approver recorded by
+// the caller), and at most one experiment per campaign+version may be active.
+export function validateActivation(e: Experiment, existingActive: Experiment | null): string[] {
+  const errors: string[] = [];
+  if (e.status !== "draft") errors.push("not_draft");
+  errors.push(...validateExperiment({ ...e, status: "active", variantsApprovedBy: e.variantsApprovedBy ?? "pending-approver" }).filter((err) => err !== "variants_not_approved"));
+  if (existingActive && existingActive.experimentId !== e.experimentId) errors.push("another_active_experiment");
+  return errors;
 }

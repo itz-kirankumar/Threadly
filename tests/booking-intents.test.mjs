@@ -125,3 +125,16 @@ test("reconciler quarantines stale claims and stale intents, leaves fresh ones, 
   assert.equal((await intents.getIntent("t1", "opi_fresh")).state, "intent");
   assert.equal((await intents.getIntent("t2", "opi_other")).state, "intent", "other tenant untouched");
 });
+
+test("reconciler quarantines legacy claims that predate claimedAt tracking", async () => {
+  const intents = new MemoryOperationIntentStore();
+  const s = stores({ intents });
+  await makeLink(s);
+  const legacy = [...s._links.values()][0];
+  s._links.set(legacy.tokenHash, { ...legacy, claimState: "claiming" }); // no claimedAt
+  const result = await reconcileBookingIntents({ links: s.links, intents }, "t1", { now: NOW });
+  assert.deepEqual(result, { quarantinedLinks: 1, quarantinedIntents: 0 });
+  const after = [...s._links.values()][0];
+  assert.equal(after.claimState, "claim_unknown");
+  assert.match(after.claimError, /legacy claim predates claimedAt/);
+});

@@ -1,6 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
-import { validateExperiment } from "@/lib/outbound/experiments";
+import { validateActivation, validateExperiment } from "@/lib/outbound/experiments";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
 import type { Experiment, ExperimentVariant } from "@/lib/outbound/types";
 import { auditEvent } from "@/lib/outbound/audit";
@@ -35,6 +35,32 @@ export async function POST(request: Request) {
       return Response.json({ error: "Only workspace admins can manage experiments." }, { status: 403, headers: NO_STORE });
     }
     const body = (await readJsonBody(request, 64 * 1024)) as Record<string, unknown>;
+
+    if (body.action === "activate") {
+      // Deliberate two-step activation: the activating admin's identity is
+      // recorded as the variant approver. Atomic draft -> active via CAS.
+      const experimentId = typeof body.experimentId === "string" ? body.experimentId : "";
+      if (!experimentId) return Response.json({ error: "experimentId is required." }, { status: 400, headers: NO_STORE });
+      const store = new RtdbExperimentStore();
+      const experiment = await store.getExperiment(access.workspaceUid, experimentId);
+      if (!experiment) return Response.json({ error: "Experiment not found." }, { status: 404, headers: NO_STORE });
+      const existingActive = await store.getActiveExperiment(access.workspaceUid, experiment.campaignId, experiment.campaignVersion);
+      const errors = validateActivation(experiment, existingActive);
+      if (errors.length) {
+        return Response.json({ error: `Cannot activate: ${errors.join(", ")}` }, { status: 400, headers: NO_STORE });
+      }
+      // Read-then-CAS: the another_active_experiment check is not atomic
+      // across two DIFFERENT experiments (single-admin activation assumed);
+      // the same-experiment transition itself IS atomic.
+      const activated = await store.activateExperiment(experiment, access.identity.uid);
+      if (!activated) {
+        return Response.json({ error: "Activation conflict: the experiment changed concurrently; reload and retry." }, { status: 409, headers: NO_STORE });
+      }
+      await audit(access.workspaceUid, access.identity.uid, "experiment.activated", `experiment:${experimentId}`, "success", `campaign=${experiment.campaignId} v${experiment.campaignVersion}`);
+      const fresh = await store.getExperiment(access.workspaceUid, experimentId);
+      return Response.json({ experiment: fresh }, { status: 200, headers: NO_STORE });
+    }
+
     const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
     const campaignVersion = typeof body.campaignVersion === "number" ? body.campaignVersion : 0;
     if (!campaignId || !campaignVersion) return Response.json({ error: "campaignId and campaignVersion are required." }, { status: 400 });

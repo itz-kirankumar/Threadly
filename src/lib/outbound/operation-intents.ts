@@ -76,9 +76,10 @@ export class MemoryOperationIntentStore implements OperationIntentStore {
 //      markClaimUnknown - never retried automatically.
 //   2. intent still in state "intent" older than staleMs (crash after intent
 //      write, before resolution): intent quarantined.
-// Links stuck in "claiming" WITHOUT a claimedAt timestamp predate this
-// reconciler and cannot be aged; they stay quarantined-in-place (fail-closed,
-// unusable) and are handled by manual cleanup.
+// Links stuck in "claiming" WITHOUT a claimedAt timestamp predate the
+// claimedAt stamp. Every new claim carries one, so a missing stamp proves the
+// claim predates this reconciler's deployment and cannot be in flight: it is
+// quarantined on sight as legacy, with a distinct note.
 export async function reconcileBookingIntents(
   stores: { links: BookingLinkStore; intents: OperationIntentStore },
   tenantId: string,
@@ -91,10 +92,15 @@ export async function reconcileBookingIntents(
   let quarantinedIntents = 0;
   const links = await stores.links.listLinks(tenantId);
   const staleClaims = links
-    .filter((l) => l.claimState === "claiming" && l.claimedAt != null && Date.parse(l.claimedAt) < cutoff)
+    .filter((l) => l.claimState === "claiming" && (l.claimedAt == null || Date.parse(l.claimedAt) < cutoff))
     .slice(0, limit);
   for (const link of staleClaims) {
-    await stores.links.markClaimUnknown(link, "reconciler: claim exceeded stale threshold without completion");
+    await stores.links.markClaimUnknown(
+      link,
+      link.claimedAt == null
+        ? "reconciler: legacy claim predates claimedAt tracking; cannot be in flight, quarantined"
+        : "reconciler: claim exceeded stale threshold without completion"
+    );
     quarantinedLinks += 1;
   }
   const staleIntents = (await stores.intents.listIntents(tenantId, "intent"))
