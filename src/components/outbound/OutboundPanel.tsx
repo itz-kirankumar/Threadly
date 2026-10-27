@@ -14,6 +14,7 @@ type PlanResult = { plannedCount: number; skipped: { contactId: string; reasons:
 type Sender = { senderId: string; email: string; provider: string; status: string };
 type Draft = { draftId: string; intentId: string; step: number; subject: string; body: string; engine: string; renderedAt: string };
 type DraftRunResult = { renderedCount: number; rendered: string[]; skipped: { intentId: string; reason: string }[]; usageRecorded: string[] };
+type DispatchResult = { dispatchedCount: number; dispatched: { intentId: string; outcome: string }[]; deferred: { intentId: string; reasons: string[] }[]; skipped: { intentId: string; reason: string }[] };
 type Conversation = { conversationId: string; contactId: string; humanReplySeenAt: string | null; classification: string | null; classifiedBy: string | null };
 type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: boolean; attendeeAccepted: boolean | null; held: boolean | null };
 
@@ -27,6 +28,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   const [busy, setBusy] = useState(false);
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
   const [draftResult, setDraftResult] = useState<DraftRunResult | null>(null);
+  const [dispatchResult, setDispatchResult] = useState<DispatchResult | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -242,6 +244,24 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           </div>
 
           <div className={card}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Dispatch (mock)</h3>
+            <button className={btn} disabled={busy} onClick={() => act(async () => {
+              const res = (await authedFetch("/api/outbound/dispatch", { method: "POST", body: JSON.stringify({ campaignId: selected }) })) as DispatchResult;
+              setDispatchResult(res);
+              await refreshDetail(selected);
+            })}>Run dispatch</button>
+            <p className="mt-1 text-xs text-zinc-500">Mock provider only: no external send occurs. Gates still apply; senders stay pending_consent.</p>
+            {dispatchResult && (
+              <div className="mt-2 text-xs text-zinc-400">
+                <p>{dispatchResult.dispatchedCount} dispatched (mock).</p>
+                {dispatchResult.deferred.map((df, i) => (
+                  <p key={i} className="text-amber-700 dark:text-amber-300/80">{df.intentId}: {df.reasons.join(", ")}</p>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className={card}>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Drafts</h3>
             {!drafts.length && <p className="text-sm text-zinc-500">None.</p>}
             <ul className="grid gap-1 text-sm text-zinc-300">
@@ -249,7 +269,13 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
                 <li key={d.draftId} className="rounded-lg border border-white/10 px-3 py-2">
                   <p className="font-medium text-zinc-200">{d.subject}</p>
                   <p className="mt-1 text-xs text-zinc-400">{d.body}</p>
-                  <p className="mt-1 text-xs text-zinc-500">step {d.step} · {d.engine}</p>
+                  <div className="mt-1 flex items-center justify-between">
+                    <p className="text-xs text-zinc-500">step {d.step} · {d.engine}</p>
+                    <button className="text-xs text-teal-700 hover:underline dark:text-teal-300" disabled={busy} onClick={() => act(async () => {
+                      await authedFetch("/api/outbound/drafts", { method: "POST", body: JSON.stringify({ action: "approve", draftId: d.draftId }) });
+                      await refreshDetail(selected);
+                    })}>Approve draft</button>
+                  </div>
                 </li>
               ))}
             </ul>

@@ -73,3 +73,25 @@ export async function generateDrafts(
   }
   return result;
 }
+
+// Human review step: approving a stored draft moves its intent drafted ->
+// approved, making it eligible for dispatch. Nothing else does.
+export async function approveDraft(
+  stores: { ledger: LedgerStore; campaigns: CampaignStore; drafts: DraftStore },
+  input: { tenantId: string; draftId: string; actor: string; now: Date }
+): Promise<{ intentId: string }> {
+  const { ledger, campaigns, drafts } = stores;
+  const { tenantId, draftId, actor, now } = input;
+  const all = await drafts.listDrafts(tenantId);
+  const draft = all.find((d) => d.draftId === draftId);
+  if (!draft) throw new Error("draft_missing");
+  const intent = await ledger.getIntent(tenantId, draft.intentId);
+  if (!intent) throw new Error("intent_missing");
+  if (intent.status !== "drafted") throw new Error(`intent_not_drafted:${intent.status}`);
+  const { transition } = await import("./ledger.ts");
+  const next = transition(intent, "approved", { actor, now });
+  const ok = await ledger.compareAndSetStatus(tenantId, intent.intentId, "drafted", next);
+  if (!ok) throw new Error("reservation_conflict");
+  await campaigns.saveIntent(next);
+  return { intentId: intent.intentId };
+}

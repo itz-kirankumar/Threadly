@@ -1,6 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
-import { generateDrafts } from "@/lib/outbound/draft-run";
+import { approveDraft, generateDrafts } from "@/lib/outbound/draft-run";
 import { RtdbDraftStore } from "@/lib/outbound/drafts-rtdb";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
@@ -29,6 +29,23 @@ export async function POST(request: Request) {
       return Response.json({ error: "Only workspace admins can run draft generation." }, { status: 403, headers: NO_STORE });
     }
     const body = (await readJsonBody(request, 4 * 1024)) as Record<string, unknown>;
+    const action = typeof body.action === "string" ? body.action : "run";
+    if (action === "approve") {
+      // Human review: approving a stored draft moves its intent to approved.
+      const draftId = typeof body.draftId === "string" ? body.draftId : "";
+      if (!draftId) return Response.json({ error: "draftId is required." }, { status: 400 });
+      try {
+        const result = await approveDraft(
+          { ledger: new RtdbLedgerStore(), campaigns: new RtdbCampaignStore(), drafts: new RtdbDraftStore() },
+          { tenantId: access.workspaceUid, draftId, actor: access.identity.uid, now: new Date() }
+        );
+        return Response.json({ approved: true, intentId: result.intentId }, { status: 200, headers: NO_STORE });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "approve failed";
+        const status = msg === "draft_missing" || msg === "intent_missing" ? 404 : 409;
+        return Response.json({ error: msg }, { status, headers: NO_STORE });
+      }
+    }
     const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
     if (!campaignId) return Response.json({ error: "campaignId is required." }, { status: 400 });
     const result = await generateDrafts(
