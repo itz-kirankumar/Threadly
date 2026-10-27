@@ -43,11 +43,25 @@ touches provider accounts, or spends money:
 
 ## What does not exist yet (per PRD v1.2)
 
-- Provider adapters behind checkDispatch (OAuth account grants, real send).
-- Sender consent activation flow (senders stay pending_consent by design).
+- Real provider adapters behind checkDispatch (OAuth account grants, real
+  send). A mock adapter exists for loop validation; its attempts and usage
+  events are marked `synthetic` and excluded from real delivery/cap counts.
+- Sender consent activation flow (senders stay pending_consent by design;
+  POST /api/outbound/senders {action:"begin-consent"} returns an explicit 501
+  rather than a missing path; checkDispatch denies sender_not_active).
 - LLM personalization engine (needs verified pricing before recording usage).
 - Meeting booking integration (types exist; no provider writes).
 - PRD D01 owner decisions (pivot vs module) — pending with the owner.
+
+## Components added since the first validation runs
+
+- Draft generation worker + /api/outbound/drafts (render, list, human approve).
+- Dispatch runner + /api/outbound/dispatch (mock provider only; all
+  checkDispatch gates apply; reserved-before-dispatch lease-expiry reclaim;
+  stranded dispatching/provider_unknown reported, never retried).
+- Sequence advancement (sequence.ts, run by the plan route): advance on
+  provider-confirmed outcomes only; provider_unknown never advances.
+- RTDB intent CAS via REST ETag compare-and-put (serverless-safe).
 
 ## Validation history
 
@@ -73,7 +87,8 @@ touches provider accounts, or spends money:
   added: campaigns draftcamp1 v1 and failcamp1 v1 with approvals, contacts
   ct_b35e0a87 (unverified), ct_f9eb1f7d (valid, no timestamp), ct_1166c6c9
   (verified), three enrollments, two intents, one draft, one generation usage
-  event.
+  event. Run 5 added: campaign consentcamp1 v1 + approval, one intent
+  (scheduled, consent-gated), one draft. Run 6 added no fixtures.
 
 ## Deployment model
 

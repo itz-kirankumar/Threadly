@@ -29,6 +29,17 @@ export async function POST(request: Request) {
       return Response.json({ error: "Only workspace admins can manage senders." }, { status: 403, headers: NO_STORE });
     }
     const body = (await readJsonBody(request, 4 * 1024)) as Record<string, unknown>;
+    const action = typeof body.action === "string" ? body.action : "register";
+    if (action === "begin-consent") {
+      // Explicit not-built: the OAuth consent flow that would activate a
+      // sender does not exist yet. Senders stay pending_consent; checkDispatch
+      // denies every dispatch against them until a real consent flow sets
+      // status active with a consentTraceId. This endpoint never activates.
+      return Response.json(
+        { error: "Sender OAuth consent flow is not built yet. Senders remain pending_consent and cannot dispatch.", senderStatus: "pending_consent" },
+        { status: 501, headers: NO_STORE }
+      );
+    }
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const provider = body.provider === "gmail" || body.provider === "microsoft" ? body.provider : null;
     if (!email.includes("@") || !provider) {
