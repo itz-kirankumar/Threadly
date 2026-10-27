@@ -8,7 +8,7 @@ import type {
   MessageIntent,
   RightsRecord,
   Sender,
-} from "./types";
+} from "./types.ts";
 import { createHash } from "node:crypto";
 
 export function normalizeEmail(email: string): string {

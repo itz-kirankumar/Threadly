@@ -1,7 +1,7 @@
 // Durable send ledger: the ledger owns truth, workflows do not.
 // Pure transition logic; persistence lives behind the Store interface.
 
-import type { DeliveryAttempt, MessageIntent, MessageStatus } from "./types";
+import type { DeliveryAttempt, MessageIntent, MessageStatus } from "./types.ts";
 
 export function intentUniqueKey(parts: {
   tenantId: string;
