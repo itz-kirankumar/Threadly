@@ -1,6 +1,6 @@
 import { RequestError } from "@/lib/api-request";
 import { PLAN_LIMITS } from "./plan";
-import { getFirebaseIdentity, withWorkspace } from "@/lib/portal-db";
+import { getFirebaseIdentity, withWorkspace, type FirebaseIdentity } from "@/lib/portal-db";
 import { adminConfigured, getAdminDatabase } from "@/lib/geo/admin-store";
 
 // Teams: a workspace (one user's geo tree) can be shared with other signed-in
@@ -120,15 +120,24 @@ async function writeInvite(ownerUid: string, invite: TeamInvite | null): Promise
 
 import { NEW_SIGNUP_BLOCK_MESSAGE, decideSignupAccess } from "@/lib/geo/signup-gate";
 
-export interface ResolveAccessOptions {
-  allowNewSignup?: boolean;
+// Throws 403 when the caller is a brand-new signup (no team membership and no
+// existing workspace data). Exported so billing guest routes apply the same
+// gate to signed-in callers.
+export async function assertSignupAllowed(identity: FirebaseIdentity): Promise<void> {
+  if (identity.idToken === "demo-token" || !adminConfigured()) return;
+  const membership = await adminGetMembership(identity.uid);
+  if (membership) return;
+  const snapshot = await (await getAdminDatabase()).ref(`users/${identity.uid}/geo`).get();
+  const decision = decideSignupAccess({
+    isDemo: false,
+    adminConfigured: true,
+    hasMembership: false,
+    hasWorkspaceData: snapshot.exists(),
+  });
+  if (decision === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
 }
 
-export async function resolveWorkspaceAccess(
-  request: Request,
-  permission: TeamPermission,
-  options?: ResolveAccessOptions
-): Promise<WorkspaceAccess> {
+export async function resolveWorkspaceAccess(request: Request, permission: TeamPermission): Promise<WorkspaceAccess> {
   const identity = await getFirebaseIdentity(request);
   if (!identity) throw new RequestError("Sign in with Google to continue.", 401);
 
@@ -137,14 +146,13 @@ export async function resolveWorkspaceAccess(
   }
 
   const membership = await adminGetMembership(identity.uid);
-  if (!membership && !options?.allowNewSignup) {
+  if (!membership) {
     const snapshot = await (await getAdminDatabase()).ref(`users/${identity.uid}/geo`).get();
     const decision = decideSignupAccess({
       isDemo: false,
       adminConfigured: true,
       hasMembership: false,
       hasWorkspaceData: snapshot.exists(),
-      allowNewSignup: false,
     });
     if (decision === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
   }

@@ -14,11 +14,9 @@ export interface SignupGateInput {
   adminConfigured: boolean;
   hasMembership: boolean;
   hasWorkspaceData: boolean;
-  allowNewSignup: boolean;
 }
 
 export function decideSignupAccess(input: SignupGateInput): "allow" | "block" {
-  if (input.allowNewSignup) return "allow";
   if (input.isDemo || !input.adminConfigured) return "allow"; // demo mode and dev path
   if (input.hasMembership || input.hasWorkspaceData) return "allow"; // existing user
   return "block";

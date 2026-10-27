@@ -4,6 +4,8 @@ import { loadBilling } from "@/lib/billing/store";
 import { normalizeE164 } from "@/lib/billing/identity";
 import { newClaimSecret, saveClaim, listPromoClaims, type BillingClaim } from "@/lib/billing/claims";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { assertSignupAllowed } from "@/lib/geo/team";
+import { NEW_SIGNUP_BLOCK_MESSAGE } from "@/lib/geo/signup-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +44,15 @@ export async function POST(request: Request) {
     if (limit && !limit.allowed) {
       return Response.json({ error: "Too many attempts. Try again shortly." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds), "Cache-Control": "no-store" } });
     }
+    // New-signup gate: promo redemption is a new-signup acquisition path and
+    // its claim step is gated, so unauth redemption is closed while the gate
+    // is on. Signed-in existing users are unaffected.
+    if (!(request.headers.get("authorization") || "").trim()) {
+      return Response.json(
+        { error: NEW_SIGNUP_BLOCK_MESSAGE, code: "signup_gate" },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     // Same fail-closed duplicate guard as paid checkout when signed in.
     if ((request.headers.get("authorization") || "").trim()) {
       let identity = null;
@@ -52,6 +63,7 @@ export async function POST(request: Request) {
           { status: 401, headers: { "Cache-Control": "no-store" } },
         );
       }
+      await assertSignupAllowed(identity);
       let existing = null;
       try { existing = await withWorkspace(identity.uid, identity.idToken, () => loadBilling()); }
       catch {
