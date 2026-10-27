@@ -2,6 +2,7 @@
 // tenant root; reads re-verify tenantId. Raw emails are stored on the
 // contact record itself (needed for sending) but never in RTDB paths.
 
+import { createHash } from "node:crypto";
 import type { Contact, RightsRecord } from "./types.ts";
 import type { ContactStore } from "./planner.ts";
 import { tenantRoot } from "./rtdb-store.ts";
@@ -38,6 +39,23 @@ export class RtdbContactStore implements ContactStore {
   async saveContact(contact: Contact): Promise<void> {
     const database = await db();
     await database.ref(`${tenantRoot(contact.tenantId)}/contacts/${safeKey(contact.contactId)}`).set(contact);
+    const emailKey = createHash("sha256").update(contact.email.trim().toLowerCase(), "utf8").digest("hex");
+    await database.ref(`${tenantRoot(contact.tenantId)}/contactsByEmail/${emailKey}`).set(contact.contactId);
+  }
+
+  async listContacts(tenantId: string): Promise<Contact[]> {
+    const database = await db();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/contacts`).get();
+    if (!snap.exists()) return [];
+    return Object.values(snap.val() as Record<string, Contact>).filter((c) => c.tenantId === tenantId);
+  }
+
+  async findByEmail(tenantId: string, email: string): Promise<Contact | null> {
+    const database = await db();
+    const emailKey = createHash("sha256").update(email.trim().toLowerCase(), "utf8").digest("hex");
+    const snap = await database.ref(`${tenantRoot(tenantId)}/contactsByEmail/${emailKey}`).get();
+    if (!snap.exists()) return null;
+    return this.getContact(tenantId, snap.val() as string);
   }
 
   async saveRights(rights: RightsRecord): Promise<void> {
