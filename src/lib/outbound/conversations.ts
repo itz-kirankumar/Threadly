@@ -53,3 +53,57 @@ export function classifyReplyText(text: string): ConversationIntent {
   if (/\b(interested|sounds good|let'?s talk|book|schedule|send over)\b/.test(t)) return "interested";
   return "uncertain";
 }
+
+// F16: editable classification and owner routing.
+// - A human reclassification is authoritative and editable at any time; it
+//   records classifiedBy "human". It never touches humanReplySeenAt and
+//   never resumes a stopped sequence: reclassification informs handling,
+//   it does not resurrect follow-ups.
+// - Owner routing assigns the person responsible. "Uncertain" auto
+//   classifications must reach a person: routeUncertain assigns the given
+//   owner when the conversation is uncertain and unowned.
+
+export interface ConversationStoreOps {
+  getConversation(tenantId: string, conversationId: string): Promise<Conversation | null>;
+  saveConversation(c: Conversation): Promise<void>;
+}
+
+export async function reclassifyConversation(
+  store: ConversationStoreOps,
+  input: { tenantId: string; conversationId: string; intent: ConversationIntent; actor: string },
+): Promise<Conversation> {
+  const conv = await store.getConversation(input.tenantId, input.conversationId);
+  if (!conv) throw new Error("conversation not found");
+  const updated: Conversation = { ...conv, classification: input.intent, classifiedBy: "human" };
+  await store.saveConversation(updated);
+  return updated;
+}
+
+export async function assignConversationOwner(
+  store: ConversationStoreOps,
+  input: { tenantId: string; conversationId: string; ownerUserId: string; actor: string },
+): Promise<Conversation> {
+  const conv = await store.getConversation(input.tenantId, input.conversationId);
+  if (!conv) throw new Error("conversation not found");
+  const updated: Conversation = { ...conv, ownerUserId: input.ownerUserId };
+  await store.saveConversation(updated);
+  return updated;
+}
+
+// "Uncertain reaches a person": when the latest classification is uncertain
+// and nobody owns the conversation, assign the fallback owner. Returns the
+// conversation and whether an assignment happened.
+export async function routeUncertain(
+  store: ConversationStoreOps,
+  input: { tenantId: string; conversationId: string; fallbackOwnerUserId: string },
+): Promise<{ conversation: Conversation; assigned: boolean }> {
+  const conv = await store.getConversation(input.tenantId, input.conversationId);
+  if (!conv) throw new Error("conversation not found");
+  if (conv.classification !== "uncertain" || conv.ownerUserId !== null) {
+    return { conversation: conv, assigned: false };
+  }
+  const updated: Conversation = { ...conv, ownerUserId: input.fallbackOwnerUserId };
+  await store.saveConversation(updated);
+  return { conversation: updated, assigned: true };
+}
+
