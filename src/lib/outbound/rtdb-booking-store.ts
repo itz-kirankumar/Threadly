@@ -56,7 +56,11 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
   async getLinkByTokenHash(tokenHash: string): Promise<BookingLink | null> {
     const database = await db();
     const snap = await database.ref(`${outboundDataRoot()}/bookingLinksByToken/${safeKey(tokenHash)}`).get();
-    return snap.exists() ? (snap.val() as BookingLink) : null;
+    if (!snap.exists()) return null;
+    const val = snap.val() as BookingLink;
+    // RTDB drops null fields on write; normalize absent nullable fields back
+    // to null so downstream writes never carry undefined into set().
+    return { ...val, conversationId: val.conversationId ?? null, meetingId: val.meetingId ?? null, claimState: val.claimState ?? null, claimError: val.claimError ?? null };
   }
 
   async updateLink(l: BookingLink): Promise<void> {

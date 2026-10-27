@@ -121,7 +121,7 @@ export async function commitBooking(
   const meeting: Meeting = {
     tenantId: input.tenantId,
     meetingId: `mtg_${crypto.randomUUID()}`,
-    conversationId: input.conversationId,
+    conversationId: input.conversationId ?? null,
     providerEventId: created.providerEventId,
     organizerSenderId: input.organizerSenderId,
     attendees: [input.contactEmail],
