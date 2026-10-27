@@ -9,6 +9,13 @@ const { MemoryUsageStore } = await import("../src/lib/outbound/usage.ts");
 const { generateDrafts, approveDraft } = await import("../src/lib/outbound/draft-run.ts");
 const { MockDispatchProvider, runDispatch } = await import("../src/lib/outbound/dispatch.ts");
 const { MemoryKillSwitchStore } = await import("../src/lib/outbound/kill-switches.ts");
+const { MemoryPreflightStore } = await import("../src/lib/outbound/preflight.ts");
+function passingPreflight(domain) {
+  return {
+    tenantId: "t1", domain, spf: "pass", dkim: "pass", dkimSelector: "google", dmarc: "pass", dmarcPolicy: "reject",
+    checkedAt: NOW.toISOString(), evidence: "test fixture", createdAt: NOW.toISOString(), createdBy: "u1",
+  };
+}
 
 const NOW = new Date("2026-10-27T12:00:00Z");
 const ISO = NOW.toISOString();
@@ -78,7 +85,11 @@ async function setup(senderList, contactId = "k1") {
   assert.equal(gen.rendered.length, 1);
   const draft = (await drafts.listDrafts("t1"))[0];
   const senders = new StaticSenderReader(senderList);
-  const stores = { campaigns, ledger, drafts, senders, contacts, usage, killSwitches: new MemoryKillSwitchStore() };
+  const preflight = new MemoryPreflightStore();
+  for (const snd of senderList) {
+    await preflight.save(passingPreflight(snd.email.split("@")[1]));
+  }
+  const stores = { campaigns, ledger, drafts, senders, contacts, usage, killSwitches: new MemoryKillSwitchStore(), preflight };
   return { stores, campaign, intent, draft, ledger, usage, campaigns };
 }
 

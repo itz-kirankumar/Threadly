@@ -80,6 +80,9 @@ export interface DispatchInput {
   // F09 kill-switch reasons matched against this intent's campaign/sender/
   // domain. Each reason already names its scope; any present reason blocks.
   killSwitchReasons?: string[];
+  // F13 domain preflight for the sender's domain. Fail-closed: anything but
+  // "pass" blocks. "failed" reasons name the failed checks.
+  domainPreflight?: { state: "pass" | "missing" | "failed" | "stale"; failedChecks: string[] };
   now: Date;
 }
 
@@ -105,6 +108,10 @@ export function checkDispatch(input: DispatchInput): Decision {
   if (input.humanReplySeen) reasons.push("human_reply_seen_stops_followups");
 
   for (const r of input.killSwitchReasons ?? []) reasons.push(r);
+  if (input.domainPreflight && input.domainPreflight.state !== "pass") {
+    const pf = input.domainPreflight;
+    reasons.push(pf.state === "failed" ? `domain_preflight_failed:${pf.failedChecks.join("+")}` : `domain_preflight_${pf.state}`);
+  }
   if (!input.tenantCostComplete) reasons.push("tenant_cost_unknown");
   if (campaign && input.tenantCostToDate >= campaign.costCeiling.amount) reasons.push("tenant_cost_ceiling_reached");
 

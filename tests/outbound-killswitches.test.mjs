@@ -10,6 +10,14 @@ const { MemoryDraftStore } = await import("../src/lib/outbound/drafts.ts");
 const { MemoryUsageStore } = await import("../src/lib/outbound/usage.ts");
 const { MemoryIngestionStore } = await import("../src/lib/outbound/ingestion.ts");
 const { checkDispatch } = await import("../src/lib/outbound/policy.ts");
+const { MemoryPreflightStore } = await import("../src/lib/outbound/preflight.ts");
+
+function passingPreflight(domain) {
+  return {
+    tenantId: "t1", domain, spf: "pass", dkim: "pass", dkimSelector: "google", dmarc: "pass", dmarcPolicy: "reject",
+    checkedAt: NOW.toISOString(), evidence: "test fixture", createdAt: NOW.toISOString(), createdBy: "u1",
+  };
+}
 
 const NOW = new Date("2026-10-28T12:00:00Z");
 
@@ -117,8 +125,10 @@ test("sender/domain scopes are enforced at dispatch (not planning)", async () =>
   } };
   const ingestion = new MemoryIngestionStore();
   await ingestion.saveCursor({ tenantId: "t1", senderId: "snd_1", cursor: "c1", syncedAt: NOW.toISOString() });
+  const preflight = new MemoryPreflightStore();
+  await preflight.save(passingPreflight("example.com"));
   const result = await runDispatch(
-    { campaigns: stores.campaigns, ledger: stores.ledger, drafts, senders, contacts: stores.contacts, usage, ingestion, killSwitches: stores.killSwitches },
+    { campaigns: stores.campaigns, ledger: stores.ledger, drafts, senders, contacts: stores.contacts, usage, ingestion, killSwitches: stores.killSwitches, preflight },
     new MockDispatchProvider(),
     { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW },
   );

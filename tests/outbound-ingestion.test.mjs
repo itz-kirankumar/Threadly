@@ -7,6 +7,7 @@ const { MemoryConversationStore } = await import("../src/lib/outbound/conversati
 const { MemoryLedgerStore } = await import("../src/lib/outbound/ledger.ts");
 const { MemoryContactStore, planCampaignIntents } = await import("../src/lib/outbound/planner.ts");
 const { MemoryKillSwitchStore } = await import("../src/lib/outbound/kill-switches.ts");
+const { MemoryPreflightStore } = await import("../src/lib/outbound/preflight.ts");
 
 const NOW = new Date("2026-10-27T12:00:00Z");
 
@@ -142,7 +143,9 @@ test("dispatch defers when sender sync is stale or never synced", async () => {
   await drafts.saveDraft({ tenantId: "t1", draftId: "dr_x", intentId: intents[0].intentId, subject: "s", body: "b", reviewState: "approved", createdAt: NOW.toISOString(), createdBy: "u1" });
 
   const ingestion = new MemoryIngestionStore();
-  const stores = { campaigns, ledger, drafts, senders, contacts, usage, ingestion, killSwitches: new MemoryKillSwitchStore() };
+  const preflight = new MemoryPreflightStore();
+  await preflight.save({ tenantId: "t1", domain: "acme.com", spf: "pass", dkim: "pass", dkimSelector: "google", dmarc: "pass", dmarcPolicy: "reject", checkedAt: NOW.toISOString(), evidence: "fixture", createdAt: NOW.toISOString(), createdBy: "u1" });
+  const stores = { campaigns, ledger, drafts, senders, contacts, usage, ingestion, killSwitches: new MemoryKillSwitchStore(), preflight };
   // never synced: dispatch must defer
   const r1 = await runDispatch(stores, new MockDispatchProvider(), { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(r1.dispatched.length, 0);

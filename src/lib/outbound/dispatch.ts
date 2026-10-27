@@ -17,6 +17,8 @@ import type { IngestionStore } from "./ingestion.ts";
 import { syncHealth } from "./ingestion.ts";
 import type { KillSwitchStore } from "./kill-switches.ts";
 import { activeKillSwitches, killSwitchReasons } from "./kill-switches.ts";
+import type { PreflightStore } from "./preflight.ts";
+import { evaluatePreflight } from "./preflight.ts";
 import type { DeliveryAttempt, MessageIntent, Sender } from "./types.ts";
 
 export interface SenderReader {
@@ -72,6 +74,10 @@ export interface DispatchStores {
   // JS callers that bypass the type), so no composition can silently
   // dispatch past an engaged switch.
   killSwitches: KillSwitchStore;
+  // F13 domain preflight. REQUIRED like the kill-switch store: runDispatch
+  // refuses to run without it so no composition can dispatch past an
+  // unchecked sender domain.
+  preflight: PreflightStore;
 }
 
 export interface DispatchResult {
@@ -95,6 +101,9 @@ export async function runDispatch(
     // Runtime fail-closed: a JavaScript caller can bypass the required type.
     // Dispatching without the safety control is never allowed.
     throw new Error("kill switch store required: refusing to dispatch without the safety control");
+  }
+  if (!stores.preflight) {
+    throw new Error("preflight store required: refusing to dispatch without domain authentication evidence");
   }
   const result: DispatchResult = { dispatched: [], deferred: [], skipped: [] };
 
@@ -155,6 +164,8 @@ export async function runDispatch(
 
     const sender = intent.senderId ? await senders.getSender(tenantId, intent.senderId) : null;
     const senderDomain = sender ? sender.email.split("@")[1] : undefined;
+    const preflightRecord = senderDomain ? await stores.preflight.get(tenantId, senderDomain) : null;
+    const preflightEval = evaluatePreflight(preflightRecord, now);
     const killReasons = killSwitchReasons(
       activeKillSwitches(switches, { campaignId, senderId: sender?.senderId, senderDomain })
     );
@@ -176,6 +187,7 @@ export async function runDispatch(
       tenantCostToDate,
       tenantCostComplete,
       killSwitchReasons: killReasons,
+      domainPreflight: preflightEval,
       now,
     });
 

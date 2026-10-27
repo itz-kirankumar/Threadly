@@ -9,6 +9,7 @@ import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import { RtdbIngestionStore } from "@/lib/outbound/rtdb-ingestion-store";
 import { RtdbKillSwitchStore } from "@/lib/outbound/rtdb-kill-switch-store";
+import { RtdbPreflightStore } from "@/lib/outbound/rtdb-preflight-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import { RtdbUsageStore } from "@/lib/outbound/rtdb-usage-store";
 import { auditEvent } from "@/lib/outbound/audit";
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
         // defers dispatch (reply/bounce state may be out of date).
         ingestion: new RtdbIngestionStore(),
         killSwitches: new RtdbKillSwitchStore(),
+        preflight: new RtdbPreflightStore(),
       },
       new RoutingDispatchProvider(new RtdbConsentStore()),
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
