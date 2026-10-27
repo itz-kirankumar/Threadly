@@ -265,19 +265,27 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Drafts</h3>
             {!drafts.length && <p className="text-sm text-zinc-500">None.</p>}
             <ul className="grid gap-1 text-sm text-zinc-300">
-              {drafts.map((d) => (
-                <li key={d.draftId} className="rounded-lg border border-white/10 px-3 py-2">
-                  <p className="font-medium text-zinc-200">{d.subject}</p>
-                  <p className="mt-1 text-xs text-zinc-400">{d.body}</p>
-                  <div className="mt-1 flex items-center justify-between">
-                    <p className="text-xs text-zinc-500">step {d.step} · {d.engine}</p>
-                    <button className="text-xs text-teal-700 hover:underline dark:text-teal-300" disabled={busy} onClick={() => act(async () => {
-                      await authedFetch("/api/outbound/drafts", { method: "POST", body: JSON.stringify({ action: "approve", draftId: d.draftId }) });
-                      await refreshDetail(selected);
-                    })}>Approve draft</button>
-                  </div>
-                </li>
-              ))}
+              {drafts.map((d) => {
+                const intentStatus = intents.find((i) => i.intentId === d.intentId)?.status ?? "unknown";
+                const approvable = intentStatus === "drafted";
+                return (
+                  <li key={d.draftId} className="rounded-lg border border-white/10 px-3 py-2">
+                    <p className="font-medium text-zinc-200">{d.subject}</p>
+                    <p className="mt-1 text-xs text-zinc-400">{d.body}</p>
+                    <div className="mt-1 flex items-center justify-between">
+                      <p className="text-xs text-zinc-500">step {d.step} · {d.engine} · intent {intentStatus}</p>
+                      {approvable ? (
+                        <button className="text-xs text-teal-700 hover:underline dark:text-teal-300" disabled={busy} onClick={() => act(async () => {
+                          await authedFetch("/api/outbound/drafts", { method: "POST", body: JSON.stringify({ action: "approve", draftId: d.draftId }) });
+                          await refreshDetail(selected);
+                        })}>Approve draft</button>
+                      ) : (
+                        <span className="text-xs text-zinc-500">{intentStatus === "approved" || intentStatus === "scheduled" ? "Approved" : "Not approvable"}</span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

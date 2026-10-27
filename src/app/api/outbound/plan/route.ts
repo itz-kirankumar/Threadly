@@ -1,6 +1,7 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { planCampaignIntents } from "@/lib/outbound/planner";
+import { advanceEnrollments } from "@/lib/outbound/sequence";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
@@ -32,6 +33,10 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request, 4 * 1024)) as Record<string, unknown>;
     const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
     if (!campaignId) return Response.json({ error: "campaignId is required." }, { status: 400 });
+    const advancement = await advanceEnrollments(
+      { campaigns: new RtdbCampaignStore() },
+      { tenantId: access.workspaceUid, campaignId }
+    );
     const result = await planCampaignIntents(
       { campaigns: new RtdbCampaignStore(), ledger: new RtdbLedgerStore(), contacts: new RtdbContactStore() },
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
@@ -43,6 +48,7 @@ export async function POST(request: Request) {
         planned: result.planned.map((i) => ({ intentId: i.intentId, enrollmentId: i.enrollmentId, contactId: i.contactId, step: i.step, status: i.status })),
         skipped: result.skipped,
         blocked: result.blocked,
+        advancement,
       },
       { status: 200, headers: NO_STORE }
     );
