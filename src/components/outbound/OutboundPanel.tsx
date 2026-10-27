@@ -12,6 +12,10 @@ type Enrollment = { enrollmentId: string; contactId: string; status: string; cur
 type Intent = { intentId: string; contactId: string; step: number; status: string };
 type PlanResult = { plannedCount: number; skipped: { contactId: string; reasons: string[] }[]; blocked: string[] };
 type Sender = { senderId: string; email: string; provider: string; status: string };
+type Draft = { draftId: string; intentId: string; step: number; subject: string; body: string; engine: string; renderedAt: string };
+type DraftRunResult = { renderedCount: number; rendered: string[]; skipped: { intentId: string; reason: string }[]; usageRecorded: string[] };
+type Conversation = { conversationId: string; contactId: string; humanReplySeenAt: string | null; classification: string | null; classifiedBy: string | null };
+type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: boolean; attendeeAccepted: boolean | null; held: boolean | null };
 
 export default function OutboundPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -22,6 +26,10 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   const [error, setError] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
+  const [draftResult, setDraftResult] = useState<DraftRunResult | null>(null);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [senders, setSenders] = useState<Sender[]>([]);
   const [senderEmail, setSenderEmail] = useState("");
   const [form, setForm] = useState({ campaignId: "", subject: "", body: "", contactEmail: "", contactName: "" });
@@ -31,17 +39,22 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
     setCampaigns(data.campaigns);
     const snd = (await authedFetch("/api/outbound/senders")) as { senders: Sender[] };
     setSenders(snd.senders);
+    const conv = (await authedFetch("/api/outbound/conversations")) as { conversations: Conversation[]; meetings: Meeting[] };
+    setConversations(conv.conversations);
+    setMeetings(conv.meetings);
   }, [authedFetch]);
 
   const refreshDetail = useCallback(async (campaignId: string) => {
-    const [detail, enr, ints] = await Promise.all([
+    const [detail, enr, ints, dr] = await Promise.all([
       authedFetch(`/api/outbound/campaigns?campaignId=${campaignId}`) as Promise<{ approval: Approval }>,
       authedFetch(`/api/outbound/enrollments?campaignId=${campaignId}`) as Promise<{ enrollments: Enrollment[] }>,
       authedFetch(`/api/outbound/intents?campaignId=${campaignId}`) as Promise<{ intents: Intent[] }>,
+      authedFetch(`/api/outbound/drafts?campaignId=${campaignId}`) as Promise<{ drafts: Draft[] }>,
     ]);
     setApproval(detail.approval);
     setEnrollments(enr.enrollments);
     setInts(ints.intents);
+    setDrafts(dr.drafts);
   }, [authedFetch]);
 
   const setInts = (v: Intent[]) => setIntents(v);
@@ -179,6 +192,24 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
             )}
           </div>
 
+          <div className={card}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Draft generation</h3>
+            <button className={btn} disabled={busy} onClick={() => act(async () => {
+              const res = (await authedFetch("/api/outbound/drafts", { method: "POST", body: JSON.stringify({ campaignId: selected }) })) as DraftRunResult;
+              setDraftResult(res);
+              await refreshDetail(selected);
+            })}>Generate drafts</button>
+            <p className="mt-1 text-xs text-zinc-500">Template rendering only; drafts are stored for review. Nothing is sent.</p>
+            {draftResult && (
+              <div className="mt-2 text-xs text-zinc-400">
+                <p>{draftResult.renderedCount} draft(s) rendered.</p>
+                {draftResult.skipped.map((sk, i) => (
+                  <p key={i} className="text-amber-700 dark:text-amber-300/80">{sk.intentId}: {sk.reason}</p>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <div className={card}>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Enrollments</h3>
@@ -204,6 +235,45 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
                 {intents.map((i) => (
                   <li key={i.intentId} className="rounded-lg border border-white/10 px-3 py-2">
                     step {i.step} · {i.status} · {i.contactId.slice(0, 14)}...
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className={card}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Drafts</h3>
+            {!drafts.length && <p className="text-sm text-zinc-500">None.</p>}
+            <ul className="grid gap-1 text-sm text-zinc-300">
+              {drafts.map((d) => (
+                <li key={d.draftId} className="rounded-lg border border-white/10 px-3 py-2">
+                  <p className="font-medium text-zinc-200">{d.subject}</p>
+                  <p className="mt-1 text-xs text-zinc-400">{d.body}</p>
+                  <p className="mt-1 text-xs text-zinc-500">step {d.step} · {d.engine}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className={card}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Conversations</h3>
+              {!conversations.length && <p className="text-sm text-zinc-500">None.</p>}
+              <ul className="grid gap-1 text-sm text-zinc-300">
+                {conversations.map((c) => (
+                  <li key={c.conversationId} className="rounded-lg border border-white/10 px-3 py-2">
+                    {c.contactId.slice(0, 14)}... · reply {c.humanReplySeenAt ? "seen" : "none"} · {c.classification ?? "unclassified"}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className={card}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Meetings</h3>
+              {!meetings.length && <p className="text-sm text-zinc-500">None.</p>}
+              <ul className="grid gap-1 text-sm text-zinc-300">
+                {meetings.map((m) => (
+                  <li key={m.meetingId} className="rounded-lg border border-white/10 px-3 py-2">
+                    {m.startsAt} ({m.timezone}) · {m.booked ? "booked" : "not booked"} · held: {m.held === null ? "unknown" : m.held ? "yes" : "no"}
                   </li>
                 ))}
               </ul>
