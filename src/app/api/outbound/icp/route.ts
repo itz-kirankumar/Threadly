@@ -1,6 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
-import { createIcpDraft, currentIcp, nextVersionNumber, planConfirmation } from "@/lib/outbound/icp";
+import { confirmIcp, createIcpDraft, currentIcp, nextVersionNumber } from "@/lib/outbound/icp";
 import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
@@ -30,8 +30,13 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
-    const versions = await new RtdbIcpStore().list(access.workspaceUid);
-    return Response.json({ current: currentIcp(versions), versions: versions.slice(0, 100) }, { headers: NO_STORE });
+    const icpStore = new RtdbIcpStore();
+    const versions = await icpStore.list(access.workspaceUid);
+    // Pointer is authoritative for "current"; currentIcp is the read
+    // fallback only when no pointer exists yet.
+    const pointerId = await icpStore.getCurrentId(access.workspaceUid);
+    const pointed = pointerId ? versions.find((v) => v.icpVersionId === pointerId && v.status === "confirmed") ?? null : null;
+    return Response.json({ current: pointed ?? currentIcp(versions), versions: versions.slice(0, 100) }, { headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound icp");
   }
@@ -80,23 +85,21 @@ export async function POST(request: Request) {
       if (!icpVersionId) {
         return Response.json({ error: "icpVersionId is required." }, { status: 400, headers: NO_STORE });
       }
-      const versions = await store.list(access.workspaceUid);
-      let plan;
-      try {
-        plan = planConfirmation(versions, access.workspaceUid, icpVersionId, access.identity.uid, new Date());
-      } catch (e) {
-        return Response.json({ error: e instanceof Error ? e.message : "Cannot confirm." }, { status: 409, headers: NO_STORE });
+      const outcome = await confirmIcp(store, access.workspaceUid, icpVersionId, access.identity.uid, new Date());
+      if (!outcome.ok) {
+        const messages = {
+          not_found: "ICP version not found.",
+          not_draft: "Only a draft ICP version can be confirmed.",
+          record_race: "ICP version changed concurrently; reload and retry.",
+          pointer_race: "Another ICP version was confirmed concurrently; reload and retry.",
+        } as const;
+        if (outcome.reason === "pointer_race") {
+          await audit(access.workspaceUid, access.identity.uid, "icp.confirm_conflict", `icp:${icpVersionId}`, "denied", "lost tenant current-pointer race; record superseded");
+        }
+        return Response.json({ error: messages[outcome.reason] }, { status: outcome.reason === "not_found" ? 404 : 409, headers: NO_STORE });
       }
-      const prior = versions.find((v) => v.icpVersionId === icpVersionId)!;
-      const won = await store.casConfirm(prior, plan.confirmed);
-      if (!won) {
-        return Response.json({ error: "ICP version changed concurrently; reload and retry." }, { status: 409, headers: NO_STORE });
-      }
-      for (const s of plan.superseded) {
-        await store.save(s);
-      }
-      await audit(access.workspaceUid, access.identity.uid, "icp.confirmed", `icp:${icpVersionId}`, "success", `version=${plan.confirmed.version} superseded=${plan.superseded.length} source=${plan.confirmed.source.kind}`);
-      return Response.json(plan.confirmed, { headers: NO_STORE });
+      await audit(access.workspaceUid, access.identity.uid, "icp.confirmed", `icp:${icpVersionId}`, "success", `version=${outcome.confirmed.version} superseded=${outcome.superseded.length} source=${outcome.confirmed.source.kind}`);
+      return Response.json(outcome.confirmed, { headers: NO_STORE });
     }
 
     return Response.json({ error: "action must be create or confirm." }, { status: 400, headers: NO_STORE });

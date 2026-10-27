@@ -2,8 +2,16 @@
 // exclusions and approved product claims. Every change is a NEW version;
 // confirmed versions are immutable records. A version becomes active only
 // through explicit human confirmation - URL-derived proposals are drafts
-// like any other and are never approved automatically. The current ICP is
-// the highest-version confirmed version.
+// like any other and are never approved automatically.
+//
+// SINGLE ACTIVATION: the tenant-scoped current pointer (IcpStore
+// getCurrentId/casSetCurrent) is the source of truth for which version is
+// active; a confirm wins only by CAS-ing the pointer from the value it
+// read. Two concurrent confirms of DIFFERENT drafts cannot both win the
+// pointer - the loser is told to retry and its just-confirmed record is
+// superseded. Record-level status is informational hygiene: currentIcp()
+// (highest confirmed version) is only a deterministic READ fallback when no
+// pointer exists yet, never proof of single activation.
 //
 // This module does not extract from URLs itself (no LLM call; provider
 // spend is an owner decision). Callers supply proposed text with provenance
@@ -79,9 +87,18 @@ export interface IcpStore {
   save(version: IcpVersion): Promise<void>;
   get(tenantId: string, icpVersionId: string): Promise<IcpVersion | null>;
   list(tenantId: string): Promise<IcpVersion[]>;
+  // Tenant-scoped current pointer: the single-activation mechanism.
+  getCurrentId(tenantId: string): Promise<string | null>;
+  // Sets the pointer only if it still holds expectedCurrentId (null = unset).
+  casSetCurrent(tenantId: string, expectedCurrentId: string | null, nextCurrentId: string): Promise<boolean>;
+  // Optional per-record CAS for the draft -> confirmed transition; stores
+  // without it fall back to a plain write (single-process use only).
+  casConfirm?(expectedDraft: IcpVersion, confirmed: IcpVersion): Promise<boolean>;
 }
 
-// Highest-version confirmed version wins; ties break on createdAt.
+// READ FALLBACK ONLY: highest-version confirmed version wins; ties break on
+// createdAt. Deterministic selection is not single activation - use the
+// tenant pointer where available; this resolves reads when none exists.
 export function currentIcp(versions: IcpVersion[]): IcpVersion | null {
   const confirmed = versions.filter((v) => v.status === "confirmed");
   if (confirmed.length === 0) return null;
@@ -115,6 +132,58 @@ export function planConfirmation(
   return { confirmed, superseded };
 }
 
+export type ConfirmOutcome =
+  | { ok: true; confirmed: IcpVersion; superseded: IcpVersion[] }
+  | { ok: false; reason: "not_found" | "not_draft" | "record_race" | "pointer_race" };
+
+// The full confirmation sequence against a store, with single activation:
+//   1. per-record CAS draft -> confirmed (crash here: unpointed confirmed
+//      record, reads still follow the old pointer);
+//   2. tenant pointer CAS expected -> new (crash here: same as 1; losing a
+//      race here supersedes our just-confirmed record so it cannot linger
+//      as apparently-active);
+//   3. supersede previously confirmed records (crash here: stale confirmed
+//      records remain, but the pointer keeps reads single-active).
+// Known residual limit: step 1 runs before the pointer is won, so a process
+// can confirm-then-lose and briefly hold a confirmed-but-never-active
+// record until step 2's cleanup lands; reads via the pointer are never
+// affected, but list views can transiently show it.
+export async function confirmIcp(
+  store: IcpStore,
+  tenantId: string,
+  icpVersionId: string,
+  actor: string,
+  now: Date,
+): Promise<ConfirmOutcome> {
+  const versions = await store.list(tenantId);
+  const target = versions.find((v) => v.icpVersionId === icpVersionId);
+  if (!target) return { ok: false, reason: "not_found" };
+  let plan;
+  try {
+    plan = planConfirmation(versions, tenantId, icpVersionId, actor, now);
+  } catch {
+    return { ok: false, reason: "not_draft" };
+  }
+  const pointerBefore = await store.getCurrentId(tenantId);
+  let recordWon: boolean;
+  if (typeof store.casConfirm === "function") {
+    recordWon = await store.casConfirm(target, plan.confirmed);
+  } else {
+    await store.save(plan.confirmed);
+    recordWon = true;
+  }
+  if (!recordWon) return { ok: false, reason: "record_race" };
+  const activated = await store.casSetCurrent(tenantId, pointerBefore, icpVersionId);
+  if (!activated) {
+    await store.save({ ...plan.confirmed, status: "superseded" });
+    return { ok: false, reason: "pointer_race" };
+  }
+  for (const sup of plan.superseded) {
+    await store.save(sup);
+  }
+  return { ok: true, confirmed: plan.confirmed, superseded: plan.superseded };
+}
+
 // Maps a confirmed ICP to the F04 scoring target profile. Exclusions and
 // approved claims are not scoring criteria; they gate targeting and
 // personalization elsewhere.
@@ -129,6 +198,7 @@ export function targetFromIcp(icp: IcpVersion): { roles?: string[]; regions?: st
 
 export class MemoryIcpStore implements IcpStore {
   versions = new Map<string, IcpVersion>();
+  current = new Map<string, string>();
   async save(version: IcpVersion): Promise<void> {
     this.versions.set(`${version.tenantId}:${version.icpVersionId}`, version);
   }
@@ -140,5 +210,13 @@ export class MemoryIcpStore implements IcpStore {
     return [...this.versions.values()]
       .filter((v) => v.tenantId === tenantId)
       .sort((a, b) => b.version - a.version);
+  }
+  async getCurrentId(tenantId: string): Promise<string | null> {
+    return this.current.get(tenantId) ?? null;
+  }
+  async casSetCurrent(tenantId: string, expectedCurrentId: string | null, nextCurrentId: string): Promise<boolean> {
+    if ((this.current.get(tenantId) ?? null) !== expectedCurrentId) return false;
+    this.current.set(tenantId, nextCurrentId);
+    return true;
   }
 }

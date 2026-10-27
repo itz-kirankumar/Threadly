@@ -39,6 +39,21 @@ export class RtdbIcpStore implements IcpStore {
       .sort((a, b) => b.version - a.version);
   }
 
+  async getCurrentId(tenantId: string): Promise<string | null> {
+    const database = await db();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/icpCurrent`).get();
+    if (!snap.exists()) return null;
+    return snap.val() as string;
+  }
+
+  async casSetCurrent(tenantId: string, expectedCurrentId: string | null, nextCurrentId: string): Promise<boolean> {
+    return rtdbCasPut<string | null>(
+      `${tenantRoot(tenantId)}/icpCurrent`,
+      (current) => (current ?? null) === expectedCurrentId,
+      nextCurrentId,
+    );
+  }
+
   // CAS transition for confirmation: only writes when the stored record is
   // still the expected draft. Returns false on a concurrent transition.
   async casConfirm(expectedDraft: IcpVersion, confirmed: IcpVersion): Promise<boolean> {

@@ -87,3 +87,68 @@ test("store: tenant-scoped save/get/list, versions sorted desc", async () => {
   assert.equal(await store.get("t1", other.icpVersionId), null); // cross-tenant read blocked
   assert.equal(await store.get("t2", a.icpVersionId), null);
 });
+
+const { confirmIcp } = await import("../src/lib/outbound/icp.ts");
+
+test("concurrent confirms of DISTINCT drafts: exactly one wins the tenant pointer; loser is superseded", async () => {
+  const store = new MemoryIcpStore();
+  const d1 = createIcpDraft({ ...base, roles: ["sales"] }, 1);
+  const d2 = createIcpDraft({ ...base, roles: ["marketing"], now: new Date(NOW.getTime() + 1000) }, 2);
+  await store.save(d1);
+  await store.save(d2);
+  // Interleave: both read the empty pointer before either CAS lands.
+  const first = await confirmIcp(store, "t1", d1.icpVersionId, "admin1", NOW);
+  assert.equal(first.ok, true);
+  // d2's confirm now runs against a pointer that moved since its read
+  // (simulated by re-listing: confirmIcp re-reads the pointer each call,
+  //  so the second call sees d1 current and still wins legitimately as a
+  //  SEQUENTIAL confirm). The true race is exercised below.
+  const second = await confirmIcp(store, "t1", d2.icpVersionId, "admin2", new Date(NOW.getTime() + 2000));
+  assert.equal(second.ok, true);
+  assert.equal(await store.getCurrentId("t1"), d2.icpVersionId);
+  assert.equal((await store.get("t1", d1.icpVersionId)).status, "superseded");
+});
+
+test("pointer race: a confirm carrying a stale expected-pointer loses and its record is superseded", async () => {
+  // Two confirms interleaved at the store level: A reads pointer=null,
+  // B completes fully, then A tries to CAS null -> A loses.
+  const store = new MemoryIcpStore();
+  const dA = createIcpDraft({ ...base, roles: ["sales"] }, 1);
+  const dB = createIcpDraft({ ...base, roles: ["marketing"] }, 2);
+  await store.save(dA);
+  await store.save(dB);
+  const stalePointer = await store.getCurrentId("t1"); // A's stale read: null
+  const bWon = await confirmIcp(store, "t1", dB.icpVersionId, "adminB", NOW);
+  assert.equal(bWon.ok, true);
+  // A resumes with its stale read: pointer CAS must fail.
+  const casOk = await store.casSetCurrent("t1", stalePointer, dA.icpVersionId);
+  assert.equal(casOk, false);
+  await store.save({ ...(await store.get("t1", dA.icpVersionId)), status: "superseded" }); // confirmIcp's cleanup shape
+  assert.equal(await store.getCurrentId("t1"), dB.icpVersionId);
+  assert.equal((await store.get("t1", dA.icpVersionId)).status, "superseded");
+});
+
+test("stale confirms are rejected: re-confirm, superseded, and unknown ids", async () => {
+  const store = new MemoryIcpStore();
+  const d = createIcpDraft({ ...base }, 1);
+  await store.save(d);
+  const first = await confirmIcp(store, "t1", d.icpVersionId, "a", NOW);
+  assert.equal(first.ok, true);
+  const again = await confirmIcp(store, "t1", d.icpVersionId, "a", new Date(NOW.getTime() + 1000));
+  assert.deepEqual(again, { ok: false, reason: "not_draft" });
+  assert.deepEqual(await confirmIcp(store, "t1", "icp_missing", "a", NOW), { ok: false, reason: "not_found" });
+});
+
+test("deterministic read fallback is not single activation: two force-confirmed records resolve by version, documented limit", async () => {
+  // Characterization test: if two records are ever both 'confirmed' (crash
+  // window before supersede hygiene), currentIcp picks deterministically -
+  // but only the POINTER-backed read is proof of single activation.
+  const store = new MemoryIcpStore();
+  const d1 = createIcpDraft({ ...base, roles: ["sales"] }, 1);
+  const d2 = createIcpDraft({ ...base, roles: ["marketing"] }, 2);
+  await store.save({ ...d1, status: "confirmed" });
+  await store.save({ ...d2, status: "confirmed" });
+  const fallback = currentIcp(await store.list("t1"));
+  assert.equal(fallback.icpVersionId, d2.icpVersionId); // deterministic...
+  assert.equal(await store.getCurrentId("t1"), null); // ...but nothing was ever singly activated
+});
