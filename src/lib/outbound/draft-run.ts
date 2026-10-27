@@ -18,7 +18,7 @@ export interface DraftRunResult {
 }
 
 export async function generateDrafts(
-  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; drafts: DraftStore; usage: UsageStore; experiments?: import("./experiments.ts").ExperimentStore },
+  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; drafts: DraftStore; usage: UsageStore; experiments?: import("./experiments.ts").ExperimentStore; llm?: import("./llm/types.ts").PersonalizationProvider },
   input: { tenantId: string; campaignId: string; actor: string; now: Date }
 ): Promise<DraftRunResult> {
   const { campaigns, ledger, contacts, drafts, usage } = stores;
@@ -55,7 +55,35 @@ export async function generateDrafts(
       }
       templateSource = { ...campaign, templates: variant.templates };
     }
-    const rendered = renderTemplate(templateSource, intent, contactEvidence(contact));
+    const evidence = contactEvidence(contact);
+    let engine: Draft["engine"] = "template";
+    let fallbackReason: string | undefined;
+    let rendered = renderTemplate(templateSource, intent, evidence);
+    if ((campaign.personalizationEngine ?? "template") === "llm-assisted" && rendered.ok) {
+      const stepTemplate = templateSource.templates.find((t) => t.step === intent.step);
+      if (!stores.llm) {
+        engine = "template-fallback";
+        fallbackReason = "llm_not_configured";
+      } else if (stepTemplate) {
+        const llmResult = await stores.llm.personalize({
+          intentId: intent.intentId,
+          step: intent.step,
+          template: stepTemplate,
+          evidence,
+          allowedVariables: campaign.allowedPersonalization,
+        });
+        if (llmResult.ok) {
+          // Provider output keeps {{variable}} placeholders; fill them from
+          // evidence here so validation governs exactly what was used.
+          const fill = (text: string) => text.replace(/\{\{([a-z0-9_]+)\}\}/gi, (m, v) => (v in evidence ? evidence[v] : m));
+          rendered = { ok: true, subject: fill(llmResult.subject), body: fill(llmResult.body), reasons: [] };
+          engine = stores.llm.name as Draft["engine"];
+        } else {
+          engine = "template-fallback";
+          fallbackReason = llmResult.reasons.join(";").slice(0, 300);
+        }
+      }
+    }
     if (!rendered.ok) {
       for (const reason of rendered.reasons) result.skipped.push({ intentId: intent.intentId, reason });
       continue;
@@ -67,21 +95,29 @@ export async function generateDrafts(
       step: intent.step,
       subject: rendered.subject!,
       body: rendered.body!,
-      engine: "template",
+      engine,
+      ...(fallbackReason ? { fallbackReason } : {}),
       renderedAt: now.toISOString(),
       createdAt: now.toISOString(),
       createdBy: actor,
     };
     await drafts.saveDraft(draft);
     result.rendered.push(draft.draftId);
+    // Cost honesty: template rendering is a true zero. A real model call has
+    // no verified price here, so cost is recorded as UNKNOWN (null), which
+    // fails tenantCostComplete and blocks dispatch until priced. Mock LLM is
+    // explicitly synthetic and excluded from real spend accounting.
+    const isMockLlm = engine === "mock-llm";
+    const isRealLlm = engine === "http-llm";
     const usageResult = await usage.recordUsage({
       tenantId,
       usageId: `ug_${draft.draftId.replace(/^dr_/, "")}`,
       kind: "generation",
       units: 1,
       idempotencyKey: `generation:${intent.intentId}:${draft.draftId}`,
-      costMinorUnits: 0,
-      currency: "USD",
+      costMinorUnits: isRealLlm ? null : 0,
+      currency: isRealLlm ? null : "USD",
+      ...(isMockLlm ? { synthetic: true } : {}),
       createdAt: now.toISOString(),
       createdBy: actor,
     });

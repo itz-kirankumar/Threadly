@@ -12,7 +12,10 @@ export interface Draft {
   step: number;
   subject: string;
   body: string;
-  engine: "template";
+  engine: "template" | "mock-llm" | "http-llm" | "template-fallback";
+  // Set when llm-assisted was requested but the approved template was used
+  // instead; records exactly why (F06 fallback is explicit, never silent).
+  fallbackReason?: string;
   renderedAt: string;
   createdAt: string;
   createdBy: string;

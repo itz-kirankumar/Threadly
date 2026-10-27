@@ -122,6 +122,10 @@ export interface CampaignVersion extends CreationMeta {
   costCeiling: { currency: string; amount: number };
   bookingPolicy: { directBooking: boolean; hostPool: string[] };
   expiresAt: ISODate;
+  // Default "template". "llm-assisted" tries the scoped model adapter and
+  // falls back to the approved template with an explicit recorded reason
+  // when the provider is unconfigured or its output fails validation.
+  personalizationEngine?: "template" | "llm-assisted";
 }
 
 export interface Approval extends CreationMeta {

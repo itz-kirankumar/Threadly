@@ -3,6 +3,8 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { approveDraft, generateDrafts } from "@/lib/outbound/draft-run";
 import { RtdbDraftStore } from "@/lib/outbound/drafts-rtdb";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
+import { HttpLLMProvider } from "@/lib/outbound/llm/http";
+import { MockLLMProvider } from "@/lib/outbound/llm/mock";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
@@ -57,6 +59,16 @@ export async function POST(request: Request) {
         drafts: new RtdbDraftStore(),
         usage: new RtdbUsageStore(),
         experiments: new RtdbExperimentStore(),
+        // llm-assisted engine: use the real endpoint when configured,
+        // otherwise the mock (synthetic, clearly marked) so the path is
+        // exercisable without supplier selection or spend.
+        llm: (() => {
+          try {
+            return new HttpLLMProvider();
+          } catch {
+            return new MockLLMProvider();
+          }
+        })(),
       },
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
