@@ -1,7 +1,8 @@
 // RTDB-backed sender registry. Senders are created ONLY in pending_consent
-// status: activation requires a real OAuth consent flow (not built), so no
-// code path here can mark a sender active. checkDispatch requires an active
-// sender, which keeps the whole send pipeline unreachable until then.
+// status. The single activation path is activateSenderFromConsent below,
+// which is called exclusively by the OAuth consent callback after the
+// provider verified the consented mailbox identity. checkDispatch requires
+// an active sender, which keeps live dispatch unreachable until then.
 
 import type { Sender } from "./types.ts";
 import { tenantRoot } from "./rtdb-store.ts";
@@ -33,6 +34,30 @@ export class RtdbSenderStore {
     if (!snap.exists()) return null;
     const val = snap.val() as Sender;
     return val.tenantId === tenantId ? val : null;
+  }
+
+  // The ONLY code path that may mark a sender active. Called exclusively by
+  // the OAuth consent callback (completeConsent) after the provider verified
+  // that the consented mailbox matches the registered sender email.
+  async activateSenderFromConsent(tenantId: string, senderId: string, consentTraceId: string, scopes: string[]): Promise<Sender> {
+    const sender = await this.getSender(tenantId, senderId);
+    if (!sender) throw new Error("sender not found");
+    if (sender.status !== "pending_consent" && sender.status !== "revoked") {
+      throw new Error(`cannot activate sender in status ${sender.status}`);
+    }
+    const updated: Sender = { ...sender, status: "active", consentTraceId, scopes };
+    const database = await db();
+    await database.ref(`${tenantRoot(tenantId)}/senders/${safeKey(senderId)}`).set(updated);
+    return updated;
+  }
+
+  async revokeSender(tenantId: string, senderId: string): Promise<Sender> {
+    const sender = await this.getSender(tenantId, senderId);
+    if (!sender) throw new Error("sender not found");
+    const updated: Sender = { ...sender, status: "revoked" };
+    const database = await db();
+    await database.ref(`${tenantRoot(tenantId)}/senders/${safeKey(senderId)}`).set(updated);
+    return updated;
   }
 
   async listSenders(tenantId: string): Promise<Sender[]> {

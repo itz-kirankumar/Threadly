@@ -240,6 +240,18 @@ export interface CRMMapping extends CreationMeta {
   lastSyncAt: ISODate | null;
 }
 
+
+export interface ConsentTrace extends CreationMeta {
+  tenantId: string;
+  consentTraceId: string;
+  senderId: string;
+  provider: SenderProvider;
+  scopes: string[];
+  consentedAt: ISODate;
+  consentorIdentity: string; // provider-verified mailbox identity
+  revokedAt: ISODate | null;
+}
+
 export interface UsageEvent extends CreationMeta {
   tenantId: string;
   usageId: string;

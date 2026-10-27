@@ -21,11 +21,14 @@ export interface SenderReader {
 
 export interface DispatchProvider {
   name: string;
-  send(input: { sender: Sender; intent: MessageIntent; subject: string; body: string }): Promise<{
+  send(input: { sender: Sender; intent: MessageIntent; subject: string; body: string; to: string }): Promise<{
     outcome: "accepted" | "rejected" | "unknown";
     correlationId: string | null;
     statusCode: number | null;
     detail: string | null;
+    // True when no external send occurred (mock path). Synthetic outcomes are
+    // excluded from real sent/provider delivery counts.
+    synthetic: boolean;
   }>;
 }
 
@@ -38,12 +41,14 @@ export class MockDispatchProvider implements DispatchProvider {
     correlationId: string;
     statusCode: number;
     detail: string;
+    synthetic: true;
   }> {
     return {
       outcome: "accepted",
       correlationId: `mock_${input.intent.intentId}`,
       statusCode: 200,
       detail: "mock adapter: no external send occurred",
+      synthetic: true,
     };
   }
 }
@@ -163,7 +168,7 @@ export async function runDispatch(
     await ledger.compareAndSetStatus(tenantId, intent.intentId, "reserved", dispatching);
     await campaigns.saveIntent(dispatching);
 
-    const sendResult = await provider.send({ sender: sender!, intent: dispatching, subject: draft.subject, body: draft.body });
+    const sendResult = await provider.send({ sender: sender!, intent: dispatching, subject: draft.subject, body: draft.body, to: contact ? contact.email : "" });
     const attempt: DeliveryAttempt = {
       tenantId,
       attemptId: `at_${intent.intentId.replace(/^mi_/, "")}`,
@@ -174,7 +179,7 @@ export async function runDispatch(
       outcome: sendResult.outcome,
       providerStatusCode: sendResult.statusCode,
       detail: sendResult.detail,
-      synthetic: provider.name === "mock",
+      synthetic: sendResult.synthetic,
       createdAt: now.toISOString(),
       createdBy: actor,
     };
@@ -193,12 +198,12 @@ export async function runDispatch(
         kind: "send",
         units: 1,
         idempotencyKey: `send:${intent.intentId}:${attempt.attemptId}`,
-        // Mock provider: no external cost exists, so this is a true zero. Real
-        // providers must record their verified price or null (which fails
-        // tenantCostComplete and blocks further dispatch).
-        costMinorUnits: provider.name === "mock" ? 0 : null,
-        currency: provider.name === "mock" ? "USD" : null,
-        ...(provider.name === "mock" ? { synthetic: true } : {}),
+        // Synthetic (mock) outcomes: no external cost exists, so this is a
+        // true zero. Real providers must record their verified price or null
+        // (which fails tenantCostComplete and blocks further dispatch).
+        costMinorUnits: sendResult.synthetic ? 0 : null,
+        currency: sendResult.synthetic ? "USD" : null,
+        ...(sendResult.synthetic ? { synthetic: true } : {}),
         createdAt: now.toISOString(),
         createdBy: actor,
       });

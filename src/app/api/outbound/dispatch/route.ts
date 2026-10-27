@@ -1,6 +1,8 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
-import { MockDispatchProvider, runDispatch } from "@/lib/outbound/dispatch";
+import { runDispatch } from "@/lib/outbound/dispatch";
+import { RoutingDispatchProvider } from "@/lib/outbound/providers/live";
+import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbDraftStore } from "@/lib/outbound/drafts-rtdb";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
@@ -18,10 +20,11 @@ function enabled(): boolean {
   return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
 }
 
-// Runs the dispatch runner with the MOCK provider. No external send occurs:
-// every gate in checkDispatch still applies (including sender_not_active,
-// which always denies until a real OAuth consent flow exists). Real provider
-// adapters are not built and would require OAuth grants before use.
+// Runs the dispatch runner through the routing provider: the live adapter is
+// reachable only for an active sender (real OAuth consent completed) with
+// OUTBOUND_PROVIDERS_LIVE=true on the deployment; no current deployment sets
+// it, so every send falls back to the mock and stays synthetic. Every gate in
+// checkDispatch still applies, including sender_not_active.
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -43,11 +46,11 @@ export async function POST(request: Request) {
         contacts: new RtdbContactStore(),
         usage: new RtdbUsageStore(),
       },
-      new MockDispatchProvider(),
+      new RoutingDispatchProvider(new RtdbConsentStore()),
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
     return Response.json(
-      { campaignId, provider: "mock", dispatchedCount: result.dispatched.length, dispatched: result.dispatched, deferred: result.deferred, skipped: result.skipped },
+      { campaignId, provider: "routing(mock-unless-live)", dispatchedCount: result.dispatched.length, dispatched: result.dispatched, deferred: result.deferred, skipped: result.skipped },
       { status: 200, headers: NO_STORE }
     );
   } catch (error) {

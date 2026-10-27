@@ -1,5 +1,7 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { beginConsent, revokeConsent } from "@/lib/outbound/consent-flow";
+import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import type { Sender } from "@/lib/outbound/types";
 
@@ -16,9 +18,10 @@ function enabled(): boolean {
   return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
 }
 
-// Registers a sender mailbox in pending_consent status. There is no path to
-// "active" from any route: activation needs a real OAuth consent flow, which
-// is not built. Until then dispatch cannot pass its sender gate.
+// Registers a sender mailbox in pending_consent status. Activation happens
+// only through the OAuth consent flow (begin-consent -> provider consent ->
+// callback verifies mailbox identity), which is implemented but inactive
+// without provider client envs; checkDispatch denies non-active senders.
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -31,14 +34,28 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request, 4 * 1024)) as Record<string, unknown>;
     const action = typeof body.action === "string" ? body.action : "register";
     if (action === "begin-consent") {
-      // Explicit not-built: the OAuth consent flow that would activate a
-      // sender does not exist yet. Senders stay pending_consent; checkDispatch
-      // denies every dispatch against them until a real consent flow sets
-      // status active with a consentTraceId. This endpoint never activates.
+      const senderId = typeof body.senderId === "string" ? body.senderId : "";
+      if (!senderId) return Response.json({ error: "senderId is required." }, { status: 400 });
+      const result = await beginConsent(new RtdbSenderStore(), { tenantId: access.workspaceUid, senderId });
+      if (!result.ok) {
+        return Response.json(
+          { error: result.error, senderStatus: "pending_consent", ...(result.requiredEnvs ? { requiredEnvs: result.requiredEnvs } : {}) },
+          { status: result.status, headers: NO_STORE }
+        );
+      }
       return Response.json(
-        { error: "Sender OAuth consent flow is not built yet. Senders remain pending_consent and cannot dispatch.", senderStatus: "pending_consent" },
-        { status: 501, headers: NO_STORE }
+        { consentUrl: result.consentUrl, expiresAt: result.expiresAt, provider: result.provider },
+        { status: 200, headers: NO_STORE }
       );
+    }
+    if (action === "revoke-consent") {
+      const senderId = typeof body.senderId === "string" ? body.senderId : "";
+      if (!senderId) return Response.json({ error: "senderId is required." }, { status: 400 });
+      const result = await revokeConsent(new RtdbSenderStore(), new RtdbConsentStore(), { tenantId: access.workspaceUid, senderId });
+      if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });
+      }
+      return Response.json({ senderId, status: "revoked" }, { status: 200, headers: NO_STORE });
     }
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const provider = body.provider === "gmail" || body.provider === "microsoft" ? body.provider : null;
