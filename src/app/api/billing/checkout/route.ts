@@ -96,18 +96,15 @@ export async function POST(request: Request) {
     // means an earlier attempt is unresolved - no new link is created anywhere.
     let claim = await claimCheckoutAttempt(access.workspaceUid, attempt, now);
     if (!claim.claimed && claim.existing?.provider === "dodo" && claim.existing.state === "issued" && claim.existing.providerRef) {
-      // Issued Dodo session: provider-backed resolution only. An explicitly
-      // expired session is terminal (single-use link dead) -> safe to create a
-      // fresh session. Open -> the 409 below returns the same live URL.
-      // Completed/unknown/lookup-failure -> stay blocked (payment path owns it).
+      // Issued Dodo session: provider-backed resolution only. "completed" on
+      // the exact session id this attempt created is exact intent -> reconcile.
+      // Every other status (incl. "expired": link death does not prove the
+      // underlying payment/subscription cannot settle) -> stay blocked.
       const priorDodo = claim.existing;
       const priorSessionId = priorDodo.providerRef;
       if (priorSessionId) try {
         const sess = (await dodoClient().checkoutSessions.retrieve(priorSessionId)) as unknown as { status?: string };
-        if (sess.status === "expired") {
-          await saveCheckoutAttempt(access.workspaceUid, { ...priorDodo, state: "expired", updatedAt: new Date().toISOString() });
-          claim = await claimCheckoutAttempt(access.workspaceUid, attempt, new Date());
-        } else if (sess.status === "completed") {
+        if (sess.status === "completed") {
           await saveCheckoutAttempt(access.workspaceUid, { ...priorDodo, state: "reconciled", updatedAt: new Date().toISOString() });
           return Response.json(
             { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new checkout was created.", state: "reconciled" },
@@ -130,8 +127,9 @@ export async function POST(request: Request) {
         paymentFound = items.some((pay) => {
           const md = pay.metadata ?? {};
           if (md.workspace_uid !== access.workspaceUid) return false;
+          if (md.plan !== prior.plan || md.interval !== prior.interval) return false;
           const ts = pay.created_at ? Date.parse(pay.created_at) : NaN;
-          return Number.isNaN(ts) || ts >= since;
+          return !Number.isNaN(ts) && ts >= since;
         });
       } catch {
         paymentFound = null;
@@ -176,6 +174,13 @@ export async function POST(request: Request) {
           { status: 503, headers: { "Cache-Control": "no-store" } },
         );
       }
+    const replaced = claim.claimed ? claim.existing : null;
+    if (replaced?.state === "reconciled" && replaced.plan === body.plan && replaced.interval === body.interval && !(existing && (existing.status === "active" || existing.status === "grace"))) {
+      return Response.json(
+        { error: "A payment for this plan was already recorded and is being applied - no new checkout was created.", state: "reconciled" },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
+      );
+    }
       try {
         if (provider === "dodo") {
           const session = await dodoClient().checkoutSessions.create({

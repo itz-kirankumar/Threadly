@@ -116,7 +116,8 @@ export async function POST(request: Request) {
             { headers: { "Cache-Control": "no-store" } },
           );
         }
-        if (order.status === "paid") {
+        const amountMatches = (prior.amount == null || order.amount == null || prior.amount === order.amount) && (prior.currency == null || order.currency == null || prior.currency === order.currency);
+        if (order.status === "paid" && amountMatches) {
           await saveCheckoutAttempt(access.workspaceUid, { ...prior, state: "reconciled", updatedAt: new Date().toISOString() });
           return Response.json(
             { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new order was created.", state: "reconciled" },
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
           { headers: { "Cache-Control": "no-store" } },
         );
       }
-      if (decision.action === "mark_reconciled_paid") {
+      if (decision.action === "mark_reconciled_paid" && (claim.existing.amount == null || orders?.find((o) => o.status === "paid")?.id)) {
         await saveCheckoutAttempt(access.workspaceUid, { ...claim.existing, state: "reconciled", updatedAt: new Date().toISOString() });
         return Response.json(
           { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new order was created.", state: "reconciled" },
