@@ -43,7 +43,8 @@ export async function POST(request: Request) {
       accountId: typeof body.accountId === "string" ? body.accountId : "",
       email,
       fullName,
-      title: typeof body.title === "string" ? body.title : undefined,
+      // RTDB rejects undefined values; only set title when provided.
+      ...(typeof body.title === "string" && body.title ? { title: body.title } : {}),
       verification: {
         state: VSTATES.find((v) => v === (body.verificationState as string)) ?? "unknown",
         verifiedAt: typeof body.verifiedAt === "string" ? body.verifiedAt : null,
