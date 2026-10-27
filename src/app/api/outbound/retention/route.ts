@@ -5,6 +5,7 @@ import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
 import { RtdbEvidenceStore } from "@/lib/outbound/rtdb-import-store";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { RtdbRetentionOverrideStore } from "@/lib/outbound/rtdb-retention-override-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { planRetentionSweep, executeRetentionSweep } from "@/lib/outbound/retention";
 
@@ -46,8 +47,13 @@ export async function POST(request: Request) {
       conversations: new RtdbConversationStore(),
       evidence: new RtdbEvidenceStore(),
       audit: new RtdbAuditStore(),
+      overrides: new RtdbRetentionOverrideStore(),
     };
     const plan = await planRetentionSweep(stores, { tenantId: access.workspaceUid, now: new Date() });
+    if (plan.blocked) {
+      await audit(access.workspaceUid, access.identity.uid, "retention.sweep_blocked", `tenant:${access.workspaceUid}`, "denied", plan.blocked);
+      return Response.json({ mode: "blocked", blocked: plan.blocked, plan }, { status: execute ? 409 : 200, headers: NO_STORE });
+    }
     if (!execute) {
       await audit(access.workspaceUid, access.identity.uid, "retention.sweep_planned", `tenant:${access.workspaceUid}`, "success", `deleteContacts=${plan.deleteContacts.length} deleteEvidence=${plan.deleteEvidence.length} purgeAudit=${plan.purgeAuditEvents}`);
       return Response.json({ mode: "dry_run", plan }, { headers: NO_STORE });

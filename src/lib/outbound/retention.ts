@@ -23,6 +23,66 @@ export const PROSPECT_CONTENT_RETENTION_DAYS = 90;
 export const AUDIT_METADATA_RETENTION_DAYS = 365;
 export const LEGAL_HOLD_BASIS = "legal_hold";
 
+// Contract-level retention overrides. The MECHANISM is built; the TERMS are
+// an owner decision (no route creates these records today - activation of
+// specific terms requires owner input). Evaluation is fail-closed: an active
+// legal hold or any override record we cannot fully parse blocks the entire
+// sweep, because deleting under unknown contract terms is worse than
+// keeping data longer. Multiple active overrides combine by taking the
+// LONGEST window (most conservative). Expired overrides are ignored.
+export interface RetentionOverride {
+  tenantId: string;
+  overrideId: string;
+  kind: "contract";
+  prospectDays: number | null; // null = keep the proposal default
+  auditDays: number | null;
+  legalHoldUntil: ISODate | null; // future = full hold, sweep refuses
+  note: string;
+  expiresAt: ISODate | null; // past = ignored
+  createdAt: ISODate;
+  createdBy: string;
+}
+
+export type OverrideEvaluation =
+  | { state: "none" }
+  | { state: "active"; prospectDays: number | null; auditDays: number | null }
+  | { state: "blocked"; reason: string };
+
+export function evaluateOverrides(overrides: RetentionOverride[], now: Date): OverrideEvaluation {
+  let active: { prospectDays: number | null; auditDays: number | null } | null = null;
+  for (const o of overrides) {
+    if (o.expiresAt && Date.parse(o.expiresAt) <= now.getTime()) continue; // expired: ignored
+    if (o.legalHoldUntil && Date.parse(o.legalHoldUntil) > now.getTime()) {
+      return { state: "blocked", reason: `legal hold active until ${o.legalHoldUntil} (override ${o.overrideId})` };
+    }
+    const daysOk = (d: number | null) => d === null || (Number.isInteger(d) && d > 0);
+    if (o.kind !== "contract" || !daysOk(o.prospectDays) || !daysOk(o.auditDays)) {
+      // Fail closed: the tenant's contract terms cannot be determined, so
+      // no deletion is safe.
+      return { state: "blocked", reason: `override ${o.overrideId} cannot be evaluated; refusing to sweep under unknown terms` };
+    }
+    active = {
+      prospectDays: active === null ? o.prospectDays : Math.max(active.prospectDays ?? 0, o.prospectDays ?? 0) || null,
+      auditDays: active === null ? o.auditDays : Math.max(active.auditDays ?? 0, o.auditDays ?? 0) || null,
+    };
+  }
+  return active ? { state: "active", ...active } : { state: "none" };
+}
+
+export interface RetentionOverrideStore {
+  listOverrides(tenantId: string): Promise<RetentionOverride[]>;
+}
+
+export class MemoryRetentionOverrideStore implements RetentionOverrideStore {
+  items = new Map<string, RetentionOverride>();
+  async save(o: RetentionOverride): Promise<void> {
+    this.items.set(`${o.tenantId}:${o.overrideId}`, o);
+  }
+  async listOverrides(tenantId: string): Promise<RetentionOverride[]> {
+    return [...this.items.values()].filter((o) => o.tenantId === tenantId);
+  }
+}
+
 export interface EvidenceStore {
   listEvidence(tenantId: string): Promise<SourceEvidence[]>;
   deleteEvidence(tenantId: string, evidenceId: string): Promise<void>;
@@ -38,6 +98,7 @@ export interface RetentionStores {
 
 export interface RetentionPlan {
   tenantId: string;
+  blocked: string | null; // non-null: nothing in this plan may execute
   prospectCutoff: ISODate;
   auditCutoff: ISODate;
   deleteContacts: { contactId: string; createdAt: ISODate }[];
@@ -56,11 +117,27 @@ export interface RetentionResult {
 }
 
 export async function planRetentionSweep(
-  stores: RetentionStores,
+  stores: RetentionStores & { overrides?: RetentionOverrideStore },
   input: { tenantId: string; now: Date; prospectDays?: number; auditDays?: number }
 ): Promise<RetentionPlan> {
-  const prospectCutoff = new Date(input.now.getTime() - (input.prospectDays ?? PROSPECT_CONTENT_RETENTION_DAYS) * 24 * 60 * 60 * 1000).toISOString();
-  const auditCutoff = new Date(input.now.getTime() - (input.auditDays ?? AUDIT_METADATA_RETENTION_DAYS) * 24 * 60 * 60 * 1000).toISOString();
+  const evaluation = evaluateOverrides(stores.overrides ? await stores.overrides.listOverrides(input.tenantId) : [], input.now);
+  const prospectDays = input.prospectDays ?? (evaluation.state === "active" ? evaluation.prospectDays : null) ?? PROSPECT_CONTENT_RETENTION_DAYS;
+  const auditDays = input.auditDays ?? (evaluation.state === "active" ? evaluation.auditDays : null) ?? AUDIT_METADATA_RETENTION_DAYS;
+  const prospectCutoff = new Date(input.now.getTime() - prospectDays * 24 * 60 * 60 * 1000).toISOString();
+  const auditCutoff = new Date(input.now.getTime() - auditDays * 24 * 60 * 60 * 1000).toISOString();
+  if (evaluation.state === "blocked") {
+    return {
+      tenantId: input.tenantId,
+      blocked: evaluation.reason,
+      prospectCutoff,
+      auditCutoff,
+      deleteContacts: [],
+      skipContacts: [],
+      deleteEvidence: [],
+      purgeAuditEvents: 0,
+      suppressionsUntouched: 0,
+    };
+  }
 
   // Contacts protected by an active or paused enrollment in any campaign.
   const protectedByEnrollment = new Set<string>();
@@ -75,6 +152,7 @@ export async function planRetentionSweep(
 
   const plan: RetentionPlan = {
     tenantId: input.tenantId,
+    blocked: null,
     prospectCutoff,
     auditCutoff,
     deleteContacts: [],
@@ -126,6 +204,7 @@ export async function executeRetentionSweep(
   plan: RetentionPlan,
   auditCutoff: ISODate
 ): Promise<RetentionResult> {
+  if (plan.blocked) throw new Error(`retention sweep blocked: ${plan.blocked}`);
   let deletedContacts = 0;
   for (const c of plan.deleteContacts) {
     await stores.contacts.deleteRights(plan.tenantId, c.contactId);

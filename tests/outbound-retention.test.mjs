@@ -153,3 +153,55 @@ test("dry-run plan alone mutates nothing", async () => {
   assert.equal(plan.deleteContacts.length, 1);
   assert.notEqual(await stores.contacts.getContact("t1", "c_old"), null);
 });
+
+const { MemoryRetentionOverrideStore, evaluateOverrides } = await import("../src/lib/outbound/retention.ts");
+
+function override(over = {}) {
+  return {
+    tenantId: "t1", overrideId: "ov_1", kind: "contract", prospectDays: null, auditDays: null,
+    legalHoldUntil: null, note: "test", expiresAt: null, createdAt: OLD, createdBy: "owner", ...over,
+  };
+}
+
+test("override evaluation: none, active (longest wins), expired ignored, legal hold blocks, unparseable blocks", () => {
+  assert.deepEqual(evaluateOverrides([], NOW), { state: "none" });
+  assert.deepEqual(evaluateOverrides([override({ prospectDays: 180 })], NOW), { state: "active", prospectDays: 180, auditDays: null });
+  assert.deepEqual(
+    evaluateOverrides([override({ prospectDays: 180 }), override({ overrideId: "ov_2", prospectDays: 365 })], NOW),
+    { state: "active", prospectDays: 365, auditDays: null },
+  );
+  assert.deepEqual(evaluateOverrides([override({ prospectDays: 365, expiresAt: "2026-10-01T00:00:00Z" })], NOW), { state: "none" });
+  const hold = evaluateOverrides([override({ legalHoldUntil: "2026-11-01T00:00:00Z" })], NOW);
+  assert.equal(hold.state, "blocked");
+  assert.match(hold.reason, /legal hold active/);
+  const bad = evaluateOverrides([override({ prospectDays: -5 })], NOW);
+  assert.equal(bad.state, "blocked");
+  assert.match(bad.reason, /cannot be evaluated/);
+  const badKind = evaluateOverrides([override({ kind: "other" })], NOW);
+  assert.equal(badKind.state, "blocked");
+});
+
+test("active contract override replaces the proposal defaults in the plan", async () => {
+  const stores = await buildStores();
+  stores.overrides = new MemoryRetentionOverrideStore();
+  await stores.overrides.save(override({ prospectDays: 365 }));
+  // c_old is ~300 days old: deletable under the 90d proposal, recent under a 365d contract
+  await stores.contacts.saveContact(contact("c_old", OLD));
+  const plan = await planRetentionSweep(stores, { tenantId: "t1", now: NOW });
+  assert.equal(plan.blocked, null);
+  const skips = Object.fromEntries(plan.skipContacts.map((s) => [s.contactId, s.reason]));
+  assert.equal(skips.c_old, "recent");
+  assert.equal(plan.deleteContacts.length, 0);
+});
+
+test("blocked evaluation empties the plan and execute refuses", async () => {
+  const stores = await buildStores();
+  stores.overrides = new MemoryRetentionOverrideStore();
+  await stores.overrides.save(override({ legalHoldUntil: "2026-11-01T00:00:00Z" }));
+  await stores.contacts.saveContact(contact("c_old", OLD));
+  const plan = await planRetentionSweep(stores, { tenantId: "t1", now: NOW });
+  assert.match(plan.blocked, /legal hold/);
+  assert.equal(plan.deleteContacts.length, 0);
+  await assert.rejects(() => executeRetentionSweep(stores, plan, plan.auditCutoff), /blocked/);
+  assert.notEqual(await stores.contacts.getContact("t1", "c_old"), null);
+});
