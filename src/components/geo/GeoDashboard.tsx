@@ -233,7 +233,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         { id: "tab-overview", label: "Go to Overview", hint: "Section", run: () => setTab("overview") },
         { id: "tab-queries", label: "Go to Questions", hint: "Section", run: () => setTab("queries") },
         { id: "tab-citations", label: "Go to Citations", hint: "Section", run: () => setTab("citations") },
-        { id: "tab-optimizer", label: "Go to AI Optimizer", hint: "Section", run: () => setTab("optimizer") },
+        { id: "tab-optimizer", label: "Go to Optimization", hint: "Section", run: () => setTab("optimizer") },
         { id: "tab-runs", label: "Go to Scans", hint: "Section", run: () => setTab("runs") },
         { id: "tab-outreach", label: "Go to Leads & Outreach", hint: "Section", run: () => setTab("outreach") },
         { id: "tab-social", label: "Go to Social search", hint: "Section", run: () => setTab("social") },
@@ -490,7 +490,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     { id: "overview", label: "Overview" },
     { id: "queries", label: `Questions (${state.queries.length})` },
     { id: "citations", label: "Citations" },
-    { id: "optimizer", label: "AI Optimizer" },
+    { id: "optimizer", label: "Optimization" },
     { id: "runs", label: `Scans (${state.runs.length})` },
     ...(!readOnly ? [{ id: "outreach" as Tab, label: "Leads & Outreach" }, { id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
   ];

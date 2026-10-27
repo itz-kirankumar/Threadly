@@ -16,6 +16,8 @@ const MODEL = process.env.ASSISTANT_MODEL ?? "claude-haiku-5-5";
 
 // Reserve budget atomically via an Admin SDK transaction. Returns false when
 // over budget or the counter is unavailable (paid path fails closed).
+// Reservations are never released: a failed/timed-out call may still be billed,
+// so the counter only ever overestimates spend.
 async function reserveSpend(path: string, deltaMicros: number): Promise<boolean> {
   try {
     const { getAdminDatabase } = await import("@/lib/geo/admin-store");
@@ -91,19 +93,12 @@ export async function POST(request: NextRequest) {
         };
         const text = (data.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
         if (text) {
-          // Reconcile reservation with actual usage (Haiku 5.5: $0.10/MTok in, $0.50/MTok out, <=100k ctx).
-          const inTok = data.usage?.input_tokens ?? 0;
-          const outTok = data.usage?.output_tokens ?? 0;
-          const actualMicros = Math.round(((inTok * 0.1 + outTok * 0.5) / 1_000_000) * 1_000_000);
-          const refund = Math.max(0, reserveMicros - Math.max(actualMicros, reserveMicros * 0)); // conservative: keep reservation
-          if (refund > 0) void reserveSpend(spendPath, -refund);
           return NextResponse.json({ reply: text });
         }
       }
     } catch {
       /* fall through to docs-only fallback */
     }
-    void reserveSpend(spendPath, -reserveMicros); // release reservation on failure
   }
 
   return NextResponse.json({ reply: local.answer });

@@ -136,3 +136,4 @@ body {
     animation: none !important;
   }
 }
+.light .deals-won-label { color: #0f766e; }
