@@ -1,0 +1,117 @@
+import { errorResponse, readJsonBody } from "@/lib/api-request";
+import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { approveCampaign } from "@/lib/outbound/campaign";
+import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
+import type { CampaignVersion, RoleId } from "@/lib/outbound/types";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function outboundEnabled(): boolean {
+  return process.env.OUTBOUND_ENABLED === "true";
+}
+
+const NO_STORE = { "Cache-Control": "no-store" } as const;
+
+// Maps workspace roles onto outbound RoleIds for the gated preview. Only
+// owner/admin may approve; the CampaignStore functions re-verify anyway.
+function outboundRole(role: string): RoleId {
+  return role === "owner" || role === "admin" ? "campaign_approver" : "rep";
+}
+
+export async function POST(request: Request) {
+  try {
+    if (!outboundEnabled()) {
+      return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
+    }
+    const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (access.role !== "owner" && access.role !== "admin") {
+      return Response.json({ error: "Only workspace admins can manage campaigns." }, { status: 403, headers: NO_STORE });
+    }
+    const body = (await readJsonBody(request, 32 * 1024)) as Record<string, unknown>;
+    const action = typeof body.action === "string" ? body.action : "";
+    const tenantId = access.workspaceUid;
+    const store = new RtdbCampaignStore();
+
+    if (action === "create") {
+      const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
+      if (!campaignId || !/^[A-Za-z0-9_-]{1,64}$/.test(campaignId)) {
+        return Response.json({ error: "campaignId is required (letters, digits, -, _)." }, { status: 400 });
+      }
+      const latest = await store.latestCampaignVersion(tenantId, campaignId);
+      const version = (latest?.version ?? 0) + 1;
+      const spec = (body.spec ?? {}) as Partial<CampaignVersion>;
+      if (!Array.isArray(spec.templates) || spec.templates.length === 0) {
+        return Response.json({ error: "spec.templates (non-empty) is required." }, { status: 400 });
+      }
+      if (typeof spec.followUpCount === "number" && spec.followUpCount > 2) {
+        return Response.json({ error: "followUpCount above the pilot maximum of 2 is not allowed." }, { status: 400 });
+      }
+      const now = new Date().toISOString();
+      const campaign: CampaignVersion = {
+        tenantId,
+        campaignId,
+        version,
+        senderAllowlist: Array.isArray(spec.senderAllowlist) ? spec.senderAllowlist : [],
+        audienceQueryVersion: typeof spec.audienceQueryVersion === "string" ? spec.audienceQueryVersion : "",
+        exclusions: Array.isArray(spec.exclusions) ? spec.exclusions : [],
+        templates: spec.templates,
+        allowedPersonalization: Array.isArray(spec.allowedPersonalization) ? spec.allowedPersonalization : [],
+        followUpCount: typeof spec.followUpCount === "number" ? spec.followUpCount : 2,
+        countries: Array.isArray(spec.countries) ? spec.countries : [],
+        sendWindows: Array.isArray(spec.sendWindows) ? spec.sendWindows : [],
+        dailyCapPerSender: typeof spec.dailyCapPerSender === "number" ? spec.dailyCapPerSender : 25,
+        costCeiling:
+          spec.costCeiling && typeof spec.costCeiling === "object"
+            ? spec.costCeiling
+            : { currency: "USD", amount: 0 },
+        bookingPolicy:
+          spec.bookingPolicy && typeof spec.bookingPolicy === "object"
+            ? spec.bookingPolicy
+            : { directBooking: false, hostPool: [] },
+        expiresAt: typeof spec.expiresAt === "string" ? spec.expiresAt : now,
+        createdAt: now,
+        createdBy: access.identity.uid,
+      };
+      await store.saveCampaignVersion(campaign);
+      return Response.json({ campaign }, { status: 201, headers: NO_STORE });
+    }
+
+    if (action === "approve") {
+      const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
+      const version = typeof body.version === "number" ? body.version : NaN;
+      const campaign = await store.getCampaignVersion(tenantId, campaignId, version);
+      if (!campaign) return Response.json({ error: "Campaign version not found." }, { status: 404 });
+      const approval = await approveCampaign(store, {
+        tenantId,
+        campaign,
+        approverUserId: access.identity.uid,
+        approverRole: outboundRole(access.role),
+        now: new Date(),
+      });
+      return Response.json({ approval }, { status: 201, headers: NO_STORE });
+    }
+
+    return Response.json({ error: 'action must be "create" or "approve".' }, { status: 400 });
+  } catch (error) {
+    return errorResponse(error, "outbound campaigns");
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    if (!outboundEnabled()) {
+      return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
+    }
+    const access = await resolveWorkspaceAccess(request, "view");
+    const campaignId = new URL(request.url).searchParams.get("campaignId") ?? "";
+    if (!campaignId) return Response.json({ error: "campaignId is required." }, { status: 400 });
+    const store = new RtdbCampaignStore();
+    const campaign = await store.latestCampaignVersion(access.workspaceUid, campaignId);
+    if (!campaign) return Response.json({ error: "Not found." }, { status: 404 });
+    const approval = await store.getApprovalForVersion(access.workspaceUid, campaignId, campaign.version);
+    return Response.json({ campaign, approval: approval && !approval.revokedAt ? approval : null }, { headers: NO_STORE });
+  } catch (error) {
+    return errorResponse(error, "outbound campaigns");
+  }
+}
