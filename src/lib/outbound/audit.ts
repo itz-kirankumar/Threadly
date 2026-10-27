@@ -19,6 +19,10 @@ export interface AuditEvent {
 export interface AuditStore {
   append(event: AuditEvent): Promise<void>;
   list(tenantId: string, limit?: number): Promise<AuditEvent[]>;
+  // Degraded-mode write used ONLY when append fails: the event plus the
+  // failure cause land on a separate durable path so a required audit record
+  // is never silently lost. Implementations may share the primary store.
+  appendDegraded?(event: AuditEvent, cause: string): Promise<void>;
 }
 
 export class MemoryAuditStore implements AuditStore {
@@ -29,6 +33,10 @@ export class MemoryAuditStore implements AuditStore {
   }
   async list(tenantId: string): Promise<AuditEvent[]> {
     return this.events.filter((e) => e.tenantId === tenantId);
+  }
+  degraded: { event: AuditEvent; cause: string }[] = [];
+  async appendDegraded(event: AuditEvent, cause: string): Promise<void> {
+    this.degraded.push({ event, cause });
   }
 }
 

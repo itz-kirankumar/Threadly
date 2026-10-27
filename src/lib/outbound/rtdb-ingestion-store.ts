@@ -37,6 +37,15 @@ export class RtdbIngestionStore implements IngestionStore {
     return snap.exists() ? (snap.val() as SyncCursor) : null;
   }
 
+  // A webhook-recorded request to pull fresh inbound state. Deliberately
+  // NOT the sync cursor: only a real completed pull advances the cursor,
+  // otherwise a webhook burst would fake freshness and defeat the
+  // stale-sync dispatch pause.
+  async markSyncRequested(tenantId: string, senderId: string, marker: string): Promise<void> {
+    const database = await db();
+    await database.ref(`${tenantRoot(tenantId)}/ingestion/pendingSync/${safeKey(senderId)}`).set({ marker, requestedAt: new Date().toISOString() });
+  }
+
   async saveCursor(c: SyncCursor): Promise<void> {
     const database = await db();
     await database.ref(`${tenantRoot(c.tenantId)}/ingestion/cursors/${safeKey(c.senderId)}`).set(c);

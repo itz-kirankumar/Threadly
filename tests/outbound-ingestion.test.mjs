@@ -157,3 +157,29 @@ test("dispatch defers when sender sync is stale or never synced", async () => {
   const r3 = await runDispatch(stores, new MockDispatchProvider(), { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
   assert.equal(r3.dispatched.length, 1);
 });
+
+test("webhook verification: constant-time secret compare, gmail push parsing, graph clientState fail-closed", async () => {
+  const { secretMatches, parseGmailPush, parseGraphNotifications } = await import("../src/lib/outbound/webhooks.ts");
+  assert.equal(secretMatches("abc", "abc"), true);
+  assert.equal(secretMatches("abc", "abd"), false);
+  assert.equal(secretMatches("abc", "abcd"), false);
+  assert.equal(secretMatches("", "abc"), false);
+
+  const good = { message: { data: Buffer.from(JSON.stringify({ emailAddress: "rep@acme.com", historyId: 12345 })).toString("base64url") } };
+  assert.deepEqual(parseGmailPush(good), { emailAddress: "rep@acme.com", historyId: "12345" });
+  assert.equal(parseGmailPush({ message: {} }), null);
+  assert.equal(parseGmailPush({ message: { data: "!!!notbase64json" } }), null);
+  assert.equal(parseGmailPush(null), null);
+  assert.equal(parseGmailPush({ message: { data: Buffer.from('{"historyId":1}').toString("base64url") } }), null);
+
+  const body = { value: [
+    { subscriptionId: "s1", clientState: "secret1", resource: "users/u1/messages/m1", changeType: "created" },
+    { subscriptionId: "s1", clientState: "secret1", resource: "users/u1/messages/m2", changeType: "created" },
+  ]};
+  assert.deepEqual(parseGraphNotifications(body, "secret1"), ["users/u1/messages/m1", "users/u1/messages/m2"]);
+  // any entry with a wrong clientState voids the whole batch (fail closed)
+  const mixed = { value: [body.value[0], { ...body.value[1], clientState: "wrong" }] };
+  assert.equal(parseGraphNotifications(mixed, "secret1"), null);
+  assert.equal(parseGraphNotifications({ value: [] }, "secret1"), null);
+  assert.equal(parseGraphNotifications({}, "secret1"), null);
+});

@@ -5,13 +5,18 @@
 // an active sender, which keeps live dispatch unreachable until then.
 
 import type { Sender } from "./types.ts";
-import { rtdbCasPut, tenantRoot } from "./rtdb-store.ts";
+import { createHash } from "node:crypto";
+import { outboundDataRoot, rtdbCasPut, tenantRoot } from "./rtdb-store.ts";
 
 async function db() {
   const { getAdminDatabase } = await import("../geo/admin-store.ts");
   const database = await getAdminDatabase();
   if (!database) throw new Error("RTDB admin not configured");
   return database;
+}
+
+function emailHash(email: string): string {
+  return createHash("sha256").update(email.trim().toLowerCase()).digest("hex").slice(0, 40);
 }
 
 function safeKey(id: string): string {
@@ -26,6 +31,15 @@ export class RtdbSenderStore {
     }
     const database = await db();
     await database.ref(`${tenantRoot(sender.tenantId)}/senders/${safeKey(sender.senderId)}`).set(sender);
+    // Global binding index for inbound webhooks (fail-closed lookup by
+    // mailbox). Stores only the hash of the lowercased address.
+    await database.ref(`${outboundDataRoot()}/senderByEmailHash/${emailHash(sender.email)}`).set({ tenantId: sender.tenantId, senderId: sender.senderId });
+  }
+
+  async findByEmail(email: string): Promise<{ tenantId: string; senderId: string } | null> {
+    const database = await db();
+    const snap = await database.ref(`${outboundDataRoot()}/senderByEmailHash/${emailHash(email)}`).get();
+    return snap.exists() ? (snap.val() as { tenantId: string; senderId: string }) : null;
   }
 
   async getSender(tenantId: string, senderId: string): Promise<Sender | null> {

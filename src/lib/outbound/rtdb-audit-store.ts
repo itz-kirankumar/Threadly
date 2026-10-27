@@ -16,6 +16,13 @@ export class RtdbAuditStore implements AuditStore {
     await database.ref(`${tenantRoot(event.tenantId)}/audit`).push(event);
   }
 
+  // Separate durable path from the primary audit log: survives whatever made
+  // the primary append fail (index/rules/payload issues on /audit).
+  async appendDegraded(event: AuditEvent, cause: string): Promise<void> {
+    const database = await db();
+    await database.ref(`${tenantRoot(event.tenantId)}/auditFallback`).push({ event, cause, recoveredAt: null });
+  }
+
   async list(tenantId: string, limit = 200): Promise<AuditEvent[]> {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/audit`).orderByChild("at").limitToLast(limit).get();

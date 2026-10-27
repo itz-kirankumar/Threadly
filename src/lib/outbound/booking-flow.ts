@@ -180,16 +180,29 @@ export async function selectSlot(
     await stores.links.markClaimUnknown(link, claimError);
     return { ok: false, status: 502, error: "provider_outcome_unknown: the calendar call outcome is uncertain; reconciliation is required and no automatic retry will happen (duplicate-invite risk is not taken)." };
   }
-  // Audit failure must not fail a committed booking; the meeting record is
-  // the source of truth and the error is logged for investigation.
+  // Audit failure must not fail a committed booking, but the record is
+  // required: a failed append is retried onto the durable degraded path so
+  // recovery evidence exists. Only if that fallback ALSO fails is the loss
+  // logged (both durable paths down at once).
+  const event = auditEvent({
+    tenantId: link.tenantId, actor: input.actor, action: "booking.committed",
+    target: `meeting:${committed.meeting.meetingId}`, outcome: "success",
+    detail: committed.synthetic ? "synthetic (mock calendar)" : "provider-confirmed",
+  });
   try {
-    await input.audit?.append(auditEvent({
-      tenantId: link.tenantId, actor: input.actor, action: "booking.committed",
-      target: `meeting:${committed.meeting.meetingId}`, outcome: "success",
-      detail: committed.synthetic ? "synthetic (mock calendar)" : "provider-confirmed",
-    }));
+    await input.audit?.append(event);
   } catch (error) {
-    console.error("booking audit append failed after commit", error instanceof Error ? { name: error.name, message: error.message } : error);
+    const cause = error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 300) : "unknown error";
+    console.error("booking audit append failed after commit; writing degraded record", { cause });
+    try {
+      await input.audit?.appendDegraded?.(event, cause);
+    } catch (fallbackError) {
+      console.error("booking audit degraded append ALSO failed; audit record lost", {
+        cause,
+        fallback: fallbackError instanceof Error ? fallbackError.message : "unknown",
+        event,
+      });
+    }
   }
   return { ok: true, meeting: committed.meeting, synthetic: committed.synthetic };
 }
