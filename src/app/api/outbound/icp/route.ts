@@ -1,6 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
-import { confirmIcp, createIcpDraft, currentIcp, nextVersionNumber } from "@/lib/outbound/icp";
+import { confirmIcp, createIcpDraft, nextVersionNumber, resolveCurrentIcp } from "@/lib/outbound/icp";
 import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
@@ -32,11 +32,10 @@ export async function GET(request: Request) {
     const access = await resolveWorkspaceAccess(request, "view");
     const icpStore = new RtdbIcpStore();
     const versions = await icpStore.list(access.workspaceUid);
-    // Pointer is authoritative for "current"; currentIcp is the read
-    // fallback only when no pointer exists yet.
-    const pointerId = await icpStore.getCurrentId(access.workspaceUid);
-    const pointed = pointerId ? versions.find((v) => v.icpVersionId === pointerId && v.status === "confirmed") ?? null : null;
-    return Response.json({ current: pointed ?? currentIcp(versions), versions: versions.slice(0, 100) }, { headers: NO_STORE });
+    // Fail closed: current resolves only through the pointer to an
+    // activated record. No list-based fallback.
+    const current = await resolveCurrentIcp(icpStore, access.workspaceUid);
+    return Response.json({ current, versions: versions.slice(0, 100) }, { headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound icp");
   }

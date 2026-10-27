@@ -7,7 +7,7 @@ import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbAccountStore, RtdbEvidenceStore } from "@/lib/outbound/rtdb-import-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
-import { currentIcp, targetFromIcp } from "@/lib/outbound/icp";
+import { icpUsableAsTarget, resolveCurrentIcp, targetFromIcp } from "@/lib/outbound/icp";
 import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
 
 export const runtime = "nodejs";
@@ -84,13 +84,16 @@ export async function POST(request: Request) {
     let targetSource: { kind: "request" | "icp"; icpVersionId?: string; icpVersion?: number } = { kind: "request" };
     const icpRef = typeof body.icpVersionId === "string" ? body.icpVersionId.trim() : "";
     if (icpRef) {
-      // Target from a confirmed F01 ICP version ("current" or a specific id).
+      // Target from an F01 ICP version: "current" resolves via the pointer
+      // only (fail closed); an explicit id must have been successfully
+      // ACTIVATED (activatedAt set) - confirmed-but-never-activated is not
+      // usable, superseded history is.
       const icpStore = new RtdbIcpStore();
       const icp = icpRef === "current"
-        ? currentIcp(await icpStore.list(access.workspaceUid))
+        ? await resolveCurrentIcp(icpStore, access.workspaceUid)
         : await icpStore.get(access.workspaceUid, icpRef);
-      if (!icp || icp.status !== "confirmed") {
-        return Response.json({ error: "No confirmed ICP version found for the given reference." }, { status: 404, headers: NO_STORE });
+      if (!icp || !icpUsableAsTarget(icp)) {
+        return Response.json({ error: "No activated ICP version found for the given reference." }, { status: 404, headers: NO_STORE });
       }
       target = targetFromIcp(icp);
       targetSource = { kind: "icp", icpVersionId: icp.icpVersionId, icpVersion: icp.version };

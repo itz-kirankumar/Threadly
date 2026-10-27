@@ -9,9 +9,15 @@
 // active; a confirm wins only by CAS-ing the pointer from the value it
 // read. Two concurrent confirms of DIFFERENT drafts cannot both win the
 // pointer - the loser is told to retry and its just-confirmed record is
-// superseded. Record-level status is informational hygiene: currentIcp()
-// (highest confirmed version) is only a deterministic READ fallback when no
-// pointer exists yet, never proof of single activation.
+// superseded.
+//
+// FAIL CLOSED: "current" resolves ONLY through the pointer, and only to a
+// record that carries activatedAt (written after the pointer was won). A
+// confirmed record without activatedAt was never successfully activated -
+// including the initial-activation crash window (record CAS landed, pointer
+// CAS never did) - and is never exposed as current. currentIcp() survives
+// below as a deterministic characterization helper for tests ONLY; no
+// runtime path uses it to decide the active ICP.
 //
 // This module does not extract from URLs itself (no LLM call; provider
 // spend is an owner decision). Callers supply proposed text with provenance
@@ -41,6 +47,11 @@ export interface IcpVersion extends CreationMeta {
   source: IcpSource;
   confirmedAt: ISODate | null;
   confirmedBy: string | null;
+  // Set only AFTER the tenant pointer was won. confirmed + activatedAt =
+  // successfully activated at some point; confirmed without it = never
+  // activated (crash orphan or pointer-race loser), never usable as a
+  // scoring target.
+  activatedAt: ISODate | null;
 }
 
 function cleanList(v: unknown, max = 100): string[] {
@@ -78,6 +89,7 @@ export function createIcpDraft(input: IcpDraftInput, nextVersion: number): IcpVe
     source: input.source.kind === "url_derived" ? { kind: "url_derived", url: input.source.url } : { kind: "manual" },
     confirmedAt: null,
     confirmedBy: null,
+    activatedAt: null,
     createdAt: now,
     createdBy: input.actor,
   };
@@ -178,10 +190,35 @@ export async function confirmIcp(
     await store.save({ ...plan.confirmed, status: "superseded" });
     return { ok: false, reason: "pointer_race" };
   }
+  // Pointer won: record the successful activation on the record itself.
+  // Crash between the pointer CAS and this write leaves the pointer aimed
+  // at a record without activatedAt; resolveCurrentIcp fails closed on
+  // that until a later write heals it.
+  const activatedRecord: IcpVersion = { ...plan.confirmed, activatedAt: now.toISOString() };
+  await store.save(activatedRecord);
   for (const sup of plan.superseded) {
     await store.save(sup);
   }
-  return { ok: true, confirmed: plan.confirmed, superseded: plan.superseded };
+  return { ok: true, confirmed: activatedRecord, superseded: plan.superseded };
+}
+
+// The ONLY runtime resolution of the active ICP: pointer-aimed record,
+// requiring status confirmed AND activatedAt set. Anything else (no
+// pointer, dangling pointer, unactivated record) resolves to null.
+export async function resolveCurrentIcp(store: IcpStore, tenantId: string): Promise<IcpVersion | null> {
+  const pointerId = await store.getCurrentId(tenantId);
+  if (!pointerId) return null;
+  const record = await store.get(tenantId, pointerId);
+  if (!record || record.status !== "confirmed" || record.activatedAt === null) return null;
+  return record;
+}
+
+// Scoring-target acceptance: an explicitly referenced ICP version must have
+// been successfully activated at some point (activatedAt set), whether it
+// is current now or superseded history. Confirmed-but-never-activated is
+// rejected.
+export function icpUsableAsTarget(icp: IcpVersion | null): icp is IcpVersion {
+  return icp !== null && icp.activatedAt !== null && (icp.status === "confirmed" || icp.status === "superseded");
 }
 
 // Maps a confirmed ICP to the F04 scoring target profile. Exclusions and

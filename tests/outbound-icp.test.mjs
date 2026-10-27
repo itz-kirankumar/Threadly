@@ -152,3 +152,65 @@ test("deterministic read fallback is not single activation: two force-confirmed 
   assert.equal(fallback.icpVersionId, d2.icpVersionId); // deterministic...
   assert.equal(await store.getCurrentId("t1"), null); // ...but nothing was ever singly activated
 });
+
+const { resolveCurrentIcp, icpUsableAsTarget } = await import("../src/lib/outbound/icp.ts");
+
+test("initial-activation crash: confirmed record + no pointer resolves to NO current (fail closed)", async () => {
+  // Simulates crash after the draft->confirmed record CAS but before the
+  // pointer CAS on a tenant's FIRST activation.
+  const store = new MemoryIcpStore();
+  const d = createIcpDraft({ ...base, roles: ["sales"] }, 1);
+  await store.save({ ...d, status: "confirmed", confirmedAt: NOW.toISOString(), confirmedBy: "a" }); // crash orphan
+  assert.equal(await store.getCurrentId("t1"), null);
+  assert.equal(await resolveCurrentIcp(store, "t1"), null); // never exposed
+});
+
+test("pointer aimed at a record missing activatedAt resolves to NO current (post-pointer crash window)", async () => {
+  const store = new MemoryIcpStore();
+  const d = createIcpDraft({ ...base, roles: ["sales"] }, 1);
+  await store.save({ ...d, status: "confirmed", confirmedAt: NOW.toISOString(), confirmedBy: "a", activatedAt: null });
+  await store.casSetCurrent("t1", null, d.icpVersionId);
+  assert.equal(await resolveCurrentIcp(store, "t1"), null); // heals on the post-pointer record write
+});
+
+test("successful activation: pointer + activatedAt resolve current", async () => {
+  const store = new MemoryIcpStore();
+  const d = createIcpDraft({ ...base, roles: ["sales"] }, 1);
+  await store.save(d);
+  const out = await confirmIcp(store, "t1", d.icpVersionId, "a", NOW);
+  assert.equal(out.ok, true);
+  assert.ok(out.confirmed.activatedAt);
+  const cur = await resolveCurrentIcp(store, "t1");
+  assert.equal(cur?.icpVersionId, d.icpVersionId);
+  assert.ok(cur?.activatedAt);
+});
+
+test("scoring-target acceptance: activated history ok, confirmed-never-activated rejected", async () => {
+  const store = new MemoryIcpStore();
+  const d1 = createIcpDraft({ ...base, roles: ["sales"] }, 1);
+  const d2 = createIcpDraft({ ...base, roles: ["marketing"] }, 2);
+  await store.save(d1); await store.save(d2);
+  await confirmIcp(store, "t1", d1.icpVersionId, "a", NOW);
+  await confirmIcp(store, "t1", d2.icpVersionId, "a", new Date(NOW.getTime() + 1000));
+  const historical = await store.get("t1", d1.icpVersionId); // superseded, was activated
+  assert.equal(historical.status, "superseded");
+  assert.equal(icpUsableAsTarget(historical), true);
+  const orphan = { ...d1, icpVersionId: "icp_orphan", status: "confirmed", activatedAt: null };
+  assert.equal(icpUsableAsTarget(orphan), false);
+  assert.equal(icpUsableAsTarget({ ...d1, status: "draft" }), false);
+  assert.equal(icpUsableAsTarget(null), false);
+});
+
+test("pointer-race loser: never activated, not usable as a scoring target", async () => {
+  const store = new MemoryIcpStore();
+  const dA = createIcpDraft({ ...base, roles: ["sales"] }, 1);
+  const dB = createIcpDraft({ ...base, roles: ["marketing"] }, 2);
+  await store.save(dA); await store.save(dB);
+  await confirmIcp(store, "t1", dB.icpVersionId, "b", NOW);
+  // A resumes with its stale null pointer and loses; its record is superseded.
+  assert.equal(await store.casSetCurrent("t1", null, dA.icpVersionId), false);
+  const loser = { ...(await store.get("t1", dA.icpVersionId)), status: "superseded", activatedAt: null };
+  await store.save(loser);
+  assert.equal(icpUsableAsTarget(await store.get("t1", dA.icpVersionId)), false);
+  assert.equal((await resolveCurrentIcp(store, "t1")).icpVersionId, dB.icpVersionId);
+});
