@@ -11,6 +11,7 @@ import {
   suppressionTokenFor,
   type Decision,
 } from "./policy.ts";
+import { decideAssignment, type ExperimentStore } from "./experiments.ts";
 import type { Contact, MessageIntent, RightsRecord } from "./types.ts";
 
 export interface ContactStore {
@@ -48,10 +49,10 @@ export interface PlanResult {
 }
 
 export async function planCampaignIntents(
-  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore },
+  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; experiments?: ExperimentStore },
   input: { tenantId: string; campaignId: string; actor: string; now: Date }
 ): Promise<PlanResult> {
-  const { campaigns, ledger, contacts } = stores;
+  const { campaigns, ledger, contacts, experiments } = stores;
   const { tenantId, campaignId, actor, now } = input;
   const result: PlanResult = { campaignId, planned: [], skipped: [], blocked: [] };
 
@@ -70,9 +71,23 @@ export async function planCampaignIntents(
     return result;
   }
 
+  // F10: an active experiment assigns each contact deterministically.
+  // Holdouts never get intents; variants are tagged on the intent so the
+  // draft worker renders the variant's approved templates.
+  const experiment = experiments ? await experiments.getActiveExperiment(tenantId, campaignId, campaign.version) : null;
+
   const enrollments = await campaigns.listEnrollments(tenantId, campaignId);
   for (const enrollment of enrollments) {
     if (enrollment.status !== "active") continue;
+    let experimentVariant: string | undefined;
+    if (experiment) {
+      const assignment = decideAssignment(experiment, enrollment.contactId);
+      if (assignment.kind === "holdout") {
+        result.skipped.push({ enrollmentId: enrollment.enrollmentId, contactId: enrollment.contactId, reasons: ["experiment_holdout"] });
+        continue;
+      }
+      experimentVariant = assignment.key;
+    }
     const step = enrollment.currentStep + 1;
     if (step > 1 + campaign.followUpCount) continue; // sequence complete
 
@@ -105,6 +120,7 @@ export async function planCampaignIntents(
       step,
       status: "drafted",
       statusUpdatedAt: nowIso,
+      ...(experimentVariant ? { experimentVariant } : {}),
       cancelReason: null,
       leaseOwner: null,
       leaseExpiresAt: null,

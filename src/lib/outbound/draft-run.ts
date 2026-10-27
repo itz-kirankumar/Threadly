@@ -18,7 +18,7 @@ export interface DraftRunResult {
 }
 
 export async function generateDrafts(
-  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; drafts: DraftStore; usage: UsageStore },
+  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; drafts: DraftStore; usage: UsageStore; experiments?: import("./experiments.ts").ExperimentStore },
   input: { tenantId: string; campaignId: string; actor: string; now: Date }
 ): Promise<DraftRunResult> {
   const { campaigns, ledger, contacts, drafts, usage } = stores;
@@ -39,7 +39,23 @@ export async function generateDrafts(
       result.skipped.push({ intentId: intent.intentId, reason: "contact_missing" });
       continue;
     }
-    const rendered = renderTemplate(campaign, intent, contactEvidence(contact));
+    // F10: intents tagged with an experiment variant render that variant's
+    // approved templates instead of the base campaign templates.
+    let templateSource = campaign;
+    if (intent.experimentVariant) {
+      if (!stores.experiments) {
+        result.skipped.push({ intentId: intent.intentId, reason: "experiment_store_missing" });
+        continue;
+      }
+      const experiment = await stores.experiments.getActiveExperiment(tenantId, campaignId, campaign.version);
+      const variant = experiment?.variants.find((v) => v.key === intent.experimentVariant);
+      if (!variant) {
+        result.skipped.push({ intentId: intent.intentId, reason: `experiment_variant_missing:${intent.experimentVariant}` });
+        continue;
+      }
+      templateSource = { ...campaign, templates: variant.templates };
+    }
+    const rendered = renderTemplate(templateSource, intent, contactEvidence(contact));
     if (!rendered.ok) {
       for (const reason of rendered.reasons) result.skipped.push({ intentId: intent.intentId, reason });
       continue;

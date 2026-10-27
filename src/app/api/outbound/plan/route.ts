@@ -4,6 +4,7 @@ import { planCampaignIntents } from "@/lib/outbound/planner";
 import { advanceEnrollments } from "@/lib/outbound/sequence";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
+import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 
 export const runtime = "nodejs";
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
       { tenantId: access.workspaceUid, campaignId }
     );
     const result = await planCampaignIntents(
-      { campaigns: new RtdbCampaignStore(), ledger: new RtdbLedgerStore(), contacts: new RtdbContactStore() },
+      { campaigns: new RtdbCampaignStore(), ledger: new RtdbLedgerStore(), contacts: new RtdbContactStore(), experiments: new RtdbExperimentStore() },
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
     return Response.json(

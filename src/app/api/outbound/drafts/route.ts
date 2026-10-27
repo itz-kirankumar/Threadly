@@ -2,6 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { approveDraft, generateDrafts } from "@/lib/outbound/draft-run";
 import { RtdbDraftStore } from "@/lib/outbound/drafts-rtdb";
+import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
         contacts: new RtdbContactStore(),
         drafts: new RtdbDraftStore(),
         usage: new RtdbUsageStore(),
+        experiments: new RtdbExperimentStore(),
       },
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );

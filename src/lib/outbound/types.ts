@@ -178,6 +178,9 @@ export interface MessageIntent extends CreationMeta {
   leaseOwner: string | null;
   leaseExpiresAt: ISODate | null;
   reconciledAt: ISODate | null; // set when a provider_unknown outcome is resolved
+  // F10: variant key when this intent belongs to an experiment. Deterministic
+  // per tenant+contact+experiment, so no contact ever crosses variants.
+  experimentVariant?: string;
 }
 
 export interface DeliveryAttempt extends CreationMeta {
@@ -279,6 +282,24 @@ export interface ConsentTrace extends CreationMeta {
   consentedAt: ISODate;
   consentorIdentity: string; // provider-verified mailbox identity
   revokedAt: ISODate | null;
+}
+
+// F10: stable experiment assignment and holdouts. Variants carry their own
+// templates and must each be approved before activation.
+export interface ExperimentVariant {
+  key: string;
+  templates: { step: number; subject: string; body: string }[];
+}
+
+export interface Experiment extends CreationMeta {
+  tenantId: string;
+  experimentId: string;
+  campaignId: string;
+  campaignVersion: number;
+  variants: ExperimentVariant[];
+  holdoutPercent: number; // 0-100; holdout contacts are never enrolled into sends
+  status: "draft" | "active" | "ended";
+  variantsApprovedBy: string | null; // approver identity; required before activation
 }
 
 export interface UsageEvent extends CreationMeta {
