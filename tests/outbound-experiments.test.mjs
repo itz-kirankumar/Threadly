@@ -111,3 +111,29 @@ test("activation validation: draft-only, variant integrity, one active per campa
   assert.ok(validateActivation({ ...draft, variants: [{ key: "b", templates: [] }] }, null).some((e) => e.startsWith("variant_without_templates")));
   assert.ok(validateActivation({ ...draft, variants: [] }, null).includes("no_variants"));
 });
+
+test("competing activation of two different drafts is atomic at campaign+version scope", async () => {
+  const { MemoryExperimentStore } = await import("../src/lib/outbound/experiments.ts");
+  const store = new MemoryExperimentStore();
+  const mk = (id) => ({
+    tenantId: "t1", experimentId: id, campaignId: "c1", campaignVersion: 1,
+    variants: [{ key: "b", templates: [{ step: 1, subject: "s", body: "b" }] }],
+    holdoutPercent: 10, status: "draft", variantsApprovedBy: null, createdAt: "2026-10-26T00:00:00Z", createdBy: "u1",
+  });
+  const a = mk("exp_a"); const b = mk("exp_b");
+  await store.saveExperiment(a); await store.saveExperiment(b);
+  // Two separate "requests" race: exactly one wins, the loser gets another_active
+  const [r1, r2] = [await store.activateExperiment(a, "u1"), await store.activateExperiment(b, "u2")];
+  assert.deepEqual([r1, r2].sort(), ["activated", "another_active"]);
+  // re-activating the winner is a conflict, not a no-op success
+  assert.equal(await store.activateExperiment(a, "u1"), "conflict");
+  // after ending the winner, the pointer frees and a new draft can activate
+  assert.equal(await store.endExperiment(await store.getExperiment("t1", "exp_a")), true);
+  assert.equal(await store.activateExperiment(b, "u2"), "activated");
+  // a draft cannot be ended
+  const c = mk("exp_c"); await store.saveExperiment(c);
+  assert.equal(await store.endExperiment(c), false);
+  // different campaign+version is independent
+  const d = { ...mk("exp_d"), campaignVersion: 2 }; await store.saveExperiment(d);
+  assert.equal(await store.activateExperiment(d, "u1"), "activated");
+});

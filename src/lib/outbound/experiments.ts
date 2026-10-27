@@ -14,6 +14,15 @@ export interface ExperimentStore {
   getExperiment(tenantId: string, experimentId: string): Promise<Experiment | null>;
   getActiveExperiment(tenantId: string, campaignId: string, campaignVersion: number): Promise<Experiment | null>;
   listExperiments(tenantId: string, campaignId: string): Promise<Experiment[]>;
+  // Atomic activation guard at campaign+version scope: a pointer record is
+  // claimed first (only one experiment can hold it), then the experiment's
+  // own status transitions draft -> active; on transition failure the
+  // pointer is released. Returns "activated" | "another_active" | "conflict".
+  // Separate requests or tabs racing two DIFFERENT drafts cannot both pass.
+  activateExperiment(e: Experiment, approverUid: string): Promise<"activated" | "another_active" | "conflict">;
+  // active -> ended; releases the campaign+version pointer when it names
+  // this experiment. Returns false unless the experiment was active.
+  endExperiment(e: Experiment): Promise<boolean>;
 }
 
 export class MemoryExperimentStore implements ExperimentStore {
@@ -24,6 +33,28 @@ export class MemoryExperimentStore implements ExperimentStore {
   }
   async getExperiment(tenantId: string, experimentId: string): Promise<Experiment | null> {
     return this.experiments.get(`${tenantId}:${experimentId}`) ?? null;
+  }
+  activePointers = new Map<string, string>(); // `${tenantId}:${campaignId}:${version}` -> experimentId
+  async activateExperiment(e: Experiment, approverUid: string): Promise<"activated" | "another_active" | "conflict"> {
+    const key = `${e.tenantId}:${e.campaignId}:${e.campaignVersion}`;
+    const holder = this.activePointers.get(key);
+    if (holder && holder !== e.experimentId) return "another_active";
+    this.activePointers.set(key, e.experimentId);
+    const current = this.experiments.get(`${e.tenantId}:${e.experimentId}`);
+    if (!current || current.status !== "draft") {
+      if (holder !== e.experimentId) this.activePointers.delete(key);
+      return "conflict";
+    }
+    this.experiments.set(`${e.tenantId}:${e.experimentId}`, { ...current, status: "active", variantsApprovedBy: approverUid });
+    return "activated";
+  }
+  async endExperiment(e: Experiment): Promise<boolean> {
+    const current = this.experiments.get(`${e.tenantId}:${e.experimentId}`);
+    if (!current || current.status !== "active") return false;
+    this.experiments.set(`${e.tenantId}:${e.experimentId}`, { ...current, status: "ended" });
+    const key = `${e.tenantId}:${e.campaignId}:${e.campaignVersion}`;
+    if (this.activePointers.get(key) === e.experimentId) this.activePointers.delete(key);
+    return true;
   }
   async getActiveExperiment(tenantId: string, campaignId: string, campaignVersion: number): Promise<Experiment | null> {
     return (

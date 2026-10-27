@@ -401,25 +401,34 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
                   <div>
                     {x.experimentId.slice(0, 14)}... · {x.status} · holdout {x.holdoutPercent}% · variants: a (campaign default){x.variants.map((v) => `, ${v.key}`).join("")} · {x.variantsApprovedBy ? `variants approved by ${x.variantsApprovedBy.slice(0, 10)}...` : "variants not approved"}
                   </div>
-                  {x.variants.map((v) => (
-                    <div key={v.key} className="mt-1 rounded border border-white/5 px-2 py-1 text-xs text-zinc-400">
-                      {v.templates.map((t, i) => (
-                        <p key={i}>variant {v.key} · step {t.step} · subject: {t.subject || "(empty)"} · body: {(t.body || "").slice(0, 120) || "(empty)"}</p>
-                      ))}
-                    </div>
-                  ))}
+                  {x.variants.map((v) =>
+                    v.templates.map((t, i) => (
+                      <details key={`${v.key}-${i}`} className="mt-1 rounded border border-white/5 px-2 py-1 text-xs text-zinc-400">
+                        <summary className="cursor-pointer select-none">variant {v.key} · step {t.step} · subject: {t.subject || "(empty)"} - expand to review the full template before approving</summary>
+                        <p className="mt-1 whitespace-pre-wrap break-words">{"Subject: " + (t.subject || "(empty)") + "\n\nBody:\n" + (t.body || "(empty)")}</p>
+                      </details>
+                    ))
+                  )}
                   {x.status === "draft" && (
                     <button className="mt-2 text-xs text-teal-700 hover:underline dark:text-teal-300" disabled={busy} onClick={() => act(async () => {
                       await authedFetch("/api/outbound/experiments", { method: "POST", body: JSON.stringify({ action: "activate", experimentId: x.experimentId }) });
                       await refreshDetail(selected);
-                    })}>Approve the variant templates shown above and activate</button>
+                    })}>Approve the full variant templates above and activate</button>
+                  )}
+                  {x.status === "active" && (
+                    <button className="mt-2 text-xs text-rose-600 hover:underline dark:text-rose-300" disabled={busy} onClick={() => act(async () => {
+                      await authedFetch("/api/outbound/experiments", { method: "POST", body: JSON.stringify({ action: "end", experimentId: x.experimentId }) });
+                      await refreshDetail(selected);
+                    })}>End experiment (future planning stops assigning it; existing assignments keep their bucket)</button>
                   )}
                 </li>
               ))}
             </ul>
             <p className="mb-2 text-xs text-zinc-500">Creates a draft experiment with variant b against the campaign default (variant a). Holdout contacts receive nothing.</p>
             <div className="grid gap-2 md:grid-cols-2">
-              <input className={input} placeholder="Holdout percent (0-50)" value={expForm.holdoutPercent} onChange={(e) => setExpForm({ ...expForm, holdoutPercent: e.target.value })} />
+              <label className="grid gap-1 text-xs text-zinc-400">Holdout percent (0-50; these contacts receive nothing)
+                <input className={input} inputMode="numeric" value={expForm.holdoutPercent} onChange={(e) => setExpForm({ ...expForm, holdoutPercent: e.target.value })} />
+              </label>
               <input className={input} placeholder="Variant b subject" value={expForm.subject} onChange={(e) => setExpForm({ ...expForm, subject: e.target.value })} />
               <textarea className={input + " md:col-span-2"} rows={2} placeholder="Variant b body" value={expForm.body} onChange={(e) => setExpForm({ ...expForm, body: e.target.value })} />
             </div>

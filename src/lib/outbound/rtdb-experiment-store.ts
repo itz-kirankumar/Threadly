@@ -29,16 +29,54 @@ export class RtdbExperimentStore implements ExperimentStore {
     return val.tenantId === tenantId ? { ...val, variantsApprovedBy: val.variantsApprovedBy ?? null } : null;
   }
 
-  // Atomic draft -> active transition via ETag compare-and-put: a concurrent
-  // activation or edit of the same experiment loses the race and returns
-  // false instead of overwriting.
-  async activateExperiment(e: Experiment, approverUid: string): Promise<boolean> {
+  // Pointer record: at most one holder per campaign+version. Claimed and
+  // released atomically via ETag compare-and-put.
+  private pointerPath(tenantId: string, campaignId: string, campaignVersion: number): string {
+    return `${tenantRoot(tenantId)}/experimentActive/${safeKey(campaignId)}__${campaignVersion}`;
+  }
+
+  async activateExperiment(e: Experiment, approverUid: string): Promise<"activated" | "another_active" | "conflict"> {
+    // Step 1: claim the campaign+version pointer. Two racing activations of
+    // DIFFERENT drafts cannot both pass this atomic write.
+    const claimed = await rtdbCasPut<string>(
+      this.pointerPath(e.tenantId, e.campaignId, e.campaignVersion),
+      (current) => current === null || current === e.experimentId,
+      e.experimentId
+    );
+    if (!claimed) return "another_active";
+    // Step 2: transition the experiment itself, draft -> active, atomically.
     const next: Experiment = { ...e, status: "active", variantsApprovedBy: approverUid };
-    return rtdbCasPut<Experiment>(
+    const transitioned = await rtdbCasPut<Experiment>(
       `${tenantRoot(e.tenantId)}/experiments/${safeKey(e.experimentId)}`,
       (current) => current !== null && current.tenantId === e.tenantId && current.status === "draft",
       next
     );
+    if (!transitioned) {
+      // Release the pointer only if we still hold it.
+      await rtdbCasPut<string | null>(
+        this.pointerPath(e.tenantId, e.campaignId, e.campaignVersion),
+        (current) => current === e.experimentId,
+        null
+      ).catch(() => {});
+      return "conflict";
+    }
+    return "activated";
+  }
+
+  async endExperiment(e: Experiment): Promise<boolean> {
+    const ended: Experiment = { ...e, status: "ended" };
+    const transitioned = await rtdbCasPut<Experiment>(
+      `${tenantRoot(e.tenantId)}/experiments/${safeKey(e.experimentId)}`,
+      (current) => current !== null && current.tenantId === e.tenantId && current.status === "active",
+      ended
+    );
+    if (!transitioned) return false;
+    await rtdbCasPut<string | null>(
+      this.pointerPath(e.tenantId, e.campaignId, e.campaignVersion),
+      (current) => current === e.experimentId,
+      null
+    ).catch(() => {});
+    return true;
   }
 
   async getActiveExperiment(tenantId: string, campaignId: string, campaignVersion: number): Promise<Experiment | null> {

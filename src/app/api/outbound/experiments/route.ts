@@ -49,14 +49,34 @@ export async function POST(request: Request) {
       if (errors.length) {
         return Response.json({ error: `Cannot activate: ${errors.join(", ")}` }, { status: 400, headers: NO_STORE });
       }
-      // Read-then-CAS: the another_active_experiment check is not atomic
-      // across two DIFFERENT experiments (single-admin activation assumed);
-      // the same-experiment transition itself IS atomic.
-      const activated = await store.activateExperiment(experiment, access.identity.uid);
-      if (!activated) {
+      // Atomic guard at campaign+version scope: a pointer record is claimed
+      // before the status transition, so racing activations of two DIFFERENT
+      // drafts (separate requests or tabs) cannot both pass.
+      const result = await store.activateExperiment(experiment, access.identity.uid);
+      if (result === "another_active") {
+        return Response.json({ error: "Cannot activate: another_active_experiment" }, { status: 400, headers: NO_STORE });
+      }
+      if (result !== "activated") {
         return Response.json({ error: "Activation conflict: the experiment changed concurrently; reload and retry." }, { status: 409, headers: NO_STORE });
       }
       await audit(access.workspaceUid, access.identity.uid, "experiment.activated", `experiment:${experimentId}`, "success", `campaign=${experiment.campaignId} v${experiment.campaignVersion}`);
+      const fresh = await store.getExperiment(access.workspaceUid, experimentId);
+      return Response.json({ experiment: fresh }, { status: 200, headers: NO_STORE });
+    }
+
+    if (body.action === "end") {
+      // active -> ended: future planning stops assigning it; contacts already
+      // assigned keep their stable bucket. Releases the activation pointer.
+      const experimentId = typeof body.experimentId === "string" ? body.experimentId : "";
+      if (!experimentId) return Response.json({ error: "experimentId is required." }, { status: 400, headers: NO_STORE });
+      const store = new RtdbExperimentStore();
+      const experiment = await store.getExperiment(access.workspaceUid, experimentId);
+      if (!experiment) return Response.json({ error: "Experiment not found." }, { status: 404, headers: NO_STORE });
+      const ended = await store.endExperiment(experiment);
+      if (!ended) {
+        return Response.json({ error: "Only an active experiment can be ended." }, { status: 400, headers: NO_STORE });
+      }
+      await audit(access.workspaceUid, access.identity.uid, "experiment.ended", `experiment:${experimentId}`, "success", `campaign=${experiment.campaignId} v${experiment.campaignVersion}`);
       const fresh = await store.getExperiment(access.workspaceUid, experimentId);
       return Response.json({ experiment: fresh }, { status: 200, headers: NO_STORE });
     }
