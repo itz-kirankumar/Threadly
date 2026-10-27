@@ -1,6 +1,10 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { enrollContact } from "@/lib/outbound/campaign";
+import { isExcludedByIcp, resolveCurrentIcp } from "@/lib/outbound/icp";
+import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
+import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
+import { RtdbAccountStore } from "@/lib/outbound/rtdb-import-store";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
@@ -44,6 +48,21 @@ export async function POST(request: Request) {
     const store = new RtdbCampaignStore();
     const campaign = await store.getCampaignVersion(access.workspaceUid, campaignId, version);
     if (!campaign) return Response.json({ error: "Campaign version not found." }, { status: 404 });
+    // F05 exclusion policy: when an activated ICP exists, its exclusions
+    // block enrollment. Fail-open by design ONLY when no ICP is activated
+    // (nothing to enforce); the first-send/dispatch eligibility gates stay
+    // fail-closed independently.
+    const contact = await new RtdbContactStore().getContact(access.workspaceUid, contactId);
+    if (!contact) return Response.json({ error: "Contact not found." }, { status: 404 });
+    const icp = await resolveCurrentIcp(new RtdbIcpStore(), access.workspaceUid);
+    if (icp) {
+      const account = await new RtdbAccountStore().getAccount(access.workspaceUid, contact.accountId);
+      const check = isExcludedByIcp(icp.exclusions, { email: contact.email, accountDomain: account?.domain ?? null });
+      if (check.excluded) {
+        await audit(access.workspaceUid, access.identity.uid, "enrollment.excluded", `contact:${contactId}`, "denied", `matched ICP exclusion "${check.matched}" (icp ${icp.icpVersionId} v${icp.version})`);
+        return Response.json({ error: `Contact is excluded by the active ICP (matched "${check.matched}").` }, { status: 409, headers: NO_STORE });
+      }
+    }
     // enrollContact re-reads the approval fresh, checks campaign binding,
     // expiry and exclusion-group clash before writing.
     const enrollment = await enrollContact(store, {

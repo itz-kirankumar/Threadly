@@ -221,6 +221,26 @@ export function icpUsableAsTarget(icp: IcpVersion | null): icp is IcpVersion {
   return icp !== null && icp.activatedAt !== null && (icp.status === "confirmed" || icp.status === "superseded");
 }
 
+// Exclusion policy (PRD F05): an activated ICP's exclusion entries are
+// domains or keywords never targeted. Matching is case-insensitive: exact
+// contact-email-domain match, exact account-domain match, or a keyword
+// contained in either domain. An empty exclusion list excludes nothing.
+export function isExcludedByIcp(
+  exclusions: string[],
+  input: { email: string; accountDomain?: string | null },
+): { excluded: boolean; matched: string | null } {
+  const emailDomain = (input.email.split("@")[1] ?? "").toLowerCase();
+  const accountDomain = (input.accountDomain ?? "").toLowerCase();
+  for (const raw of exclusions) {
+    const entry = raw.trim().toLowerCase();
+    if (!entry) continue;
+    if (emailDomain === entry || accountDomain === entry || (emailDomain.includes(entry) || (accountDomain.length > 0 && accountDomain.includes(entry)))) {
+      return { excluded: true, matched: raw };
+    }
+  }
+  return { excluded: false, matched: null };
+}
+
 // Maps a confirmed ICP to the F04 scoring target profile. Exclusions and
 // approved claims are not scoring criteria; they gate targeting and
 // personalization elsewhere.
