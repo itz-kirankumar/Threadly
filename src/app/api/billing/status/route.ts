@@ -39,6 +39,7 @@ export async function GET(request: Request) {
           testMode: billingTestMode(),
           isOwner: access.role === "owner",
           canCheckout: canCheckout(access.identity.email),
+          regionHint: request.headers.get("x-vercel-ip-country"),
         },
         { headers: { "Cache-Control": "no-store" } },
       );

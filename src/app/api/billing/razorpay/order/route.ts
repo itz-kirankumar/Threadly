@@ -34,7 +34,15 @@ export async function POST(request: Request) {
         { status: 403, headers: { "Cache-Control": "no-store" } },
       );
     }
-    const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown };
+    const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown; billingCountry?: unknown };
+    // Region routing (owner-directed 27 Oct 2026): Razorpay serves India
+    // billing countries only; every other region belongs to Dodo.
+    if ((typeof body.billingCountry === "string" ? body.billingCountry.trim().toUpperCase() : "") !== "IN") {
+      return Response.json(
+        { error: "Razorpay checkout is available for India billing addresses only.", code: "region_mismatch" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     if (!isRazorpayPlan(body.plan) || !isInterval(body.interval) || !orderPrice(body.plan, body.interval)) {
       return Response.json(
         { error: "Choose a plan (trial, pro or growth) with a valid term." },

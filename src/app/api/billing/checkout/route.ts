@@ -3,16 +3,13 @@ import { resolveWorkspaceAccess, inWorkspace } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { billingConfigured, billingTestMode, canCheckout, dodoClient, isInterval, isPaidPlan, productFor } from "@/lib/billing/dodo";
 import { razorpaySubscriptionsConfigured, razorpayCreateSubscription, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
+import { routeProviderForRegion } from "@/lib/billing/region-routing";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, loadCheckoutAttempt, saveCheckoutAttempt } from "@/lib/billing/store";
 import type { BillingProvider } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function failoverEnabled(): boolean {
-  return process.env.BILLING_FAILOVER_ENABLED === "true";
-}
 
 export async function POST(request: Request) {
   try {
@@ -29,7 +26,7 @@ export async function POST(request: Request) {
         { status: 403, headers: { "Cache-Control": "no-store" } },
       );
     }
-    const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown; provider?: unknown };
+    const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown; billingCountry?: unknown };
     if (!isPaidPlan(body.plan) || !isInterval(body.interval)) {
       return Response.json(
         { error: "Choose a plan (pro or growth) and interval (monthly or annual)." },
@@ -37,20 +34,33 @@ export async function POST(request: Request) {
       );
     }
     const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://www.gothreadly.live";
-    const requested: "auto" | BillingProvider = body.provider === "dodo" || body.provider === "razorpay" ? body.provider : "auto";
 
-    // Provider order: explicit choice, or Dodo primary only when Dodo is live
-    // (+ Razorpay backup only when failover is explicitly enabled). While Dodo
-    // is in test mode, auto routes to live Razorpay so signed-in public users
-    // can actually check out.
-    const providers: BillingProvider[] =
-      requested === "auto"
-        ? billingConfigured() && !billingTestMode()
-          ? failoverEnabled() && razorpayOperational()
-            ? ["dodo", "razorpay"]
-            : ["dodo"]
-          : ["razorpay"]
-        : [requested];
+    // Region routing (owner-directed 27 Oct 2026): the buyer's billing country
+    // selects the provider - India -> Razorpay, every other region -> Dodo.
+    // No free provider choice and no cross-provider fallback here.
+    const route = routeProviderForRegion({
+      billingCountry: typeof body.billingCountry === "string" ? body.billingCountry : null,
+      dodoOperational: billingConfigured() && !billingTestMode(),
+      razorpayOperational: razorpayOperational(),
+    });
+    if (!route.ok) {
+      const msg =
+        route.reason === "missing_country"
+          ? "Choose your billing country so we can route checkout correctly."
+          : "Checkout is temporarily unavailable for your region.";
+      return Response.json(
+        { error: msg, code: route.reason },
+        { status: route.reason === "missing_country" ? 400 : 503, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (route.provider === "razorpay") {
+      // India billing country: the Razorpay order flow owns checkout.
+      return Response.json(
+        { error: "India checkout runs through Razorpay - use the India checkout option.", code: "use_razorpay" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    const providers: BillingProvider[] = ["dodo"];
     // The test-mode allowlist gates Dodo only - never the live Razorpay path.
     if (providers.includes("dodo") && billingTestMode() && !canCheckout(access.identity.email)) {
       return Response.json(
