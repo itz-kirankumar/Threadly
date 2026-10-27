@@ -207,7 +207,7 @@ export async function recordLeadReply(
 
   if (sentiment === "interested" || sentiment === "booked") {
     newStage = "qualified";
-    suggestedReply = `Hi ${firstName(lead.name)},\n\nGlad this resonated! I've attached your full GEO citation audit comparing ${lead.company} against top AI queries. Here is a direct link to pick a 15-minute slot that works for you: https://cal.com/threadly/geo-review\n\nLooking forward to speaking!`;
+    suggestedReply = `Hi ${firstName(lead.name)},\n\nGlad this resonated! I've attached your full GEO citation audit comparing ${lead.company} against top AI queries. Happy to send over a link to pick a short slot that works for you.\n\nLooking forward to speaking!`;
   } else if (sentiment === "question") {
     newStage = "replied";
     suggestedReply = `Hi ${firstName(lead.name)},\n\nGreat question. Generative Engine Optimization specifically tunes how LLMs (like ChatGPT, Perplexity, and Claude) summarize sources when answering buying queries. Unlike traditional SEO, it focuses on factual citation density and brand anchor presence in LLM training and retrieval pipelines.\n\nHappy to walk through a live example for ${lead.company}.`;
