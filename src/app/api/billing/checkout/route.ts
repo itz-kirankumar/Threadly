@@ -95,6 +95,27 @@ export async function POST(request: Request) {
     // One durable attempt per workspace, claimed atomically. A blocked claim
     // means an earlier attempt is unresolved - no new link is created anywhere.
     let claim = await claimCheckoutAttempt(access.workspaceUid, attempt, now);
+    if (!claim.claimed && claim.existing?.provider === "dodo" && claim.existing.state === "issued" && claim.existing.providerRef) {
+      // Issued Dodo session: provider-backed resolution only. An explicitly
+      // expired session is terminal (single-use link dead) -> safe to create a
+      // fresh session. Open -> the 409 below returns the same live URL.
+      // Completed/unknown/lookup-failure -> stay blocked (payment path owns it).
+      const priorDodo = claim.existing;
+      const priorSessionId = priorDodo.providerRef;
+      if (priorSessionId) try {
+        const sess = (await dodoClient().checkoutSessions.retrieve(priorSessionId)) as unknown as { status?: string };
+        if (sess.status === "expired") {
+          await saveCheckoutAttempt(access.workspaceUid, { ...priorDodo, state: "expired", updatedAt: new Date().toISOString() });
+          claim = await claimCheckoutAttempt(access.workspaceUid, attempt, new Date());
+        } else if (sess.status === "completed") {
+          await saveCheckoutAttempt(access.workspaceUid, { ...priorDodo, state: "reconciled", updatedAt: new Date().toISOString() });
+          return Response.json(
+            { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new checkout was created.", state: "reconciled" },
+            { status: 409, headers: { "Cache-Control": "no-store" } },
+          );
+        }
+      } catch { /* retrieve failure stays blocked */ }
+    }
     if (!claim.claimed && claim.existing && claim.existing.provider === "dodo" && (claim.existing.state === "pending" || claim.existing.state === "uncertain")) {
       // Ambiguous Dodo session create: after the session TTL, a fresh session
       // is safe ONLY when a payments lookup finds nothing for this workspace

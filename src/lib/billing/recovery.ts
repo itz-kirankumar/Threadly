@@ -24,7 +24,9 @@ export function decideRazorpayBlockedAction(params: {
   const { existing, now, orders, readsAgree } = params;
   if (orders === null) return { action: "keep_blocked" };
   const open = orders.filter((o) => o.status === "created" || o.status === "attempted");
-  if (open.length > 0) return { action: "resume", orderId: open[0].id };
+  // Resume only a unique open order; multiple matches are ambiguous.
+  if (open.length === 1) return { action: "resume", orderId: open[0].id };
+  if (open.length > 1) return { action: "keep_blocked" };
   if (orders.some((o) => o.status === "paid")) return { action: "mark_reconciled_paid" };
   return { action: "keep_blocked" };
 }

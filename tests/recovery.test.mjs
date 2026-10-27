@@ -49,3 +49,21 @@ test("dodo: clean payments lookup never unblocks - terminality unproven", () => 
   const old = { ...baseAttempt, provider: "dodo", createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() };
   assert.equal(decideDodoBlockedAction({ existing: old, now, paymentFound: false }).action, "keep_blocked");
 });
+
+test("razorpay: multiple open orders on one receipt is ambiguous - blocked", () => {
+  const d = decideRazorpayBlockedAction({ existing: baseAttempt, now, orders: [{ id: "o1", status: "created" }, { id: "o2", status: "created" }], readsAgree: true });
+  assert.equal(d.action, "keep_blocked");
+});
+
+test("freeze: age never unblocks via evaluateAttempt for unresolved states", async () => {
+  const { evaluateAttempt } = await import("../src/lib/billing/attempt.ts");
+  const ancient = { ...baseAttempt, createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString() };
+  for (const state of ["pending", "uncertain", "issued"]) {
+    const v = evaluateAttempt({ ...ancient, state }, now);
+    assert.equal(v.open, false, state);
+  }
+  for (const state of ["failed", "expired", "reconciled"]) {
+    const v = evaluateAttempt({ ...ancient, state }, now);
+    assert.equal(v.open, true, state);
+  }
+});
