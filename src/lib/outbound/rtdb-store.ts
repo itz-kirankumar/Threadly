@@ -105,7 +105,8 @@ export class RtdbLedgerStore implements LedgerStore {
         return next;
       });
       if (tx.committed) return true;
-      if (tx.error) lastError = tx.error;
+      const txErr = (tx as unknown as { error?: unknown }).error;
+      if (txErr) lastError = txErr;
       // Distinguish a real status conflict from a speculative-null abort.
       const now = await ref.get();
       const current = now.val() as MessageIntent | null;
