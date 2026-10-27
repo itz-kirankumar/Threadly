@@ -328,7 +328,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
             <p className="text-xs font-medium text-teal-400 deals-won-label uppercase">Deals Won</p>
-            <p className="mt-1 text-2xl font-bold text-teal-300">{stats.wonCount}</p>
+            <p className="mt-1 text-2xl font-bold text-teal-300 deals-won-value">{stats.wonCount}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
             <p className="text-xs font-medium text-zinc-400 uppercase">Pipeline Value</p>

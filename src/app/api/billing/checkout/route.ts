@@ -6,6 +6,7 @@ import { razorpaySubscriptionsConfigured, razorpayCreateSubscription, razorpayOp
 import { routeProviderForRegion } from "@/lib/billing/region-routing";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, loadCheckoutAttempt, saveCheckoutAttempt } from "@/lib/billing/store";
+import { decideDodoBlockedAction } from "@/lib/billing/recovery";
 import type { BillingProvider } from "@/lib/billing/store";
 
 export const runtime = "nodejs";
@@ -93,7 +94,40 @@ export async function POST(request: Request) {
 
     // One durable attempt per workspace, claimed atomically. A blocked claim
     // means an earlier attempt is unresolved - no new link is created anywhere.
-    const claim = await claimCheckoutAttempt(access.workspaceUid, attempt, now);
+    let claim = await claimCheckoutAttempt(access.workspaceUid, attempt, now);
+    if (!claim.claimed && claim.existing && claim.existing.provider === "dodo" && (claim.existing.state === "pending" || claim.existing.state === "uncertain")) {
+      // Ambiguous Dodo session create: after the session TTL, a fresh session
+      // is safe ONLY when a payments lookup finds nothing for this workspace
+      // (a session may have been paid despite the lost response; metadata is
+      // copied from the session to the payment). Lookup failure stays blocked.
+      const prior = claim.existing;
+      let paymentFound: boolean | null = null;
+      try {
+        const list = await dodoClient().payments.list({ page_size: 50 });
+        const items = (list as unknown as { items?: Array<{ metadata?: Record<string, unknown>; created_at?: string }> }).items ?? [];
+        const since = Date.parse(prior.createdAt) - 5 * 60 * 1000;
+        paymentFound = items.some((pay) => {
+          const md = pay.metadata ?? {};
+          if (md.workspace_uid !== access.workspaceUid) return false;
+          const ts = pay.created_at ? Date.parse(pay.created_at) : NaN;
+          return Number.isNaN(ts) || ts >= since;
+        });
+      } catch {
+        paymentFound = null;
+      }
+      const decision = decideDodoBlockedAction({ existing: prior, now: new Date(), paymentFound });
+      if (decision.action === "mark_reconciled_paid") {
+        await saveCheckoutAttempt(access.workspaceUid, { ...prior, state: "reconciled", updatedAt: new Date().toISOString() });
+        return Response.json(
+          { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new checkout was created.", state: "reconciled" },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      if (decision.action === "allow_new") {
+        await saveCheckoutAttempt(access.workspaceUid, { ...prior, state: "expired", updatedAt: new Date().toISOString() });
+        claim = await claimCheckoutAttempt(access.workspaceUid, attempt, new Date());
+      }
+    }
     if (!claim.claimed) {
       const current = claim.existing;
       return Response.json(
