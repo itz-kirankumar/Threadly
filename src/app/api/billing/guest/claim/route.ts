@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     if (!razorpayOperational()) {
       return Response.json({ error: "Checkout is not available yet." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
-    const access = await resolveWorkspaceAccess(request, "manageTeam");
+    const access = await resolveWorkspaceAccess(request, "manageTeam", { allowNewSignup: true });
     if (access.role !== "owner") {
       return Response.json({ error: "Only the workspace owner can claim a purchase." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
