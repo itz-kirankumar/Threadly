@@ -97,6 +97,7 @@ export class RtdbLedgerStore implements LedgerStore {
     // Prime the local cache: a transaction callback runs first against the
     // locally-known value, which is null in a fresh serverless process; a
     // bare abort there would falsely report a conflict.
+    let lastError: unknown = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       await ref.get();
       const tx = await ref.transaction((current: MessageIntent | null) => {
@@ -104,11 +105,16 @@ export class RtdbLedgerStore implements LedgerStore {
         return next;
       });
       if (tx.committed) return true;
+      if (tx.error) lastError = tx.error;
       // Distinguish a real status conflict from a speculative-null abort.
       const now = await ref.get();
       const current = now.val() as MessageIntent | null;
       if (current && current.tenantId === tenantId && current.status === expected) continue; // retry once
       return false;
+    }
+    if (lastError) {
+      const msg = lastError instanceof Error ? lastError.message : String(lastError);
+      throw new Error(`cas_tx_error:${msg}`);
     }
     return false;
   }
