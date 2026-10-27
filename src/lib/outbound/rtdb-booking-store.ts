@@ -76,7 +76,16 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
     await this.saveLink({ ...l, claimState: null });
   }
 
-  async markClaimUnknown(l: BookingLink): Promise<void> {
-    await this.saveLink({ ...l, claimState: "claim_unknown" });
+  async markClaimUnknown(l: BookingLink, claimError?: string): Promise<void> {
+    await this.saveLink({ ...l, claimState: "claim_unknown", claimError: claimError ?? null });
+  }
+
+  // Reconciliation surface: every link for the tenant, newest state only.
+  // Callers must strip tokenHash before exposing records.
+  async listLinks(tenantId: string): Promise<BookingLink[]> {
+    const database = await db();
+    const snap = await database.ref(`${outboundDataRoot()}/bookingLinksByToken`).get();
+    if (!snap.exists()) return [];
+    return Object.values(snap.val() as Record<string, BookingLink>).filter((l) => l.tenantId === tenantId);
   }
 }

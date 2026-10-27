@@ -30,7 +30,8 @@ export interface BookingLinkStore {
   releaseLinkClaim(l: BookingLink): Promise<void>;
   // Mark after a provider call whose outcome is unknown: never retried
   // automatically; requires reconciliation, like provider_unknown sends.
-  markClaimUnknown(l: BookingLink): Promise<void>;
+  markClaimUnknown(l: BookingLink, claimError?: string): Promise<void>;
+  listLinks(tenantId: string): Promise<BookingLink[]>;
 }
 
 export interface BookingStores {
@@ -175,7 +176,8 @@ export async function selectSlot(
     // may not exist. Quarantine the link, log for reconciliation, never
     // blind-retry, and never leave the link stuck in "claiming".
     console.error("booking commit failed after claim; quarantined", error instanceof Error ? { name: error.name, message: error.message } : error);
-    await stores.links.markClaimUnknown(link);
+    const claimError = error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 300) : "unknown error";
+    await stores.links.markClaimUnknown(link, claimError);
     return { ok: false, status: 502, error: "provider_outcome_unknown: the calendar call outcome is uncertain; reconciliation is required and no automatic retry will happen (duplicate-invite risk is not taken)." };
   }
   // Audit failure must not fail a committed booking; the meeting record is

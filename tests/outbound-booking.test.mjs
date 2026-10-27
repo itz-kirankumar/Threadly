@@ -40,6 +40,7 @@ function stores({ busyLink = null } = {}) {
       },
       async releaseLinkClaim(l) { links.set(l.tokenHash, { ...links.get(l.tokenHash), claimState: null }); },
       async markClaimUnknown(l) { links.set(l.tokenHash, { ...links.get(l.tokenHash), claimState: "claim_unknown" }); },
+      async listLinks(tenantId) { return [...links.values()].filter((l) => l.tenantId === tenantId); },
     },
     contacts: {
       async getContact(t, id) {

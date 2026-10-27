@@ -134,8 +134,12 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
-    const policies = await new RtdbBookingStore().listPolicies(access.workspaceUid);
-    return Response.json({ policies }, { headers: NO_STORE });
+    const store = new RtdbBookingStore();
+    const policies = await store.listPolicies(access.workspaceUid);
+    // Reconciliation surface for admins: booking links with the token hash
+    // stripped, so claim_unknown quarantines are visible and actionable.
+    const links = (await store.listLinks(access.workspaceUid)).map(({ tokenHash, ...rest }) => rest);
+    return Response.json({ policies, links }, { headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound meetings");
   }

@@ -270,6 +270,9 @@ export interface BookingLink extends CreationMeta {
   // never retries automatically, so duplicate invites are impossible by
   // construction. "claimed" = committed.
   claimState?: "claiming" | "claimed" | "claim_unknown" | null;
+  // Diagnostic from the failure that quarantined the claim (error name +
+  // short message), for reconciliation. Never contains provider payloads.
+  claimError?: string | null;
 }
 
 export interface CRMMapping extends CreationMeta {
