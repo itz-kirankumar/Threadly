@@ -577,7 +577,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
               {filteredLeads.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-zinc-500">
-                    No leads found. Click <strong>"Discover Leads from GEO"</strong> or <strong>"+ Add Lead"</strong> to get started.
+                    No leads yet. Use <strong>"Discover Targets from Citations"</strong> or <strong>"+ Add Target"</strong> to get started.
                   </td>
                 </tr>
               )}
