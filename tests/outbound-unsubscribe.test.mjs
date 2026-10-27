@@ -73,7 +73,32 @@ test("config from env: both vars required", () => {
   process.env.OUTBOUND_PUBLIC_BASE_URL = "https://app.test/";
   assert.equal(unsubscribeConfigFromEnv(), null);
   process.env.OUTBOUND_UNSUBSCRIBE_SECRET = "s";
-  assert.deepEqual(unsubscribeConfigFromEnv(), { baseUrl: "https://app.test", secret: "s" });
+  assert.deepEqual(unsubscribeConfigFromEnv(), { baseUrl: "https://app.test", secret: "s", previousSecret: undefined });
   if (b !== undefined) process.env.OUTBOUND_PUBLIC_BASE_URL = b; else delete process.env.OUTBOUND_PUBLIC_BASE_URL;
   if (s !== undefined) process.env.OUTBOUND_UNSUBSCRIBE_SECRET = s; else delete process.env.OUTBOUND_UNSUBSCRIBE_SECRET;
+});
+
+test("secret rotation: links signed with the previous secret verify during the transition window", () => {
+  const oldCfg = { baseUrl: "https://app.test", secret: "old-secret" };
+  const url = buildUnsubscribeUrl(oldCfg, { tenantId: "t1", email: "ada@corp.example", campaignId: "c1" });
+  const rotated = { baseUrl: "https://app.test", secret: "new-secret", previousSecret: "old-secret" };
+  assert.deepEqual(verifyUnsubscribeParams(rotated, urlParams(url)), { tenantId: "t1", email: "ada@corp.example", campaignId: "c1" });
+  // new links sign with the new secret
+  const fresh = buildUnsubscribeUrl(rotated, { tenantId: "t1", email: "ada@corp.example", campaignId: "c1" });
+  assert.ok(verifyUnsubscribeParams(rotated, urlParams(fresh)));
+  // and the old secret alone no longer forges links under the rotated config
+  assert.equal(verifyUnsubscribeParams({ baseUrl: "https://app.test", secret: "new-secret" }, urlParams(url)), null);
+});
+
+test("config from env: previous secret picked up when set", () => {
+  const b = process.env.OUTBOUND_PUBLIC_BASE_URL, s = process.env.OUTBOUND_UNSUBSCRIBE_SECRET, p = process.env.OUTBOUND_UNSUBSCRIBE_SECRET_PREVIOUS;
+  process.env.OUTBOUND_PUBLIC_BASE_URL = "https://app.test";
+  process.env.OUTBOUND_UNSUBSCRIBE_SECRET = "s";
+  process.env.OUTBOUND_UNSUBSCRIBE_SECRET_PREVIOUS = "old";
+  assert.deepEqual(unsubscribeConfigFromEnv(), { baseUrl: "https://app.test", secret: "s", previousSecret: "old" });
+  delete process.env.OUTBOUND_UNSUBSCRIBE_SECRET_PREVIOUS;
+  assert.deepEqual(unsubscribeConfigFromEnv(), { baseUrl: "https://app.test", secret: "s", previousSecret: undefined });
+  if (b !== undefined) process.env.OUTBOUND_PUBLIC_BASE_URL = b; else delete process.env.OUTBOUND_PUBLIC_BASE_URL;
+  if (s !== undefined) process.env.OUTBOUND_UNSUBSCRIBE_SECRET = s; else delete process.env.OUTBOUND_UNSUBSCRIBE_SECRET;
+  if (p !== undefined) process.env.OUTBOUND_UNSUBSCRIBE_SECRET_PREVIOUS = p; else delete process.env.OUTBOUND_UNSUBSCRIBE_SECRET_PREVIOUS;
 });

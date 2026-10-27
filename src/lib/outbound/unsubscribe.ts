@@ -17,14 +17,16 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export interface UnsubscribeConfig {
   baseUrl: string; // e.g. https://www.gothreadly.live - no trailing slash
-  secret: string;
+  secret: string; // signs new links
+  previousSecret?: string; // still verifies links signed before a rotation (transition window)
 }
 
 export function unsubscribeConfigFromEnv(): UnsubscribeConfig | null {
   const baseUrl = process.env.OUTBOUND_PUBLIC_BASE_URL;
   const secret = process.env.OUTBOUND_UNSUBSCRIBE_SECRET;
   if (!baseUrl || !secret) return null;
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), secret };
+  const previousSecret = process.env.OUTBOUND_UNSUBSCRIBE_SECRET_PREVIOUS || undefined;
+  return { baseUrl: baseUrl.replace(/\/+$/, ""), secret, previousSecret };
 }
 
 function b64url(s: string): string {
@@ -59,11 +61,17 @@ export function verifyUnsubscribeParams(
   if (!t || !e || !c || !sig) return null;
   const email = fromB64(e);
   if (!email || !email.includes("@")) return null;
-  const expected = sign(cfg.secret, t, email, c);
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-  return { tenantId: t, email, campaignId: c };
+  // Verify against the current secret, then the previous one so links mailed
+  // before a rotation keep working during the transition window.
+  for (const secret of [cfg.secret, cfg.previousSecret].filter((x): x is string => Boolean(x))) {
+    const expected = sign(secret, t, email, c);
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length === b.length && timingSafeEqual(a, b)) {
+      return { tenantId: t, email, campaignId: c };
+    }
+  }
+  return null;
 }
 
 export function unsubscribeFooter(url: string): string {

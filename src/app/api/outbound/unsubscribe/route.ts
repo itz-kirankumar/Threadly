@@ -9,8 +9,11 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
+// Opt-outs must stay functional even when outbound SENDING is disabled:
+// recipients of messages already delivered keep a working opt-out path.
+// Disabling sends (OUTBOUND_ENABLED off) and disabling opt-outs are separate
+// controls; this route needs only a data root and unsubscribe config.
 function active(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
   if (!process.env.OUTBOUND_DATA_ROOT) return false;
   return unsubscribeConfigFromEnv() !== null;
 }
