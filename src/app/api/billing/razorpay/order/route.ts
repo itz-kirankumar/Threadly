@@ -135,10 +135,6 @@ export async function POST(request: Request) {
           { status: 409, headers: { "Cache-Control": "no-store" } },
         );
       }
-      if (decision.action === "mark_failed_allow_new") {
-        await saveCheckoutAttempt(access.workspaceUid, { ...claim.existing, state: "failed", updatedAt: new Date().toISOString() });
-        claim = await claimCheckoutAttempt(access.workspaceUid, attempt, new Date());
-      }
     }
     if (!claim.claimed) {
       const current = claim.existing;

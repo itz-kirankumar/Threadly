@@ -28,9 +28,9 @@ test("razorpay: paid order reconciles, no new order", () => {
   assert.equal(d.action, "mark_reconciled_paid");
 });
 
-test("razorpay: empty listing with agreeing reads and old attempt allows new", () => {
+test("razorpay: empty listing never unblocks - absence is not proof of no-resource", () => {
   const d = decideRazorpayBlockedAction({ existing: baseAttempt, now, orders: [], readsAgree: true });
-  assert.equal(d.action, "mark_failed_allow_new");
+  assert.equal(d.action, "keep_blocked");
 });
 
 test("razorpay: young attempt or disagreeing/failed reads stay blocked", () => {
@@ -45,9 +45,7 @@ test("dodo: payment found reconciles; unknown stays blocked", () => {
   assert.equal(decideDodoBlockedAction({ existing: baseAttempt, now, paymentFound: null }).action, "keep_blocked");
 });
 
-test("dodo: fresh session only after TTL with clean payments lookup", () => {
+test("dodo: clean payments lookup never unblocks - terminality unproven", () => {
   const old = { ...baseAttempt, provider: "dodo", createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() };
-  assert.equal(decideDodoBlockedAction({ existing: old, now, paymentFound: false }).action, "allow_new");
-  const recent = { ...baseAttempt, provider: "dodo", createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() };
-  assert.equal(decideDodoBlockedAction({ existing: recent, now, paymentFound: false }).action, "keep_blocked");
+  assert.equal(decideDodoBlockedAction({ existing: old, now, paymentFound: false }).action, "keep_blocked");
 });

@@ -123,10 +123,6 @@ export async function POST(request: Request) {
           { status: 409, headers: { "Cache-Control": "no-store" } },
         );
       }
-      if (decision.action === "allow_new") {
-        await saveCheckoutAttempt(access.workspaceUid, { ...prior, state: "expired", updatedAt: new Date().toISOString() });
-        claim = await claimCheckoutAttempt(access.workspaceUid, attempt, new Date());
-      }
     }
     if (!claim.claimed) {
       const current = claim.existing;
