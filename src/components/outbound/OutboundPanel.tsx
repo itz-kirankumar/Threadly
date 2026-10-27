@@ -9,7 +9,8 @@ type Campaign = {
 };
 type Approval = { approvalId: string; campaignVersion: number } | null;
 type Enrollment = { enrollmentId: string; contactId: string; status: string; currentStep: number };
-type Intent = { intentId: string; contactId: string; step: number; status: string };
+type Attempt = { attemptId: string; dispatchedAt: string; outcome: string; synthetic: boolean; detail: string | null };
+type Intent = { intentId: string; contactId: string; step: number; status: string; attempts?: Attempt[] };
 type PlanResult = { plannedCount: number; skipped: { contactId: string; reasons: string[] }[]; blocked: string[] };
 type Sender = { senderId: string; email: string; provider: string; status: string };
 type Draft = { draftId: string; intentId: string; step: number; subject: string; body: string; engine: string; renderedAt: string };
@@ -237,6 +238,11 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
                 {intents.map((i) => (
                   <li key={i.intentId} className="rounded-lg border border-white/10 px-3 py-2">
                     step {i.step} · {i.status} · {i.contactId.slice(0, 14)}...
+                    {(i.attempts ?? []).map((a) => (
+                      <p key={a.attemptId} className="mt-1 text-xs text-zinc-500">
+                        {a.outcome}{a.synthetic ? " (synthetic - no external send)" : ""} · {a.dispatchedAt}
+                      </p>
+                    ))}
                   </li>
                 ))}
               </ul>

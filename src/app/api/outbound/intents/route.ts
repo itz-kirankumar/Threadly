@@ -85,7 +85,22 @@ export async function GET(request: Request) {
       const { RtdbCampaignStore } = await import("@/lib/outbound/rtdb-campaign-store");
       const cs = new RtdbCampaignStore();
       const intents = await cs.listIntentsByCampaign(access.workspaceUid, campaignId);
-      return Response.json({ intents }, { headers: { "Cache-Control": "no-store" } });
+      const ledger = new RtdbLedgerStore();
+      const withAttempts = await Promise.all(
+        intents.map(async (intent) => ({
+          ...intent,
+          attempts: (await ledger.listAttempts(access.workspaceUid, intent.intentId)).map((a) => ({
+            attemptId: a.attemptId,
+            dispatchedAt: a.dispatchedAt,
+            outcome: a.outcome,
+            provider: a.provider,
+            providerCorrelationId: a.providerCorrelationId,
+            synthetic: a.synthetic,
+            detail: a.detail,
+          })),
+        }))
+      );
+      return Response.json({ intents: withAttempts }, { headers: { "Cache-Control": "no-store" } });
     }
     if (!id) return Response.json({ error: "id is required." }, { status: 400 });
     const store = new RtdbLedgerStore();
