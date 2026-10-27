@@ -150,7 +150,10 @@ test("completeConsent activates only when the consented mailbox matches the send
   assert.equal(updated.consentTraceId, done.consentTraceId);
   assert.ok(records.traces.has(done.consentTraceId));
   const stored = records.tokens.get("snd_1");
-  assert.ok(!stored.includes("at")); // ciphertext, never plaintext
+  // Ciphertext, never plaintext. (Not a 2-char substring check: random
+  // base64 ciphertext contains "at" by chance ~1 run in 5. The field name
+  // is long enough that an accidental collision is negligible.)
+  assert.ok(!stored.includes("accessToken"));
   assert.equal(JSON.parse(decryptSecret(stored)).accessToken, "at");
 
   // Cross-tenant state rejected.

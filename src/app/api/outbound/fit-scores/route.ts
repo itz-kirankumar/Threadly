@@ -7,6 +7,8 @@ import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbAccountStore, RtdbEvidenceStore } from "@/lib/outbound/rtdb-import-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { currentIcp, targetFromIcp } from "@/lib/outbound/icp";
+import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,15 +80,31 @@ export async function POST(request: Request) {
     if (!contactId) {
       return Response.json({ error: "contactId is required." }, { status: 400, headers: NO_STORE });
     }
-    const t = (body.target ?? {}) as Record<string, unknown>;
-    const target: TargetProfile = {
-      roles: cleanList(t.roles),
-      regions: cleanList(t.regions),
-      employeeBands: cleanList(t.employeeBands),
-      sectors: cleanList(t.sectors),
-    };
+    let target: TargetProfile;
+    let targetSource: { kind: "request" | "icp"; icpVersionId?: string; icpVersion?: number } = { kind: "request" };
+    const icpRef = typeof body.icpVersionId === "string" ? body.icpVersionId.trim() : "";
+    if (icpRef) {
+      // Target from a confirmed F01 ICP version ("current" or a specific id).
+      const icpStore = new RtdbIcpStore();
+      const icp = icpRef === "current"
+        ? currentIcp(await icpStore.list(access.workspaceUid))
+        : await icpStore.get(access.workspaceUid, icpRef);
+      if (!icp || icp.status !== "confirmed") {
+        return Response.json({ error: "No confirmed ICP version found for the given reference." }, { status: 404, headers: NO_STORE });
+      }
+      target = targetFromIcp(icp);
+      targetSource = { kind: "icp", icpVersionId: icp.icpVersionId, icpVersion: icp.version };
+    } else {
+      const t = (body.target ?? {}) as Record<string, unknown>;
+      target = {
+        roles: cleanList(t.roles),
+        regions: cleanList(t.regions),
+        employeeBands: cleanList(t.employeeBands),
+        sectors: cleanList(t.sectors),
+      };
+    }
     if (!target.roles && !target.regions && !target.employeeBands && !target.sectors) {
-      return Response.json({ error: "target must define at least one criterion." }, { status: 400, headers: NO_STORE });
+      return Response.json({ error: "target (or a confirmed ICP) must define at least one criterion." }, { status: 400, headers: NO_STORE });
     }
     const contact = await new RtdbContactStore().getContact(access.workspaceUid, contactId);
     if (!contact) {
@@ -98,6 +116,7 @@ export async function POST(request: Request) {
     );
     const config = parseConfig(body);
     const result = computeFitScore({ contact, account, evidence, target, config, now: new Date(), actor: access.identity.uid });
+    result.targetSource = targetSource;
     await new RtdbFitScoreStore().save(result);
     await new RtdbAuditStore().append(
       auditEvent({

@@ -74,6 +74,9 @@ export interface FitScoreResult extends CreationMeta {
   coverage: { known: number; total: number }; // total = criteria the target defines
   reasons: FitScoreReason[];
   computedAt: ISODate;
+  // Where the target profile came from. "request" = caller-supplied;
+  // "icp" = a confirmed F01 ICP version (ids recorded for audit).
+  targetSource?: { kind: "request" | "icp"; icpVersionId?: string; icpVersion?: number };
 }
 
 function norm(s: string): string {
