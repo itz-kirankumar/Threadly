@@ -162,24 +162,33 @@ export async function selectSlot(
       startISO: input.startISO,
       actor: input.actor,
     });
+    if (!committed.ok) {
+      // Conflict found before the provider call: no event attempt happened, so
+      // the claim is safely released for another slot choice.
+      await stores.links.releaseLinkClaim(link);
+      return { ok: false, status: 409, error: committed.error };
+    }
+    await stores.conversations.saveMeeting(committed.meeting);
+    await stores.links.updateLink({ ...link, usedAt: new Date().toISOString(), meetingId: committed.meeting.meetingId, claimState: "claimed" });
   } catch (error) {
-    // Provider call attempted, outcome unknown: quarantine, never blind-retry.
+    // Anything after a successful claim is uncertain: a provider event may or
+    // may not exist. Quarantine the link, log for reconciliation, never
+    // blind-retry, and never leave the link stuck in "claiming".
+    console.error("booking commit failed after claim; quarantined", error instanceof Error ? { name: error.name, message: error.message } : error);
     await stores.links.markClaimUnknown(link);
     return { ok: false, status: 502, error: "provider_outcome_unknown: the calendar call outcome is uncertain; reconciliation is required and no automatic retry will happen (duplicate-invite risk is not taken)." };
   }
-  if (!committed.ok) {
-    // Conflict found before the provider call: no event attempt happened, so
-    // the claim is safely released for another slot choice.
-    await stores.links.releaseLinkClaim(link);
-    return { ok: false, status: 409, error: committed.error };
+  // Audit failure must not fail a committed booking; the meeting record is
+  // the source of truth and the error is logged for investigation.
+  try {
+    await input.audit?.append(auditEvent({
+      tenantId: link.tenantId, actor: input.actor, action: "booking.committed",
+      target: `meeting:${committed.meeting.meetingId}`, outcome: "success",
+      detail: committed.synthetic ? "synthetic (mock calendar)" : "provider-confirmed",
+    }));
+  } catch (error) {
+    console.error("booking audit append failed after commit", error instanceof Error ? { name: error.name, message: error.message } : error);
   }
-  await stores.conversations.saveMeeting(committed.meeting);
-  await stores.links.updateLink({ ...link, usedAt: new Date().toISOString(), meetingId: committed.meeting.meetingId, claimState: "claimed" });
-  await input.audit?.append(auditEvent({
-    tenantId: link.tenantId, actor: input.actor, action: "booking.committed",
-    target: `meeting:${committed.meeting.meetingId}`, outcome: "success",
-    detail: committed.synthetic ? "synthetic (mock calendar)" : "provider-confirmed",
-  }));
   return { ok: true, meeting: committed.meeting, synthetic: committed.synthetic };
 }
 
