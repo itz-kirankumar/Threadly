@@ -122,11 +122,18 @@ export default function ScanSimulation() {
       </div>
 
       <div className="p-4 sm:p-5">
-        {/* question */}
-        <p className="mb-4 font-mono text-[13px] leading-relaxed text-zinc-300">
-          <span className="mr-2 text-violet-400">?</span>
-          {QUESTION.slice(0, questionChars)}
-          {questionChars < QUESTION.length && <span className="animate-pulse text-violet-400">▍</span>}
+        {/* question - invisible full text reserves the final height so the
+            panel never grows while the question types in */}
+        <p className="relative mb-4 font-mono text-[13px] leading-relaxed text-zinc-300">
+          <span className="invisible" aria-hidden="true">
+            <span className="mr-2">?</span>
+            {QUESTION}
+          </span>
+          <span className="absolute inset-0">
+            <span className="mr-2 text-violet-400">?</span>
+            {QUESTION.slice(0, questionChars)}
+            {questionChars < QUESTION.length && <span className="animate-pulse text-violet-400">▍</span>}
+          </span>
         </p>
 
         {/* provider answers */}
@@ -136,7 +143,28 @@ export default function ScanSimulation() {
             const done = chars >= p.answer.length;
             const started = chars > 0;
             return (
-              <div key={p.name} className="min-h-[132px] rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <div key={p.name} className="relative rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                {/* invisible completed-state copy reserves the card's final
+                    size, so typing never changes the panel height */}
+                <div className="invisible" aria-hidden="true">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-xs font-semibold">{p.name}</span>
+                    <span className="rounded-full border px-2 py-0.5 font-mono text-[10px]">
+                      mentioned · #{p.position}
+                    </span>
+                  </div>
+                  <p className="text-[12px] leading-relaxed">
+                    <Highlighted text={p.answer} />
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {p.citations.map((c) => (
+                      <span key={c} className="rounded border px-1.5 py-0.5 font-mono text-[10px]">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="absolute inset-0 p-3">
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-zinc-200">{p.name}</span>
                   {done ? (
@@ -171,6 +199,7 @@ export default function ScanSimulation() {
                     ))}
                   </div>
                 )}
+                </div>
               </div>
             );
           })}

@@ -261,24 +261,11 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
       {/* Header and Top Actions */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="m4.93 4.93 4.24 4.24" />
-                <path d="m14.83 9.17 4.24-4.24" />
-                <path d="m14.83 14.83 4.24 4.24" />
-                <path d="m9.17 14.83-4.24 4.24" />
-                <circle cx="12" cy="12" r="4" />
-              </svg>
-            </span>
-            <span>Lead Outreach & Pipeline CRM</span>
-            <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20 tracking-wide uppercase">
-              Automated Cadence
-            </span>
+          <h2 className="text-xl font-semibold tracking-tight text-white">
+            <span>Leads &amp; Outreach</span>
           </h2>
           <p className="mt-1 text-sm text-zinc-400">
-            Convert generative AI visibility gaps into automated multi-touch cold outreach and pipeline accounts.
+            Track leads, sequences and follow-ups for your outreach pipeline.
           </p>
         </div>
 
@@ -340,8 +327,8 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
             <p className="mt-1 text-2xl font-bold text-purple-300">{stats.repliedCount}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
-            <p className="text-xs font-medium text-teal-400 uppercase">Deals Won</p>
-            <p className="mt-1 text-2xl font-bold text-teal-300">{stats.wonCount}</p>
+            <p className="text-xs font-medium text-teal-400 deals-won-label uppercase">Deals Won</p>
+            <p className="mt-1 text-2xl font-bold text-teal-300 deals-won-value">{stats.wonCount}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
             <p className="text-xs font-medium text-zinc-400 uppercase">Pipeline Value</p>
@@ -590,7 +577,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
               {filteredLeads.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-zinc-500">
-                    No leads found. Click <strong>"Discover Leads from GEO"</strong> or <strong>"+ Add Lead"</strong> to get started.
+                    No leads yet. Use <strong>"Discover Targets from Citations"</strong> or <strong>"+ Add Target"</strong> to get started.
                   </td>
                 </tr>
               )}

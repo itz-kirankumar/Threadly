@@ -18,6 +18,7 @@ interface BillingStatus {
   } | null;
   billingAvailable: boolean;
   providers?: { dodo: boolean; razorpay: boolean; razorpayTestMode?: boolean };
+  regionHint?: string | null;
   testMode: boolean;
   isOwner: boolean;
   canCheckout: boolean;
@@ -40,6 +41,31 @@ function loadRazorpayScript(): Promise<void> {
   });
 }
 
+// Billing-country options for region routing. Only India vs non-India changes
+// the provider; the list covers common regions, and any valid code works.
+const BILLING_COUNTRIES = [
+  { code: "IN", name: "India" },
+  { code: "US", name: "United States" },
+  { code: "GB", name: "United Kingdom" },
+  { code: "AE", name: "United Arab Emirates" },
+  { code: "AU", name: "Australia" },
+  { code: "CA", name: "Canada" },
+  { code: "DE", name: "Germany" },
+  { code: "FR", name: "France" },
+  { code: "SG", name: "Singapore" },
+  { code: "NL", name: "Netherlands" },
+  { code: "IE", name: "Ireland" },
+  { code: "JP", name: "Japan" },
+  { code: "BR", name: "Brazil" },
+  { code: "ZA", name: "South Africa" },
+  { code: "NZ", name: "New Zealand" },
+  { code: "SE", name: "Sweden" },
+  { code: "CH", name: "Switzerland" },
+  { code: "ES", name: "Spain" },
+  { code: "IT", name: "Italy" },
+  { code: "KR", name: "South Korea" },
+];
+
 const PLANS = [
   { id: "pro" as const, name: "Pro", monthly: 49, annualMonthly: 39, blurb: "50 tracked questions, unlimited scans, 5 seats." },
   { id: "growth" as const, name: "Growth", monthly: 149, annualMonthly: 119, blurb: "150 tracked questions, 25 seats, audit log, API access." },
@@ -53,7 +79,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
   const [error, setError] = useState<string | null>(null);
   const [annual, setAnnual] = useState(true);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
-  const [provider, setProvider] = useState<"dodo" | "razorpay">("dodo");
+  const [billingCountry, setBillingCountry] = useState<string>("");
   const [notice, setNotice] = useState<string | null>(null);
 
   const [quote, setQuote] = useState<{ due: number; currency: string; credit: number; remainingDays: number } | null>(null);
@@ -62,9 +88,10 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
       const next = (await authedFetch("/api/billing/status")) as BillingStatus;
       setStatus(next);
       setQuote(null);
-      // While Dodo is sandboxed for this user, default to the live one-time
-      // Razorpay path instead of offering a provider that rejects checkout.
-      if (next.testMode && !next.canCheckout && next.providers?.razorpay) setProvider("razorpay");
+      // Region routing: prefill billing country from the server geo hint
+      // (buyer can change it); the provider follows the country, never a
+      // free choice - India -> Razorpay, everywhere else -> Dodo.
+      if (next.regionHint && /^[A-Z]{2}$/.test(next.regionHint)) setBillingCountry((c) => c || next.regionHint!);
       if (next.billing?.provider === "razorpay" && next.billing.status === "active" && next.billing.plan === "pro" && next.billing.interval) {
         try {
           const q = (await authedFetch("/api/billing/razorpay/quote", {
@@ -100,7 +127,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
   const razorpayCheckout = async (plan: "pro" | "growth") => {
     const order = (await authedFetch("/api/billing/razorpay/order", {
       method: "POST",
-      body: JSON.stringify({ plan, interval: annual ? "annual" : "monthly" }),
+      body: JSON.stringify({ plan, interval: annual ? "annual" : "monthly", billingCountry }),
     })) as { orderId: string; amount: number; currency: string; keyId: string; prefill?: { email?: string | null; contact?: string | null } };
     await loadRazorpayScript();
     if (!window.Razorpay) throw new Error("Could not load the Razorpay checkout.");
@@ -150,13 +177,18 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
     setBusyPlan(plan);
     setError(null);
     try {
-      if (status?.providers?.razorpay && (!status.providers?.dodo || provider === "razorpay")) {
+      if (!/^[A-Z]{2}$/.test(billingCountry)) {
+        throw new Error("Choose your billing country first.");
+      }
+      if (billingCountry === "IN") {
+        if (!status?.providers?.razorpay) throw new Error("India checkout is temporarily unavailable.");
         await razorpayCheckout(plan);
         return;
       }
+      if (!status?.providers?.dodo) throw new Error("International checkout is temporarily unavailable.");
       const payload = (await authedFetch("/api/billing/checkout", {
         method: "POST",
-        body: JSON.stringify({ plan, interval: annual ? "annual" : "monthly" }),
+        body: JSON.stringify({ plan, interval: annual ? "annual" : "monthly", billingCountry }),
       })) as { checkoutUrl?: string };
       if (!payload.checkoutUrl) throw new Error("No checkout link returned.");
       window.location.href = payload.checkoutUrl;
@@ -170,6 +202,10 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
   const razorpayLive = Boolean(status?.providers?.razorpay) && status?.providers?.razorpayTestMode === false;
   // In Dodo test mode only allowlisted testers may use Dodo checkout.
   const dodoSelectable = Boolean(status) && (!status!.testMode || status!.canCheckout);
+  // The provider follows the billing country (owner-directed region routing).
+  const routedProvider: "dodo" | "razorpay" | null = /^[A-Z]{2}$/.test(billingCountry)
+    ? billingCountry === "IN" ? "razorpay" : "dodo"
+    : null;
 
   if (!status && !error) return <p className="text-sm text-zinc-500">Loading billing…</p>;
 
@@ -269,7 +305,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                         ? "Current plan"
                         : busyPlan === plan.id
                           ? "Opening checkout…"
-                          : quote && plan.id === "growth" && provider === "razorpay"
+                          : quote && plan.id === "growth" && routedProvider === "razorpay"
                             ? `Upgrade to ${plan.name} - pay $${(quote.due / 100).toFixed(2)}`
                             : (PLAN_RANK[plan.id] ?? 0) < (PLAN_RANK[status.plan] ?? 0)
                               ? `Switch to ${plan.name} (lower plan)`
@@ -280,33 +316,33 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
               </div>
 
               <p className="text-[11px] leading-relaxed text-zinc-600">
-                {quote && provider === "razorpay" && status.billing?.plan === "pro" && (
+                {quote && routedProvider === "razorpay" && status.billing?.plan === "pro" && (
                   <span className="mt-1.5 block text-[11px] text-zinc-500">
                     Upgrade quote: ${(quote.credit / 100).toFixed(2)} unused Pro time credited against Growth for the remaining {quote.remainingDays} days - you pay only the difference. The term end date does not change.
                   </span>
                 )}
-                {status.providers?.dodo && status.providers?.razorpay && dodoSelectable ? (
-                  <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-zinc-700 p-0.5 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => setProvider("dodo")}
-                      className={`rounded-full px-2.5 py-1 ${provider === "dodo" ? "bg-zinc-100 text-zinc-900" : "text-zinc-400"}`}
-                    >
-                      Card via Dodo (subscription)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setProvider("razorpay")}
-                      className={`rounded-full px-2.5 py-1 ${provider === "razorpay" ? "bg-zinc-100 text-zinc-900" : "text-zinc-400"}`}
-                    >
-                      Razorpay (one-time)
-                    </button>
-                  </span>
-                ) : status.providers?.razorpay ? (
-                  "Checkout uses Razorpay - one-time purchase, each payment covers the selected term."
-                ) : (
-                  "Checkout uses Dodo Payments."
-                )}
+                <span className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                  <label htmlFor="billing-country">Billing country:</label>
+                  <select
+                    id="billing-country"
+                    value={billingCountry}
+                    onChange={(e) => setBillingCountry(e.target.value)}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-200"
+                  >
+                    <option value="">Choose…</option>
+                    {BILLING_COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {routedProvider === "razorpay" && status.providers?.razorpay && (
+                    <span>Checkout uses Razorpay - one-time purchase in INR, each payment covers the selected term.</span>
+                  )}
+                  {routedProvider === "dodo" && status.providers?.dodo && dodoSelectable && (
+                    <span>Checkout uses Dodo Payments - card subscription in USD.</span>
+                  )}
+                </span>
                 {status.testMode && !razorpayLive
                   ? " Billing is in test mode while launch is prepared - checkouts run against the payment sandbox and no real card is charged."
                   : ""}

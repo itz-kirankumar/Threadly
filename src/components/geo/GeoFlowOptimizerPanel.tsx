@@ -126,19 +126,9 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch }: P
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
-              </svg>
-            </span>
-            <span>Generative Engine Optimization & Crawler Audit</span>
-            <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20 tracking-wide uppercase">
-              Citations & Knowledge Schema
-            </span>
-          </h2>
+          <h2 className="text-xl font-semibold tracking-tight text-white">Optimization</h2>
           <p className="mt-1 text-sm text-zinc-400">
-            Synthesize LLM-ingestible knowledge facts, diagnose buyer prompts, and verify crawler access for ChatGPT, Claude, and Perplexity.
+            Knowledge facts, prompt diagnosis and crawler access checks for ChatGPT, Claude and Perplexity.
           </p>
         </div>
 
@@ -212,7 +202,7 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch }: P
       {activeTab === "facts" && (
         <div className="space-y-4">
           <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-            <h3 className="text-sm font-semibold text-white">AI Engine Structured Facts</h3>
+            <h3 className="text-sm font-semibold text-white">Structured facts</h3>
             <p className="mt-1 text-xs text-zinc-400">
               Generative models like ChatGPT, Claude, and Gemini synthesize responses from factual assertions with high source-anchor affinity. Host these on your website or <code className="text-blue-400">/llms.txt</code> to increase citation share.
             </p>
@@ -256,7 +246,7 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch }: P
       {activeTab === "diagnostic" && (
         <div className="space-y-4">
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-white">GEO Prompt Diagnostic & Intent Refiner</h3>
+            <h3 className="text-sm font-semibold text-white">Prompt diagnostic</h3>
             <p className="text-xs text-zinc-400">
               Test how LLMs parse buyer search queries, evaluate citation probability, and view high-converting distilled prompt variations.
             </p>
@@ -358,7 +348,7 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch }: P
       {activeTab === "anchors" && (
         <div className="space-y-4">
           <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-            <h3 className="text-sm font-semibold text-white">Target Citation Anchor Pool</h3>
+            <h3 className="text-sm font-semibold text-white">Citation anchor pool</h3>
             <p className="mt-1 text-xs text-zinc-400">
               Generative AI search models heavily weight citations originating from verified practitioner communities and authoritative directories. Here are the top platforms recommended for your category:
             </p>
@@ -401,7 +391,7 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch }: P
       {activeTab === "audit" && (
         <div className="space-y-4">
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-white">OpenSEO AI Crawler & robots.txt Audit</h3>
+            <h3 className="text-sm font-semibold text-white">Crawler and robots.txt audit</h3>
             <p className="text-xs text-zinc-400">
               Verify if GPTBot (ChatGPT), ClaudeBot (Anthropic), and PerplexityBot are permitted to crawl and cite your domain.
             </p>

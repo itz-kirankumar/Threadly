@@ -74,6 +74,19 @@ export async function dispatchOutreachStep(
   const lead = await loadLead(leadId);
   if (!lead) throw new Error("Lead not found.");
 
+  // Production sending guard, owner-approved 27 Oct 2026 (WhatsApp, quoted "ok").
+  // Live dispatch stays disabled until outreach is rebuilt with suppression,
+  // unsubscribe, evidence-backed content and a send ledger. No state changes,
+  // no activity log, no provider call, no simulated send.
+  if (process.env.OUTREACH_SEND_ENABLED !== "true") {
+    return {
+      success: false,
+      lead,
+      message:
+        "Outreach sending is disabled. This production guard was owner-approved on 27 Oct 2026 and stays until the outreach flow is rebuilt with suppression, unsubscribe, evidence-backed content and a send ledger.",
+    };
+  }
+
   const stepNumber = targetStep ?? (lead.sequenceStep + 1);
   const { subject, body, step } = await prepareOutreachEmail(lead, stepNumber, customEmail);
 

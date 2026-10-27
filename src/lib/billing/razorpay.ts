@@ -156,6 +156,7 @@ export async function razorpayCreateOrder(params: {
   email: string;
   amountOverride?: number;
   upgradeOf?: string | null;
+  receipt?: string;
 }): Promise<{ id: string; amount: number; currency: string }> {
   const price = orderPrice(params.plan, params.interval);
   if (!price) throw new Error("That plan and term combination is not sold.");
@@ -165,7 +166,7 @@ export async function razorpayCreateOrder(params: {
     body: JSON.stringify({
       amount: params.amountOverride ?? price.amount,
       currency: price.currency,
-      receipt: `ws_${params.workspaceUid.slice(0, 24)}_${Date.now().toString(36)}`,
+      receipt: params.receipt ?? `ws_${params.workspaceUid.slice(0, 24)}_${Date.now().toString(36)}`,
       notes: {
         workspace_uid: params.workspaceUid,
         plan: params.plan,
@@ -302,4 +303,20 @@ export function periodEndFor(interval: BillingInterval, from: Date): string {
   else if (interval === "weekly") end.setDate(end.getDate() + 7);
   else end.setMonth(end.getMonth() + 1);
   return end.toISOString();
+}
+
+/** Orders matching one of our receipts (reconciliation read; null = lookup failed). */
+export async function razorpayFindOrdersByReceipt(receipt: string): Promise<Array<{ id: string; status?: string | null }> | null> {
+  try {
+    const response = await fetch(`https://api.razorpay.com/v1/orders?receipt=${encodeURIComponent(receipt)}&count=5`, {
+      headers: { Authorization: authHeader() },
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json().catch(() => null)) as { items?: Array<{ id: string; status?: string }> } | null;
+    if (!payload || !Array.isArray(payload.items)) return null;
+    return payload.items.map((o) => ({ id: o.id, status: o.status ?? null }));
+  } catch {
+    return null;
+  }
 }

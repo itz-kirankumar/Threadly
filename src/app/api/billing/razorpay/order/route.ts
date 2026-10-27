@@ -2,7 +2,8 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { isInterval, isRazorpayPlan } from "@/lib/billing/dodo";
-import { orderPrice, razorpayCheckoutAllowed, razorpayCreateOrder, razorpayKeyId, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
+import { orderPrice, razorpayCheckoutAllowed, razorpayCreateOrder, razorpayFindOrdersByReceipt, razorpayKeyId, razorpayOperational, razorpayTestMode, resolvePaidThisTerm, upgradeQuote } from "@/lib/billing/razorpay";
+import { decideRazorpayBlockedAction } from "@/lib/billing/recovery";
 import { lookupVerifiedPhone, normalizeE164 } from "@/lib/billing/identity";
 import type { CheckoutAttempt } from "@/lib/billing/attempt";
 import { claimCheckoutAttempt, loadBilling, saveCheckoutAttempt } from "@/lib/billing/store";
@@ -34,7 +35,15 @@ export async function POST(request: Request) {
         { status: 403, headers: { "Cache-Control": "no-store" } },
       );
     }
-    const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown };
+    const body = (await readJsonBody(request, 4 * 1024)) as { plan?: unknown; interval?: unknown; billingCountry?: unknown };
+    // Region routing (owner-directed 27 Oct 2026): Razorpay serves India
+    // billing countries only; every other region belongs to Dodo.
+    if ((typeof body.billingCountry === "string" ? body.billingCountry.trim().toUpperCase() : "") !== "IN") {
+      return Response.json(
+        { error: "Razorpay checkout is available for India billing addresses only.", code: "region_mismatch" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     if (!isRazorpayPlan(body.plan) || !isInterval(body.interval) || !orderPrice(body.plan, body.interval)) {
       return Response.json(
         { error: "Choose a plan (trial, pro or growth) with a valid term." },
@@ -91,7 +100,46 @@ export async function POST(request: Request) {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
-    const claim = await claimCheckoutAttempt(access.workspaceUid, attempt, now);
+    let claim = await claimCheckoutAttempt(access.workspaceUid, attempt, now);
+    if (!claim.claimed && claim.existing && (claim.existing.state === "pending" || claim.existing.state === "uncertain")) {
+      // Ambiguous prior attempt: reconcile against Razorpay by the attempt's
+      // receipt (the create call is retried with the same receipt only after
+      // provider-backed absence) - never create on UNKNOWN.
+      const receipt = claim.existing.id;
+      const first = await razorpayFindOrdersByReceipt(receipt);
+      let orders = first;
+      let readsAgree = false;
+      if (first !== null) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const second = await razorpayFindOrdersByReceipt(receipt);
+        if (second !== null) {
+          readsAgree = JSON.stringify(first.map((o) => o.id).sort()) === JSON.stringify(second.map((o) => o.id).sort());
+          orders = second;
+        } else {
+          orders = null;
+        }
+      }
+      const decision = decideRazorpayBlockedAction({ existing: claim.existing, now: new Date(), orders, readsAgree });
+      if (decision.action === "resume") {
+        await saveCheckoutAttempt(access.workspaceUid, { ...claim.existing, state: "issued", providerRef: decision.orderId, updatedAt: new Date().toISOString() });
+        const price = orderPrice(claim.existing.plan, claim.existing.interval);
+        return Response.json(
+          { orderId: decision.orderId, amount: claim.existing.amount ?? price?.amount ?? null, currency: claim.existing.currency ?? price?.currency ?? null, keyId: razorpayKeyId(), provider: "razorpay", testMode: razorpayTestMode(), resumed: true },
+          { headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      if (decision.action === "mark_reconciled_paid") {
+        await saveCheckoutAttempt(access.workspaceUid, { ...claim.existing, state: "reconciled", updatedAt: new Date().toISOString() });
+        return Response.json(
+          { error: "A payment for this attempt was already recorded. Your plan will reflect it - no new order was created.", state: "reconciled" },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      if (decision.action === "mark_failed_allow_new") {
+        await saveCheckoutAttempt(access.workspaceUid, { ...claim.existing, state: "failed", updatedAt: new Date().toISOString() });
+        claim = await claimCheckoutAttempt(access.workspaceUid, attempt, new Date());
+      }
+    }
     if (!claim.claimed) {
       const current = claim.existing;
       return Response.json(
@@ -114,6 +162,7 @@ export async function POST(request: Request) {
         email: access.identity.email,
         amountOverride: quote?.due,
         upgradeOf: existing?.orderId ?? null,
+        receipt: attempt.id,
       });
       await saveCheckoutAttempt(access.workspaceUid, {
         ...attempt,
