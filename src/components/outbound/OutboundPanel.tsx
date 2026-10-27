@@ -131,7 +131,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           <div className={card}>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Approval</h3>
             {approval ? (
-              <p className="text-sm text-teal-300">v{approval.campaignVersion} approved ({approval.approvalId.slice(0, 12)}...)</p>
+              <p className="text-sm text-teal-700 dark:text-teal-300">v{approval.campaignVersion} approved ({approval.approvalId.slice(0, 12)}...)</p>
             ) : (
               <button className={btn} disabled={busy} onClick={() => act(async () => {
                 const c = campaigns.find((x) => x.campaignId === selected);
@@ -171,9 +171,9 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
             {planResult && (
               <div className="mt-2 text-xs text-zinc-400">
                 <p>{planResult.plannedCount} drafted intent(s).</p>
-                {planResult.blocked.length > 0 && <p className="text-rose-300">Blocked: {planResult.blocked.join(", ")}</p>}
+                {planResult.blocked.length > 0 && <p className="text-rose-700 dark:text-rose-300">Blocked: {planResult.blocked.join(", ")}</p>}
                 {planResult.skipped.map((sk, i) => (
-                  <p key={i} className="text-amber-300/80">{sk.contactId}: {sk.reasons.join(", ")}</p>
+                  <p key={i} className="text-amber-700 dark:text-amber-300/80">{sk.contactId}: {sk.reasons.join(", ")}</p>
                 ))}
               </div>
             )}
@@ -188,7 +188,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
                   <li key={e.enrollmentId} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2">
                     <span>{e.contactId.slice(0, 14)}... · {e.status} · step {e.currentStep}</span>
                     {e.status === "active" && (
-                      <button className="text-xs text-rose-300 hover:underline" disabled={busy} onClick={() => act(async () => {
+                      <button className="text-xs text-rose-700 hover:underline dark:text-rose-300" disabled={busy} onClick={() => act(async () => {
                         await authedFetch("/api/outbound/replies", { method: "POST", body: JSON.stringify({ campaignId: selected, enrollmentId: e.enrollmentId }) });
                         await refreshDetail(selected);
                       })}>Mark replied</button>
