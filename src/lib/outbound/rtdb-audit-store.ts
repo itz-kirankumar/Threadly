@@ -1,5 +1,6 @@
 import type { AuditEvent, AuditStore } from "./audit.ts";
-import { tenantRoot } from "./rtdb-store.ts";
+import { AuditConflictError, sameAuditEvent } from "./audit.ts";
+import { rtdbCasPut, tenantRoot } from "./rtdb-store.ts";
 
 async function db() {
   const { getAdminDatabase } = await import("../geo/admin-store.ts");
@@ -8,11 +9,20 @@ async function db() {
   return database;
 }
 
-// Append-only at this surface: events are written once under their own
-// eventId key; there are no update or delete methods for the primary log.
-// Keyed writes (rather than push) make recovery replays idempotent: replaying
-// the same event twice writes the same key.
+// Append-only at this surface with tamper controls: an eventId is written
+// exactly once. A write carrying an existing eventId succeeds only when the
+// content is identical (a legitimate recovery replay); differing content is
+// refused loudly and the existing record is never overwritten. The check is
+// an atomic ETag compare-and-put, safe against concurrent writers. Keyed
+// writes (rather than push) are what make recovery replays idempotent.
 export class RtdbAuditStore implements AuditStore {
+  // Create-or-identical-replay write to the primary log. Throws
+  // AuditConflictError when the eventId exists with different content.
+  private async putPrimary(tenantId: string, event: AuditEvent): Promise<void> {
+    const path = `${tenantRoot(tenantId)}/audit/${event.eventId}`;
+    const wrote = await rtdbCasPut<AuditEvent>(path, (current) => current === null || sameAuditEvent(current, event), event);
+    if (!wrote) throw new AuditConflictError(event.eventId);
+  }
   // Every append first runs a bounded recovery sweep so degraded records
   // replay automatically on the next mutation. A sweep failure never blocks
   // the append itself.
@@ -24,8 +34,7 @@ export class RtdbAuditStore implements AuditStore {
         cause: error instanceof Error ? error.message : "unknown",
       });
     }
-    const database = await db();
-    await database.ref(`${tenantRoot(event.tenantId)}/audit/${event.eventId}`).set(event);
+    await this.putPrimary(event.tenantId, event);
   }
 
   // Separate durable path from the primary audit log: survives whatever made
@@ -53,11 +62,19 @@ export class RtdbAuditStore implements AuditStore {
         continue;
       }
       try {
-        await database.ref(`${tenantRoot(tenantId)}/audit/${entry.event.eventId}`).set(entry.event);
+        await this.putPrimary(tenantId, entry.event);
         await database.ref(`${base}/${key}`).remove();
         recovered += 1;
-      } catch {
-        // stays on the fallback path for the next sweep
+      } catch (error) {
+        // Stays on the fallback path for the next sweep. A conflict means the
+        // primary log holds DIFFERENT content under this eventId: possible
+        // tampering; the fallback record is preserved as evidence and the
+        // refusal is loud.
+        console.error("audit recovery replay refused", {
+          eventId: entry.event.eventId,
+          conflict: error instanceof AuditConflictError,
+          cause: error instanceof Error ? error.message : "unknown",
+        });
       }
     }
     const rest = await database.ref(base).get();

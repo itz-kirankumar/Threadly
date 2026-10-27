@@ -90,3 +90,47 @@ test("booking commit writes a degraded audit record when the primary append fail
   assert.deepEqual(rec, { recovered: 1, remaining: 0 });
   assert.equal((await audit.list("t1")).length, 1);
 });
+
+test("keyed write refuses to overwrite an existing eventId with different content", async () => {
+  const store = new MemoryAuditStore();
+  const event = ev("t1");
+  await store.append(event);
+  const tampered = { ...event, outcome: "denied", detail: "rewritten" };
+  await assert.rejects(() => store.append(tampered), /audit_event_conflict/);
+  const listed = await store.list("t1");
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].outcome, "success", "original record survives the overwrite attempt");
+});
+
+test("keyed write accepts an identical replay (create-or-identical semantics)", async () => {
+  const store = new MemoryAuditStore();
+  const event = ev("t1");
+  await store.append(event);
+  await store.append({ ...event }); // byte-identical replay
+  assert.equal((await store.list("t1")).length, 1);
+});
+
+test("comparison treats a dropped null detail as equal (RTDB null-dropping)", async () => {
+  const { sameAuditEvent } = await import("../src/lib/outbound/audit.ts");
+  const event = ev("t1"); // detail: null
+  const readBack = { ...event };
+  delete readBack.detail; // RTDB drops null fields on write
+  assert.equal(sameAuditEvent(event, readBack), true);
+  assert.equal(sameAuditEvent(event, { ...event, detail: "x" }), false);
+  assert.equal(sameAuditEvent(event, { ...event, at: "2026-01-01T00:00:00.000Z" }), false);
+});
+
+test("tenant isolation: the same eventId under two tenants is independent, and recovery stays tenant-scoped", async () => {
+  const store = new MemoryAuditStore();
+  const a = ev("t1");
+  const b = { ...ev("t2"), eventId: a.eventId }; // same id, other tenant, other content
+  await store.append(a);
+  await store.append(b); // memory store scopes conflict checks per stored record; cross-tenant reuse must not throw here
+  await store.appendDegraded(ev("t1", "c"), "x");
+  await store.appendDegraded(ev("t2", "d"), "x");
+  const r1 = await store.recoverDegraded("t1");
+  assert.deepEqual(r1, { recovered: 1, remaining: 0 });
+  assert.equal((await store.list("t2")).filter((e) => e.action === "d").length, 0, "t2 fallback untouched by t1 sweep");
+  const r2 = await store.recoverDegraded("t2");
+  assert.deepEqual(r2, { recovered: 1, remaining: 0 });
+});

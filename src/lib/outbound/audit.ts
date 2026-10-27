@@ -5,6 +5,31 @@
 
 import type { ISODate } from "./types.ts";
 
+// Thrown when a keyed write finds an existing event with the SAME eventId but
+// DIFFERENT content. That is tampering or an id-reuse bug: the existing record
+// is never overwritten and the failure is always loud.
+export class AuditConflictError extends Error {
+  constructor(eventId: string) {
+    super(`audit_event_conflict: ${eventId} already exists with different content`);
+    this.name = "AuditConflictError";
+  }
+}
+
+// Field-exact comparison with null/undefined coalescing on nullable fields:
+// RTDB drops null fields on write, so a read-back record may LACK a key that
+// the in-memory event holds as null. Content equality, not reference or JSON
+// identity.
+export function sameAuditEvent(a: AuditEvent, b: AuditEvent): boolean {
+  return a.tenantId === b.tenantId
+    && a.eventId === b.eventId
+    && a.actor === b.actor
+    && a.action === b.action
+    && a.target === b.target
+    && a.outcome === b.outcome
+    && (a.detail ?? null) === (b.detail ?? null)
+    && a.at === b.at;
+}
+
 export interface AuditEvent {
   tenantId: string;
   eventId: string;
@@ -34,6 +59,12 @@ export class MemoryAuditStore implements AuditStore {
   events: AuditEvent[] = [];
 
   async append(event: AuditEvent): Promise<void> {
+    // Mirrors the RTDB keyed path: identity is (tenantId, eventId).
+    const existing = this.events.find((e) => e.eventId === event.eventId && e.tenantId === event.tenantId);
+    if (existing) {
+      if (sameAuditEvent(existing, event)) return; // idempotent replay
+      throw new AuditConflictError(event.eventId);
+    }
     this.events.push(event);
   }
   async list(tenantId: string): Promise<AuditEvent[]> {
