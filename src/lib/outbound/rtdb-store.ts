@@ -104,7 +104,7 @@ export class RtdbLedgerStore implements LedgerStore {
     const path = `${tenantRoot(tenantId)}/intents/${intentId}`;
     for (let attempt = 0; attempt < 3; attempt++) {
       const token = (await credential.getAccessToken()).access_token;
-      const getRes = await fetch(`${base}/${path}.json?etag=true&access_token=${encodeURIComponent(token)}`, { cache: "no-store" });
+      const getRes = await fetch(`${base}/${path}.json?access_token=${encodeURIComponent(token)}`, { cache: "no-store", headers: { "X-Firebase-ETag": "true" } });
       if (!getRes.ok) throw new Error(`cas_read_failed:${getRes.status}`);
       const etag = getRes.headers.get("ETag") ?? getRes.headers.get("etag");
       const current = (await getRes.json()) as MessageIntent | null;
