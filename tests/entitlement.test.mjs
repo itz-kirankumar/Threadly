@@ -106,9 +106,12 @@ test("pending attempt within validity blocks", () => {
   const v = evaluateAttempt({ ...attemptBase, state: "pending" }, NOW);
   assert.equal(v.open, false);
 });
-test("attempt older than 24h opens again", () => {
+test("freeze invariant: local age never reopens an unresolved attempt", () => {
   const later = new Date("2026-10-27T11:00:00.000Z");
-  assert.equal(evaluateAttempt({ ...attemptBase, state: "uncertain" }, later).open, true);
+  assert.equal(evaluateAttempt({ ...attemptBase, state: "uncertain" }, later).open, false);
+  assert.equal(evaluateAttempt({ ...attemptBase, state: "pending" }, later).open, false);
+  assert.equal(evaluateAttempt({ ...attemptBase, state: "issued" }, later).open, false);
+  assert.equal(evaluateAttempt({ ...attemptBase, state: "failed" }, later).open, true);
 });
 
 // --- Razorpay Standard Checkout (one-time orders) ---
