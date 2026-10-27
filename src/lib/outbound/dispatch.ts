@@ -15,6 +15,8 @@ import { checkDispatch, suppressionTokenFor } from "./policy.ts";
 import type { UsageStore } from "./usage.ts";
 import type { IngestionStore } from "./ingestion.ts";
 import { syncHealth } from "./ingestion.ts";
+import type { KillSwitchStore } from "./kill-switches.ts";
+import { activeKillSwitches, killSwitchReasons } from "./kill-switches.ts";
 import type { DeliveryAttempt, MessageIntent, Sender } from "./types.ts";
 
 export interface SenderReader {
@@ -65,6 +67,10 @@ export interface DispatchStores {
   // Optional: when present, a sender whose provider sync is stale or never
   // ran defers dispatch (inbound state may be out of date: replies/bounces).
   ingestion?: IngestionStore;
+  // F09 kill switches. Optional in the library so existing compositions keep
+  // compiling, but EVERY production route must wire it: a runner without the
+  // store silently ignores engaged switches. Audited routes wire it.
+  killSwitches?: KillSwitchStore;
 }
 
 export interface DispatchResult {
@@ -92,6 +98,7 @@ export async function runDispatch(
   const tenantCostComplete = !events.some((e) => e.costMinorUnits === null);
   const tenantCostToDate = events.reduce((sum, e) => sum + (e.costMinorUnits ?? 0), 0);
 
+  const switches = stores.killSwitches ? await stores.killSwitches.list(tenantId) : [];
   const allIntents = await campaigns.listIntentsByCampaign(tenantId, campaignId);
   // Lease expiry NEVER authorizes retrying a possibly-external send. Stranded
   // dispatching/provider_unknown intents are reported, not retried: a real
@@ -141,6 +148,10 @@ export async function runDispatch(
     }
 
     const sender = intent.senderId ? await senders.getSender(tenantId, intent.senderId) : null;
+    const senderDomain = sender ? sender.email.split("@")[1] : undefined;
+    const killReasons = killSwitchReasons(
+      activeKillSwitches(switches, { campaignId, senderId: sender?.senderId, senderDomain })
+    );
     const acceptedToday = await countAcceptedToday(ledger, tenantId, campaignId, intent.senderId, campaigns, now);
     const enrollment = (await campaigns.listEnrollments(tenantId, campaignId)).find((e) => e.enrollmentId === intent.enrollmentId);
     const contact = await contacts.getContact(tenantId, intent.contactId);
@@ -158,6 +169,7 @@ export async function runDispatch(
       senderAcceptedToday: acceptedToday,
       tenantCostToDate,
       tenantCostComplete,
+      killSwitchReasons: killReasons,
       now,
     });
 

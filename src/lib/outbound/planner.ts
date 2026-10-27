@@ -12,6 +12,8 @@ import {
   type Decision,
 } from "./policy.ts";
 import { decideAssignment, type ExperimentStore } from "./experiments.ts";
+import type { KillSwitchStore } from "./kill-switches.ts";
+import { activeKillSwitches, killSwitchReasons } from "./kill-switches.ts";
 import type { Contact, MessageIntent, RightsRecord } from "./types.ts";
 
 export interface ContactStore {
@@ -63,12 +65,23 @@ export interface PlanResult {
 }
 
 export async function planCampaignIntents(
-  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; experiments?: ExperimentStore },
+  // killSwitches optional in the library (see dispatch.ts note); routes must
+  // wire it. Tenant and campaign scopes are enforced here at plan time;
+  // sender/domain scopes are enforced at dispatch, where the sender is final.
+  stores: { campaigns: CampaignStore; ledger: LedgerStore; contacts: ContactStore; experiments?: ExperimentStore; killSwitches?: KillSwitchStore },
   input: { tenantId: string; campaignId: string; actor: string; now: Date }
 ): Promise<PlanResult> {
-  const { campaigns, ledger, contacts, experiments } = stores;
+  const { campaigns, ledger, contacts, experiments, killSwitches } = stores;
   const { tenantId, campaignId, actor, now } = input;
   const result: PlanResult = { campaignId, planned: [], skipped: [], blocked: [] };
+
+  if (killSwitches) {
+    const reasons = killSwitchReasons(activeKillSwitches(await killSwitches.list(tenantId), { campaignId }));
+    if (reasons.length > 0) {
+      result.blocked.push(...reasons);
+      return result;
+    }
+  }
 
   const campaign = await campaigns.latestCampaignVersion(tenantId, campaignId);
   if (!campaign) {

@@ -5,6 +5,7 @@ import { advanceEnrollments } from "@/lib/outbound/sequence";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
+import { RtdbKillSwitchStore } from "@/lib/outbound/rtdb-kill-switch-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
       { tenantId: access.workspaceUid, campaignId }
     );
     const result = await planCampaignIntents(
-      { campaigns: new RtdbCampaignStore(), ledger: new RtdbLedgerStore(), contacts: new RtdbContactStore(), experiments: new RtdbExperimentStore() },
+      { campaigns: new RtdbCampaignStore(), ledger: new RtdbLedgerStore(), contacts: new RtdbContactStore(), experiments: new RtdbExperimentStore(), killSwitches: new RtdbKillSwitchStore() },
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
     await audit(access.workspaceUid, access.identity.uid, "plan.run", `campaign:${campaignId}`, "success", `planned=${result.planned.length} skipped=${result.skipped.length} blocked=${result.blocked.length}`);

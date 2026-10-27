@@ -8,6 +8,7 @@ import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import { RtdbIngestionStore } from "@/lib/outbound/rtdb-ingestion-store";
+import { RtdbKillSwitchStore } from "@/lib/outbound/rtdb-kill-switch-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import { RtdbUsageStore } from "@/lib/outbound/rtdb-usage-store";
 import { auditEvent } from "@/lib/outbound/audit";
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
         // Stale-sync pause: a sender whose inbound sync is stale or never ran
         // defers dispatch (reply/bounce state may be out of date).
         ingestion: new RtdbIngestionStore(),
+        killSwitches: new RtdbKillSwitchStore(),
       },
       new RoutingDispatchProvider(new RtdbConsentStore()),
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }

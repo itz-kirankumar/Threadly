@@ -77,6 +77,9 @@ export interface DispatchInput {
   senderAcceptedToday: number; // provider-accepted sends by this sender today
   tenantCostToDate: number; // minor units; a lower bound unless tenantCostComplete
   tenantCostComplete: boolean; // false when unpriced usage events exist
+  // F09 kill-switch reasons matched against this intent's campaign/sender/
+  // domain. Each reason already names its scope; any present reason blocks.
+  killSwitchReasons?: string[];
   now: Date;
 }
 
@@ -101,6 +104,7 @@ export function checkDispatch(input: DispatchInput): Decision {
   if (input.enrollmentStatus !== "active") reasons.push(`enrollment_not_active:${input.enrollmentStatus}`);
   if (input.humanReplySeen) reasons.push("human_reply_seen_stops_followups");
 
+  for (const r of input.killSwitchReasons ?? []) reasons.push(r);
   if (!input.tenantCostComplete) reasons.push("tenant_cost_unknown");
   if (campaign && input.tenantCostToDate >= campaign.costCeiling.amount) reasons.push("tenant_cost_ceiling_reached");
 
