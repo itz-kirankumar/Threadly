@@ -10,6 +10,7 @@ import type { CalendarAdapter } from "./providers/calendar.ts";
 import type { BookingLink, BookingPolicy, Contact, Meeting, Sender } from "./types.ts";
 import type { ConversationStore } from "./conversations.ts";
 import { auditEvent, type AuditStore } from "./audit.ts";
+import type { OperationIntentStore } from "./operation-intents.ts";
 
 export interface BookingPolicyStore {
   savePolicy(p: BookingPolicy): Promise<void>;
@@ -40,6 +41,9 @@ export interface BookingStores {
   conversations: ConversationStore;
   contacts: { getContact(tenantId: string, contactId: string): Promise<Contact | null> };
   senders: { getSender(tenantId: string, senderId: string): Promise<Sender | null> };
+  // Optional pre-effect durable operation intent. When present, a commit
+  // intent is recorded after the atomic claim and BEFORE any provider call.
+  intents?: OperationIntentStore;
 }
 
 export function hashBookingToken(token: string): string {
@@ -150,8 +154,30 @@ export async function selectSlot(
   // both reach event creation. Exactly one provider attempt per link, ever.
   const claimed = await stores.links.claimLink(link);
   if (!claimed) return { ok: false, status: 409, error: "booking_in_progress_or_used: this link is being or has been redeemed." };
+  // Pre-effect durable intent: recorded after the claim and BEFORE any
+  // provider call. If this write itself fails, no provider call has happened
+  // yet, so the claim is safely quarantined by the shared catch below. A
+  // crash between claim and this write is closed by the reconciler
+  // (reconcileBookingIntents) via the claimedAt timestamp.
+  const opId = `opi_${crypto.randomUUID()}`;
   let committed;
   try {
+    await stores.intents?.putIntent({
+      tenantId: link.tenantId,
+      opId,
+      kind: "booking.commit",
+      state: "intent",
+      payload: {
+        tokenHash: link.tokenHash,
+        startISO: new Date(input.startISO).toISOString(),
+        contactId: link.contactId,
+        organizerSenderId: link.organizerSenderId,
+        policyId: link.policyId,
+      },
+      createdAt: new Date().toISOString(),
+      resolvedAt: null,
+      error: null,
+    });
     // Second recheck happens inside commitBooking immediately before creation.
     committed = await commitBooking(calendar.adapter, calendar.accessToken, {
       tenantId: link.tenantId,
@@ -177,8 +203,20 @@ export async function selectSlot(
     // blind-retry, and never leave the link stuck in "claiming".
     console.error("booking commit failed after claim; quarantined", error instanceof Error ? { name: error.name, message: error.message } : error);
     const claimError = error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 300) : "unknown error";
+    try {
+      await stores.intents?.transitionIntent(link.tenantId, opId, "intent", "quarantined", claimError);
+    } catch (intentError) {
+      console.error("booking intent quarantine transition failed", { opId, cause: intentError instanceof Error ? intentError.message : "unknown" });
+    }
     await stores.links.markClaimUnknown(link, claimError);
     return { ok: false, status: 502, error: "provider_outcome_unknown: the calendar call outcome is uncertain; reconciliation is required and no automatic retry will happen (duplicate-invite risk is not taken)." };
+  }
+  try {
+    await stores.intents?.transitionIntent(link.tenantId, opId, "intent", "completed");
+  } catch (intentError) {
+    // The booking IS committed at this point; a failed intent transition must
+    // not mask success. The stale intent is closed by the reconciler.
+    console.error("booking intent completion transition failed", { opId, cause: intentError instanceof Error ? intentError.message : "unknown" });
   }
   // Audit failure must not fail a committed booking, but the record is
   // required: a failed append is retried onto the durable degraded path so

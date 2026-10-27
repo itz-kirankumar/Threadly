@@ -3,7 +3,7 @@ import { getBookingOffer, selectSlot } from "@/lib/outbound/booking-flow";
 import { resolveCalendarRuntime } from "@/lib/outbound/calendar-runtime";
 import { hashBookingToken } from "@/lib/outbound/booking-flow";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
-import { RtdbBookingStore } from "@/lib/outbound/rtdb-booking-store";
+import { RtdbBookingStore, RtdbOperationIntentStore } from "@/lib/outbound/rtdb-booking-store";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
@@ -26,6 +26,7 @@ function stores() {
     conversations: new RtdbConversationStore(),
     contacts: new RtdbContactStore(),
     senders: new RtdbSenderStore(),
+    intents: new RtdbOperationIntentStore(),
   };
 }
 

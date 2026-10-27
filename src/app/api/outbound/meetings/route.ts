@@ -2,7 +2,8 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { cancelMeeting, createBookingLink } from "@/lib/outbound/booking-flow";
 import { resolveCalendarRuntime } from "@/lib/outbound/calendar-runtime";
-import { RtdbBookingStore } from "@/lib/outbound/rtdb-booking-store";
+import { RtdbBookingStore, RtdbOperationIntentStore } from "@/lib/outbound/rtdb-booking-store";
+import { reconcileBookingIntents } from "@/lib/outbound/operation-intents";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
@@ -25,6 +26,7 @@ function stores() {
   return {
     policies: new RtdbBookingStore(),
     links: new RtdbBookingStore(),
+    intents: new RtdbOperationIntentStore(),
     conversations: new RtdbConversationStore(),
     contacts: new RtdbContactStore(),
     senders: new RtdbSenderStore(),
@@ -52,6 +54,15 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request, 16 * 1024)) as Record<string, unknown>;
     const action = typeof body.action === "string" ? body.action : "";
     const bookingStore = new RtdbBookingStore();
+
+    // Lazy recovery sweep (bounded, never blocks the request on failure):
+    // quarantines stale claims and unresolved intents from crashed commits.
+    try {
+      const sweep = await reconcileBookingIntents({ links: bookingStore, intents: new RtdbOperationIntentStore() }, access.workspaceUid, { now: new Date() });
+      if (sweep.quarantinedLinks || sweep.quarantinedIntents) console.error("booking intent reconciler quarantined stale state", sweep);
+    } catch (sweepError) {
+      console.error("booking intent reconciler failed; continuing", { cause: sweepError instanceof Error ? sweepError.message : "unknown" });
+    }
 
     if (action === "save-policy") {
       const hostPool = Array.isArray(body.hostPool) ? body.hostPool.filter((s): s is string => typeof s === "string") : [];

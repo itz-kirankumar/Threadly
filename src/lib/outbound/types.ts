@@ -273,6 +273,9 @@ export interface BookingLink extends CreationMeta {
   // Diagnostic from the failure that quarantined the claim (error name +
   // short message), for reconciliation. Never contains provider payloads.
   claimError?: string | null;
+  // When the current claim started. Drives the stale-claim reconciler: a
+  // claim older than the threshold without completion is quarantined.
+  claimedAt?: ISODate | null;
 }
 
 export interface CRMMapping extends CreationMeta {

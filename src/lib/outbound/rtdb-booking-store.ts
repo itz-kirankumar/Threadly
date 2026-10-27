@@ -6,6 +6,8 @@
 import type { BookingLink, BookingPolicy } from "./types.ts";
 import { outboundDataRoot, rtdbCasPut, tenantRoot } from "./rtdb-store.ts";
 import type { BookingLinkStore, BookingPolicyStore } from "./booking-flow.ts";
+import type { OperationIntent, OperationIntentState, OperationIntentStore } from "./operation-intents.ts";
+import { sameIntent } from "./operation-intents.ts";
 
 async function db() {
   const { getAdminDatabase } = await import("../geo/admin-store.ts");
@@ -60,7 +62,7 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
     const val = snap.val() as BookingLink;
     // RTDB drops null fields on write; normalize absent nullable fields back
     // to null so downstream writes never carry undefined into set().
-    return { ...val, conversationId: val.conversationId ?? null, meetingId: val.meetingId ?? null, claimState: val.claimState ?? null, claimError: val.claimError ?? null };
+    return { ...val, conversationId: val.conversationId ?? null, meetingId: val.meetingId ?? null, claimState: val.claimState ?? null, claimError: val.claimError ?? null, claimedAt: val.claimedAt ?? null };
   }
 
   async updateLink(l: BookingLink): Promise<void> {
@@ -68,7 +70,7 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
   }
 
   async claimLink(l: BookingLink): Promise<boolean> {
-    const claimed: BookingLink = { ...l, claimState: "claiming" };
+    const claimed: BookingLink = { ...l, claimState: "claiming", claimedAt: new Date().toISOString() };
     return rtdbCasPut<BookingLink>(
       `${outboundDataRoot()}/bookingLinksByToken/${safeKey(l.tokenHash)}`,
       linkClaimable,
@@ -77,7 +79,7 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
   }
 
   async releaseLinkClaim(l: BookingLink): Promise<void> {
-    await this.saveLink({ ...l, claimState: null });
+    await this.saveLink({ ...l, claimState: null, claimedAt: null });
   }
 
   async markClaimUnknown(l: BookingLink, claimError?: string): Promise<void> {
@@ -91,5 +93,61 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
     const snap = await database.ref(`${outboundDataRoot()}/bookingLinksByToken`).get();
     if (!snap.exists()) return [];
     return Object.values(snap.val() as Record<string, BookingLink>).filter((l) => l.tenantId === tenantId);
+  }
+}
+
+// Operation intents live under the tenant root (they are operator-facing
+// recovery state, unlike links which are indexed globally by token hash).
+export class RtdbOperationIntentStore implements OperationIntentStore {
+  private path(tenantId: string, opId: string): string {
+    return `${tenantRoot(tenantId)}/operationIntents/${safeKey(opId)}`;
+  }
+
+  async putIntent(intent: OperationIntent): Promise<void> {
+    const wrote = await rtdbCasPut<OperationIntent>(
+      this.path(intent.tenantId, intent.opId),
+      (current) => current === null || sameIntent(current, intent),
+      intent
+    );
+    if (!wrote) throw new Error(`operation_intent_conflict: ${intent.opId}`);
+  }
+
+  async transitionIntent(tenantId: string, opId: string, from: OperationIntentState, to: "completed" | "quarantined", error?: string): Promise<boolean> {
+    const next = (current: OperationIntent): OperationIntent => ({
+      ...current,
+      state: to,
+      resolvedAt: new Date().toISOString(),
+      error: error ?? null,
+    });
+    // check-then-CAS: the write only lands when the current state matches.
+    // The read-modify-write is atomic via the ETag compare-and-put retry loop.
+    const path = this.path(tenantId, opId);
+    let decided: OperationIntent | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const current = await this.getIntent(tenantId, opId);
+      if (!current || current.state !== from) return false;
+      decided = next(current);
+      const wrote = await rtdbCasPut<OperationIntent>(path, (c) => c !== null && c.state === from, decided);
+      if (wrote) return true;
+      // a real conflict means state changed concurrently: re-evaluate
+    }
+    return false;
+  }
+
+  async getIntent(tenantId: string, opId: string): Promise<OperationIntent | null> {
+    const database = await db();
+    const snap = await database.ref(this.path(tenantId, opId)).get();
+    if (!snap.exists()) return null;
+    const val = snap.val() as OperationIntent;
+    return val.tenantId === tenantId ? { ...val, resolvedAt: val.resolvedAt ?? null, error: val.error ?? null } : null;
+  }
+
+  async listIntents(tenantId: string, state?: OperationIntentState): Promise<OperationIntent[]> {
+    const database = await db();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/operationIntents`).get();
+    if (!snap.exists()) return [];
+    return (Object.values(snap.val() as Record<string, OperationIntent>) as OperationIntent[])
+      .filter((i) => i.tenantId === tenantId && (!state || i.state === state))
+      .map((i) => ({ ...i, resolvedAt: i.resolvedAt ?? null, error: i.error ?? null }));
   }
 }
