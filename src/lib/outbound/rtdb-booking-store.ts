@@ -19,6 +19,14 @@ function safeKey(id: string): string {
   return id;
 }
 
+// RTDB drops null fields on write: a fresh link reads back with usedAt and
+// claimState ABSENT (undefined), so compare loosely against null. Exported
+// for the regression test: the live claim bug this fixes passed every
+// memory-store test because the in-memory store preserved explicit nulls.
+export function linkClaimable(current: BookingLink | null): boolean {
+  return !!current && current.usedAt == null && current.claimState == null;
+}
+
 export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
   async savePolicy(p: BookingPolicy): Promise<void> {
     const database = await db();
@@ -59,7 +67,7 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
     const claimed: BookingLink = { ...l, claimState: "claiming" };
     return rtdbCasPut<BookingLink>(
       `${outboundDataRoot()}/bookingLinksByToken/${safeKey(l.tokenHash)}`,
-      (current) => !!current && current.usedAt === null && !current.claimState,
+      linkClaimable,
       claimed
     );
   }
