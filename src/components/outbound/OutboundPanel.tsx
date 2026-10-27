@@ -504,7 +504,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
               <ul className="grid gap-1 text-sm text-zinc-300">
                 {meetings.map((m) => (
                   <li key={m.meetingId} className="rounded-lg border border-white/10 px-3 py-2">
-                    {m.startsAt} ({m.timezone}) · {m.booked ? "booked" : "not booked"} · held: {m.held === null ? "unknown" : m.held ? "yes" : "no"}
+                    {m.startsAt} ({m.timezone}) · {m.booked ? "booked" : "not booked"} · held: {(m.held ?? null) === null ? "unknown" : m.held ? "yes" : "no"}
                   </li>
                 ))}
               </ul>
