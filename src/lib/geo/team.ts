@@ -118,7 +118,17 @@ async function writeInvite(ownerUid: string, invite: TeamInvite | null): Promise
 
 // ---- access resolution for every API route ----
 
-export async function resolveWorkspaceAccess(request: Request, permission: TeamPermission): Promise<WorkspaceAccess> {
+import { NEW_SIGNUP_BLOCK_MESSAGE, decideSignupAccess } from "@/lib/geo/signup-gate";
+
+export interface ResolveAccessOptions {
+  allowNewSignup?: boolean;
+}
+
+export async function resolveWorkspaceAccess(
+  request: Request,
+  permission: TeamPermission,
+  options?: ResolveAccessOptions
+): Promise<WorkspaceAccess> {
   const identity = await getFirebaseIdentity(request);
   if (!identity) throw new RequestError("Sign in with Google to continue.", 401);
 
@@ -127,6 +137,17 @@ export async function resolveWorkspaceAccess(request: Request, permission: TeamP
   }
 
   const membership = await adminGetMembership(identity.uid);
+  if (!membership && !options?.allowNewSignup) {
+    const snapshot = await (await getAdminDatabase()).ref(`users/${identity.uid}/geo`).get();
+    const decision = decideSignupAccess({
+      isDemo: false,
+      adminConfigured: true,
+      hasMembership: false,
+      hasWorkspaceData: snapshot.exists(),
+      allowNewSignup: false,
+    });
+    if (decision === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
+  }
   const workspaceUid = membership?.ownerUid ?? identity.uid;
   const role: TeamRole = membership?.role ?? "owner";
   if (!roleAllows(role, permission)) {
