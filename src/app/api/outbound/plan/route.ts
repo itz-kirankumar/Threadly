@@ -6,6 +6,8 @@ import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +24,11 @@ function enabled(): boolean {
 
 // Runs the planner for one campaign. Creates drafted intents only; nothing
 // is sent by this or any other route.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -42,6 +49,7 @@ export async function POST(request: Request) {
       { campaigns: new RtdbCampaignStore(), ledger: new RtdbLedgerStore(), contacts: new RtdbContactStore(), experiments: new RtdbExperimentStore() },
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
+    await audit(access.workspaceUid, access.identity.uid, "plan.run", `campaign:${campaignId}`, "success", `planned=${result.planned.length} skipped=${result.skipped.length} blocked=${result.blocked.length}`);
     return Response.json(
       {
         campaignId: result.campaignId,

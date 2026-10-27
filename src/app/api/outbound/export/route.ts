@@ -1,6 +1,8 @@
 import { errorResponse } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,11 @@ function csvCell(value: string | undefined | null): string {
 
 // CSV export (PRD F19): tenant contacts with verification state and rights
 // provenance, for CRM handoff without a live CRM connection.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function GET(request: Request) {
   try {
     if (!enabled()) {
@@ -44,6 +51,7 @@ export async function GET(request: Request) {
         ].join(",")
       );
     }
+    await audit(access.workspaceUid, access.identity.uid, "contacts.exported", `tenant:${access.workspaceUid}`, "success", `count=${contacts.length}`);
     return new Response(lines.join("\n") + "\n", {
       headers: { ...NO_STORE, "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="threadly-contacts.csv"' },
     });

@@ -2,6 +2,8 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { enrollContact } from "@/lib/outbound/campaign";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +16,11 @@ function enabled(): boolean {
   // explicit data-root decision so a stray flag can never silently target
   // production tenant data.
   return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
+}
+
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
 }
 
 export async function POST(request: Request) {
@@ -48,6 +55,7 @@ export async function POST(request: Request) {
       actor: access.identity.uid,
       now: new Date(),
     });
+    await audit(access.workspaceUid, access.identity.uid, "enrollment.created", `enrollment:${enrollment.enrollmentId}`, "success", `campaign=${campaignId} contact=${body.contactId}`);
     return Response.json({ enrollment }, { status: 201, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound enrollments");

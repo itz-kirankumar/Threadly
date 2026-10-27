@@ -3,6 +3,8 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { intentUniqueKey } from "@/lib/outbound/ledger";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import type { MessageIntent } from "@/lib/outbound/types";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +20,11 @@ function outboundEnabled(): boolean {
 }
 
 // POST /api/outbound/intents - create (idempotently) one send intent.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!outboundEnabled()) {
@@ -65,6 +72,7 @@ export async function POST(request: Request) {
       const existing = await store.findIntentByUniqueKey(intent.uniqueKey);
       return Response.json({ intent: existing, duplicate: true }, { status: 200, headers: { "Cache-Control": "no-store" } });
     }
+    await audit(access.workspaceUid, access.identity.uid, "intent.created", `intent:${intent.intentId}`, "success", `campaign=${intent.campaignId} step=${intent.step}`);
     return Response.json({ intent, duplicate: false }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return errorResponse(error, "outbound intents");

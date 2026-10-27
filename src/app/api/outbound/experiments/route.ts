@@ -3,6 +3,8 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { validateExperiment } from "@/lib/outbound/experiments";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
 import type { Experiment, ExperimentVariant } from "@/lib/outbound/types";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +20,11 @@ function enabled(): boolean {
 // variantsApproved: true, which records the caller as the approver of every
 // variant's templates. Assignment is deterministic per contact; holdouts
 // are never planned.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -61,6 +68,7 @@ export async function POST(request: Request) {
       return Response.json({ error: `Invalid experiment: ${errors.join(", ")}` }, { status: 400, headers: NO_STORE });
     }
     await new RtdbExperimentStore().saveExperiment(experiment);
+    await audit(access.workspaceUid, access.identity.uid, "experiment.created", `experiment:${experiment.experimentId}`, "success", `campaign=${campaignId} holdout=${experiment.holdoutPercent ?? "n/a"}`);
     return Response.json({ experiment }, { status: 201, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound experiments");

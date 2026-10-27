@@ -3,6 +3,8 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { commitImport, mapRows, parseCsv, type CsvMapping } from "@/lib/outbound/csv-import";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbAccountStore, RtdbEvidenceStore } from "@/lib/outbound/rtdb-import-store";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +20,11 @@ function enabled(): boolean {
 // CSV import (PRD F02): action "preview" parses + validates without writing;
 // action "commit" writes contacts with source evidence and rights records.
 // Commit without rightsConfirmed=true is blocked as an unlicensed source.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -74,6 +81,7 @@ export async function POST(request: Request) {
           now: new Date(),
         }
       );
+      await audit(access.workspaceUid, access.identity.uid, "import.committed", `import:${result.importId ?? sourceName}`, "success", `created=${result.created} reconciled=${result.reconciled} invalid=${result.invalid.length}`);
       return Response.json(result, { status: 201, headers: NO_STORE });
     }
     return Response.json({ error: "Unknown action." }, { status: 400 });

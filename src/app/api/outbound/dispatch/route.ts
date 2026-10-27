@@ -9,6 +9,8 @@ import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import { RtdbUsageStore } from "@/lib/outbound/rtdb-usage-store";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +27,11 @@ function enabled(): boolean {
 // OUTBOUND_PROVIDERS_LIVE=true on the deployment; no current deployment sets
 // it, so every send falls back to the mock and stays synthetic. Every gate in
 // checkDispatch still applies, including sender_not_active.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -49,6 +56,7 @@ export async function POST(request: Request) {
       new RoutingDispatchProvider(new RtdbConsentStore()),
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
+    await audit(access.workspaceUid, access.identity.uid, "dispatch.run", `campaign:${campaignId}`, "success", `dispatched=${result.dispatched.length} deferred=${result.deferred.length} skipped=${result.skipped.length}`);
     return Response.json(
       { campaignId, provider: "routing(mock-unless-live)", dispatchedCount: result.dispatched.length, dispatched: result.dispatched, deferred: result.deferred, skipped: result.skipped },
       { status: 200, headers: NO_STORE }

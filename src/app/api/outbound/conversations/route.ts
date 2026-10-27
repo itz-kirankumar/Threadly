@@ -3,6 +3,8 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { classifyReplyText, INTENTS } from "@/lib/outbound/conversations";
 import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
 import type { Conversation, ConversationIntent } from "@/lib/outbound/types";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +19,11 @@ function enabled(): boolean {
 // Records a conversation/reply. humanReplySeenAt is written at intake time,
 // before any classification. Classification is assistive only ("auto" with
 // "uncertain" as the default); automated actions never key off it.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -45,6 +52,7 @@ export async function POST(request: Request) {
     };
     const store = new RtdbConversationStore();
     await store.saveConversation(conversation);
+    await audit(access.workspaceUid, access.identity.uid, "conversation.created", `conversation:${conversation.conversationId}`, "success", `contact=${conversation.contactId}`);
     return Response.json({ conversation }, { status: 201, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound conversations");

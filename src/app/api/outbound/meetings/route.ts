@@ -8,6 +8,8 @@ import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import type { BookingPolicy } from "@/lib/outbound/types";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +35,11 @@ function stores() {
 // are admin actions; the recipient-facing slot flow is the public booking
 // route. Direct calendar booking (PRD F18) stays off unless the policy sets
 // directBooking and the sender has calendar-scope consent.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -70,6 +77,7 @@ export async function POST(request: Request) {
         return Response.json({ error: "startHour must be before endHour." }, { status: 400 });
       }
       await bookingStore.savePolicy(policy);
+      await audit(access.workspaceUid, access.identity.uid, "booking_policy.saved", `policy:${policy.policyId}`, "success");
       return Response.json({ policy }, { status: 200, headers: NO_STORE });
     }
 
@@ -86,7 +94,11 @@ export async function POST(request: Request) {
         return Response.json({ error: "contactId, organizerSenderId and policyId are required." }, { status: 400 });
       }
       const result = await createBookingLink(stores(), input);
-      if (!result.ok) return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });
+      if (!result.ok) {
+        await audit(access.workspaceUid, access.identity.uid, "booking_link.created", `contact:${input.contactId}`, "denied", result.error);
+        return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });
+      }
+      await audit(access.workspaceUid, access.identity.uid, "booking_link.created", `booking_link:${result.bookingLinkId}`, "success", `contact=${input.contactId} organizer=${input.organizerSenderId}`);
       const url = new URL(request.url);
       return Response.json(
         { bookingLinkId: result.bookingLinkId, expiresAt: result.expiresAt, bookingUrl: `${url.origin}/api/outbound/booking/${result.token}` },
@@ -102,7 +114,11 @@ export async function POST(request: Request) {
       const sender = meeting ? await senderStore.getSender(access.workspaceUid, meeting.organizerSenderId) : null;
       const calendar = await resolveCalendarRuntime(new RtdbConsentStore(), sender);
       const result = await cancelMeeting(stores(), calendar, { tenantId: access.workspaceUid, meetingId, actor: access.identity.uid });
-      if (!result.ok) return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });
+      if (!result.ok) {
+        await audit(access.workspaceUid, access.identity.uid, "meeting.cancelled", `meeting:${meetingId}`, "denied", result.error);
+        return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });
+      }
+      await audit(access.workspaceUid, access.identity.uid, "meeting.cancelled", `meeting:${meetingId}`, "success");
       return Response.json({ meetingId, cancelled: true }, { status: 200, headers: NO_STORE });
     }
 

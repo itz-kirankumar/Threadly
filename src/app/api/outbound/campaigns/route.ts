@@ -3,6 +3,8 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { approveCampaign } from "@/lib/outbound/campaign";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import type { CampaignVersion, RoleId } from "@/lib/outbound/types";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +23,11 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 // owner/admin may approve; the CampaignStore functions re-verify anyway.
 function outboundRole(role: string): RoleId {
   return role === "owner" || role === "admin" ? "campaign_approver" : "rep";
+}
+
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
 }
 
 export async function POST(request: Request) {
@@ -78,6 +85,7 @@ export async function POST(request: Request) {
         createdBy: access.identity.uid,
       };
       await store.saveCampaignVersion(campaign);
+      await audit(tenantId, access.identity.uid, "campaign.created", `campaign:${campaignId}:v${campaign.version}`, "success");
       return Response.json({ campaign }, { status: 201, headers: NO_STORE });
     }
 
@@ -93,6 +101,7 @@ export async function POST(request: Request) {
         approverRole: outboundRole(access.role),
         now: new Date(),
       });
+      await audit(tenantId, access.identity.uid, "campaign.approved", `campaign:${campaignId}:v${version}`, "success", `approvalId=${approval.approvalId}`);
       return Response.json({ approval }, { status: 201, headers: NO_STORE });
     }
 

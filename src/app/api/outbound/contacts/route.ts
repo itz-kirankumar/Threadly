@@ -2,6 +2,8 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import type { Contact, ContactVerificationState, RightsRecord } from "@/lib/outbound/types";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +22,11 @@ function enabled(): boolean {
 // Creates a contact and (optionally) its rights record. The planner still
 // evaluates eligibility fresh on every run; writing a record here grants
 // nothing by itself.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -75,6 +82,7 @@ export async function POST(request: Request) {
       };
       await store.saveRights(rights);
     }
+    await audit(access.workspaceUid, access.identity.uid, "contact.created", `contact:${contact.contactId}`, "success", rights ? "with_rights_record" : null);
     return Response.json({ contact, rights }, { status: 201, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound contacts");

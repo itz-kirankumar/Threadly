@@ -2,6 +2,8 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { recordHumanReply } from "@/lib/outbound/campaign";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
+import { auditEvent } from "@/lib/outbound/audit";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,11 @@ function enabled(): boolean {
 // Records a human reply on an enrollment: marks it replied and cancels all
 // cancellable intents BEFORE any classification (PRD F15). Provider-accepted
 // messages cannot be recalled; only pre-dispatch intents are cancelled.
+
+async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
+  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
+}
+
 export async function POST(request: Request) {
   try {
     if (!enabled()) {
@@ -43,6 +50,7 @@ export async function POST(request: Request) {
       actor: access.identity.uid,
       now: new Date(),
     });
+    await audit(access.workspaceUid, access.identity.uid, "reply.recorded", `enrollment:${enrollmentId}`, "success", `cancelledIntents=${result.cancelledIntents}`);
     return Response.json({ enrollmentId, status: "replied", cancelledIntents: result.cancelledIntents }, { headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound replies");
