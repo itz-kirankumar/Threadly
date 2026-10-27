@@ -82,12 +82,23 @@ export async function runDispatch(
   const tenantCostComplete = !events.some((e) => e.costMinorUnits === null);
   const tenantCostToDate = events.reduce((sum, e) => sum + (e.costMinorUnits ?? 0), 0);
 
-  const intents = (await campaigns.listIntentsByCampaign(tenantId, campaignId)).filter(
+  const allIntents = await campaigns.listIntentsByCampaign(tenantId, campaignId);
+  // Lease expiry NEVER authorizes retrying a possibly-external send. Stranded
+  // dispatching/provider_unknown intents are reported, not retried: a real
+  // provider adapter would need reconciliation first (and mock-only
+  // validation does not establish real-provider retry safety).
+  for (const i of allIntents) {
+    if (i.status === "dispatching" || i.status === "provider_unknown") {
+      result.skipped.push({ intentId: i.intentId, reason: `${i.status}_stranded_needs_reconciliation` });
+    }
+  }
+  const intents = allIntents.filter(
     (i) =>
       i.status === "approved" ||
       i.status === "scheduled" ||
-      // Crash recovery: a reservation whose lease has expired belongs to a
-      // run that died mid-flight; reclaim it and re-evaluate the gates.
+      // Crash recovery, reserved-before-dispatch ONLY: in "reserved" no
+      // provider call has happened yet, so reclaiming an expired reservation
+      // cannot repeat an external send.
       (i.status === "reserved" && i.leaseExpiresAt !== null && Date.parse(i.leaseExpiresAt) <= now.getTime())
   );
   for (const intent of intents) {
@@ -163,6 +174,7 @@ export async function runDispatch(
       outcome: sendResult.outcome,
       providerStatusCode: sendResult.statusCode,
       detail: sendResult.detail,
+      synthetic: provider.name === "mock",
       createdAt: now.toISOString(),
       createdBy: actor,
     };
@@ -186,6 +198,7 @@ export async function runDispatch(
         // tenantCostComplete and blocks further dispatch).
         costMinorUnits: provider.name === "mock" ? 0 : null,
         currency: provider.name === "mock" ? "USD" : null,
+        ...(provider.name === "mock" ? { synthetic: true } : {}),
         createdAt: now.toISOString(),
         createdBy: actor,
       });
@@ -208,7 +221,8 @@ async function countAcceptedToday(
   for (const i of intents) {
     if (i.senderId !== senderId) continue;
     const attempts = await ledger.listAttempts(tenantId, i.intentId);
-    count += attempts.filter((a) => a.outcome === "accepted" && Date.parse(a.dispatchedAt) >= dayStart).length;
+    // Synthetic (mock) attempts are not provider-accepted sends.
+    count += attempts.filter((a) => a.outcome === "accepted" && !a.synthetic && Date.parse(a.dispatchedAt) >= dayStart).length;
   }
   return count;
 }

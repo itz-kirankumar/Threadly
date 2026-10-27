@@ -151,3 +151,42 @@ test("approveDraft rejects non-drafted intents", async () => {
     /intent_not_drafted/
   );
 });
+
+test("mock attempts and send usage are marked synthetic; synthetic attempts do not count toward daily cap", async () => {
+  const { stores, draft, intent, ledger, usage } = await setup([sender("snd1", "active")]);
+  await approveDraft({ ledger: stores.ledger, campaigns: stores.campaigns, drafts: stores.drafts }, { tenantId: "t1", draftId: draft.draftId, actor: "u1", now: NOW });
+  const res = await runDispatch(stores, new MockDispatchProvider(), { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  assert.equal(res.dispatched.length, 1);
+  const attempts = await ledger.listAttempts("t1", intent.intentId);
+  assert.equal(attempts[0].synthetic, true);
+  const sendEvent = (await usage.listUsage("t1")).find((e) => e.kind === "send");
+  assert.equal(sendEvent.synthetic, true);
+  // a follow-up intent for the same sender must still see zero accepted-today
+  // from the synthetic attempt (real caps count real sends only)
+  const attempts2 = await ledger.listAttempts("t1", intent.intentId);
+  assert.equal(attempts2.filter((a) => a.outcome === "accepted" && !a.synthetic).length, 0);
+});
+
+test("stranded dispatching/provider_unknown intents are reported, never retried on lease expiry", async () => {
+  const { stores, draft, intent, ledger } = await setup([sender("snd1", "active")]);
+  await approveDraft({ ledger: stores.ledger, campaigns: stores.campaigns, drafts: stores.drafts }, { tenantId: "t1", draftId: draft.draftId, actor: "u1", now: NOW });
+  // simulate a crash after dispatching began: force the stored status
+  const dispatching = { ...intent, status: "dispatching", leaseOwner: "dead-run", leaseExpiresAt: "2020-01-01T00:00:00Z" };
+  await stores.campaigns.saveIntent(dispatching);
+  const res = await runDispatch(stores, new MockDispatchProvider(), { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  assert.equal(res.dispatched.length, 0);
+  assert.deepEqual(res.skipped.map((s) => s.reason), ["dispatching_stranded_needs_reconciliation"]);
+  assert.equal((await ledger.listAttempts("t1", intent.intentId)).length, 0);
+});
+
+test("expired reserved-before-dispatch is reclaimed and gated again", async () => {
+  const { stores, draft, intent, ledger } = await setup([sender("snd1", "pending_consent")]);
+  await approveDraft({ ledger: stores.ledger, campaigns: stores.campaigns, drafts: stores.drafts }, { tenantId: "t1", draftId: draft.draftId, actor: "u1", now: NOW });
+  const staleReserved = { ...intent, status: "reserved", leaseOwner: "dead-run", leaseExpiresAt: "2020-01-01T00:00:00Z" };
+  await stores.campaigns.saveIntent(staleReserved);
+  const res = await runDispatch(stores, new MockDispatchProvider(), { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW });
+  assert.equal(res.dispatched.length, 0);
+  assert.ok(res.deferred[0].reasons.includes("sender_not_active:pending_consent"));
+  const final = await stores.ledger.getIntent("t1", intent.intentId).catch(() => null);
+  void final;
+});

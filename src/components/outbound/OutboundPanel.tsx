@@ -253,7 +253,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
             <p className="mt-1 text-xs text-zinc-500">Mock provider only: no external send occurs. Gates still apply; senders stay pending_consent.</p>
             {dispatchResult && (
               <div className="mt-2 text-xs text-zinc-400">
-                <p>{dispatchResult.dispatchedCount} dispatched (mock).</p>
+                <p>{dispatchResult.dispatchedCount} dispatched (mock - synthetic, no external send).</p>
                 {dispatchResult.deferred.map((df, i) => (
                   <p key={i} className="text-amber-700 dark:text-amber-300/80">{df.intentId}: {df.reasons.join(", ")}</p>
                 ))}

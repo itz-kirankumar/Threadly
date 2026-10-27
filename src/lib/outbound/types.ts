@@ -190,6 +190,10 @@ export interface DeliveryAttempt extends CreationMeta {
   outcome: "accepted" | "rejected" | "unknown";
   providerStatusCode: number | null;
   detail: string | null;
+  // True when the outcome came from the mock adapter: no external send ever
+  // happened. Synthetic attempts must be excluded from any real sent or
+  // provider delivery counts.
+  synthetic: boolean;
 }
 
 export type ConversationIntent =
@@ -244,4 +248,8 @@ export interface UsageEvent extends CreationMeta {
   idempotencyKey: string;
   costMinorUnits: number | null;
   currency: string | null;
+  // Present and true only for mock-adapter events: excluded from real
+  // spend/delivery accounting. Absent (never undefined) otherwise - RTDB
+  // drops undefined values on write.
+  synthetic?: boolean;
 }
