@@ -18,6 +18,8 @@ import BillingPanel from "./BillingPanel";
 import ActivityPanel from "./ActivityPanel";
 import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
+import CrmOutreachPanel from "@/components/crm/CrmOutreachPanel";
+import GeoFlowOptimizerPanel from "./GeoFlowOptimizerPanel";
 import {
   buildCitationLeaderboard,
   buildCompetitorComparison,
@@ -36,7 +38,7 @@ function providerErrorTitle(run: ScanRun, id: string): string {
   return `Scan failed for this provider: ${label}`;
 }
 
-type Tab = "overview" | "queries" | "citations" | "runs" | "social" | "settings";
+type Tab = "overview" | "queries" | "citations" | "runs" | "optimizer" | "outreach" | "social" | "settings";
 
 interface Props {
   user: User | null;
@@ -198,7 +200,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         { id: "tab-overview", label: "Go to Overview", hint: "Section", run: () => setTab("overview") },
         { id: "tab-queries", label: "Go to Questions", hint: "Section", run: () => setTab("queries") },
         { id: "tab-citations", label: "Go to Citations", hint: "Section", run: () => setTab("citations") },
+        { id: "tab-optimizer", label: "Go to AI Optimizer", hint: "Section", run: () => setTab("optimizer") },
         { id: "tab-runs", label: "Go to Scans", hint: "Section", run: () => setTab("runs") },
+        { id: "tab-outreach", label: "Go to Leads & Outreach", hint: "Section", run: () => setTab("outreach") },
         { id: "tab-social", label: "Go to Social search", hint: "Section", run: () => setTab("social") },
         { id: "tab-settings", label: "Go to Workspace settings", hint: "Section", run: () => setTab("settings") },
         { id: "account", label: "Open Account settings", hint: "Page", run: () => { window.location.href = "/portal/account"; } },
@@ -453,8 +457,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     { id: "overview", label: "Overview" },
     { id: "queries", label: `Questions (${state.queries.length})` },
     { id: "citations", label: "Citations" },
+    { id: "optimizer", label: "AI Optimizer" },
     { id: "runs", label: `Scans (${state.runs.length})` },
-    ...(!readOnly ? [{ id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
+    ...(!readOnly ? [{ id: "outreach" as Tab, label: "Leads & Outreach" }, { id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
   ];
 
   const body = (
@@ -469,7 +474,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         <div>
           <h1 className="flex items-center gap-2.5 text-xl font-semibold text-white">
             {state.brand.logoDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
+              // eslint-disable-next-line
               <img src={state.brand.logoDataUrl} alt="" className="h-7 w-7 rounded-md border border-white/10 object-cover" />
             ) : null}
             {state.brand.name}
@@ -800,6 +805,16 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           )}
         </div>
       )}
+      {tab === "optimizer" && (
+        <GeoFlowOptimizerPanel
+          brand={state?.brand ?? null}
+          queries={state?.queries ?? []}
+          authedFetch={authedFetch}
+        />
+      )}
+      {tab === "outreach" && !readOnly && (
+        <CrmOutreachPanel authedFetch={authedFetch} />
+      )}
       {tab === "social" && !readOnly && (
         <SocialPanel authedFetch={authedFetch} />
       )}
@@ -960,7 +975,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         <div className="shrink-0 border-b border-white/[0.06] px-3 py-3">
           <div className="flex items-center gap-2.5">
             {state.brand.logoDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
+              // eslint-disable-next-line
               <img src={state.brand.logoDataUrl} alt="" className="h-8 w-8 shrink-0 rounded-md border border-white/10 object-cover" />
             ) : (
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-xs font-semibold text-violet-300">
@@ -1098,6 +1113,18 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
   runs: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" /><path d="M13.5 2.5v2.6h-2.6" />
+    </svg>
+  ),
+  optimizer: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.5 1.5 3 9h5l-.5 5.5L13 7H8l.5-5.5z" />
+    </svg>
+  ),
+  outreach: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <circle cx="8" cy="8" r="3" />
+      <circle cx="8" cy="8" r="0.8" fill="currentColor" />
     </svg>
   ),
   social: (

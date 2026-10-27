@@ -111,7 +111,7 @@ export default function SetupWizard({ busy, error, onSave, initial, onCancel }: 
         <span className={label}>Company logo (optional)</span>
         <div className="flex items-center gap-3">
           {logoDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
+            // eslint-disable-next-line
             <img src={logoDataUrl} alt="Company logo" className="h-12 w-12 rounded-lg border border-white/10 object-cover" />
           ) : (
             <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-white/15 text-lg text-zinc-600">
