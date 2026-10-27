@@ -92,30 +92,32 @@ export class RtdbLedgerStore implements LedgerStore {
     expected: MessageStatus,
     next: MessageIntent
   ): Promise<boolean> {
+    // ETag compare-and-put over the RTDB REST API: genuinely atomic, and not
+    // dependent on the client SDK's local transaction cache (which aborts on
+    // a stale empty cache in fresh serverless processes).
     const database = await db();
-    const ref = database.ref(`${tenantRoot(tenantId)}/intents/${intentId}`);
-    // Prime the local cache: a transaction callback runs first against the
-    // locally-known value, which is null in a fresh serverless process; a
-    // bare abort there would falsely report a conflict.
-    let lastError: unknown = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await ref.get();
-      const tx = await ref.transaction((current: MessageIntent | null) => {
-        if (!current || current.tenantId !== tenantId || current.status !== expected) return; // abort
-        return next;
+    const app = (database as unknown as { app: { options: { databaseURL?: string }; } }).app;
+    const base = (app.options.databaseURL ?? "").replace(/\/$/, "");
+    if (!base) throw new Error("RTDB databaseURL missing");
+    const credential = (app as unknown as { options: { credential?: { getAccessToken(): Promise<{ access_token: string }> } } }).options.credential;
+    if (!credential) throw new Error("RTDB admin credential missing");
+    const path = `${tenantRoot(tenantId)}/intents/${intentId}`;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const token = (await credential.getAccessToken()).access_token;
+      const getRes = await fetch(`${base}/${path}.json?etag=true&access_token=${encodeURIComponent(token)}`, { cache: "no-store" });
+      if (!getRes.ok) throw new Error(`cas_read_failed:${getRes.status}`);
+      const etag = getRes.headers.get("ETag") ?? getRes.headers.get("etag");
+      const current = (await getRes.json()) as MessageIntent | null;
+      if (!current || current.tenantId !== tenantId || current.status !== expected) return false; // real conflict
+      if (!etag) throw new Error("cas_etag_missing");
+      const putRes = await fetch(`${base}/${path}.json?access_token=${encodeURIComponent(token)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "if-match": etag },
+        body: JSON.stringify(next),
       });
-      if (tx.committed) return true;
-      const txErr = (tx as unknown as { error?: unknown }).error;
-      if (txErr) lastError = txErr;
-      // Distinguish a real status conflict from a speculative-null abort.
-      const now = await ref.get();
-      const current = now.val() as MessageIntent | null;
-      if (current && current.tenantId === tenantId && current.status === expected) continue; // retry once
-      return false;
-    }
-    if (lastError) {
-      const msg = lastError instanceof Error ? lastError.message : String(lastError);
-      throw new Error(`cas_tx_error:${msg}`);
+      if (putRes.ok) return true;
+      if (putRes.status === 412) continue; // lost the race; retry against fresh state
+      throw new Error(`cas_write_failed:${putRes.status}`);
     }
     return false;
   }
