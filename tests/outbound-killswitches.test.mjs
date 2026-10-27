@@ -140,3 +140,17 @@ test("checkDispatch itself treats kill reasons as blocking", () => {
   assert.equal(d.allow, false);
   assert.ok(d.reasons.includes("kill_switch_tenant:full stop"));
 });
+
+test("runDispatch refuses to run without the kill-switch store (runtime fail-closed)", async () => {
+  const stores = await plannableSetup();
+  const drafts = new MemoryDraftStore();
+  const senders = { async getSender() { return null; } };
+  await assert.rejects(
+    () => runDispatch(
+      { campaigns: stores.campaigns, ledger: stores.ledger, drafts, senders, contacts: stores.contacts, usage: new MemoryUsageStore() },
+      new MockDispatchProvider(),
+      { tenantId: "t1", campaignId: "c1", actor: "u1", now: NOW },
+    ),
+    /kill switch store required/,
+  );
+});

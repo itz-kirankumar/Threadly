@@ -67,10 +67,11 @@ export interface DispatchStores {
   // Optional: when present, a sender whose provider sync is stale or never
   // ran defers dispatch (inbound state may be out of date: replies/bounces).
   ingestion?: IngestionStore;
-  // F09 kill switches. Optional in the library so existing compositions keep
-  // compiling, but EVERY production route must wire it: a runner without the
-  // store silently ignores engaged switches. Audited routes wire it.
-  killSwitches?: KillSwitchStore;
+  // F09 kill switches. REQUIRED: runDispatch is the only dispatch-capable
+  // entry, and it refuses to run without the store (runtime fail-closed for
+  // JS callers that bypass the type), so no composition can silently
+  // dispatch past an engaged switch.
+  killSwitches: KillSwitchStore;
 }
 
 export interface DispatchResult {
@@ -90,6 +91,11 @@ export async function runDispatch(
 ): Promise<DispatchResult> {
   const { campaigns, ledger, drafts, senders, contacts, usage } = stores;
   const { tenantId, campaignId, actor, now } = input;
+  if (!stores.killSwitches) {
+    // Runtime fail-closed: a JavaScript caller can bypass the required type.
+    // Dispatching without the safety control is never allowed.
+    throw new Error("kill switch store required: refusing to dispatch without the safety control");
+  }
   const result: DispatchResult = { dispatched: [], deferred: [], skipped: [] };
 
   const campaign = await campaigns.latestCampaignVersion(tenantId, campaignId);
@@ -98,7 +104,7 @@ export async function runDispatch(
   const tenantCostComplete = !events.some((e) => e.costMinorUnits === null);
   const tenantCostToDate = events.reduce((sum, e) => sum + (e.costMinorUnits ?? 0), 0);
 
-  const switches = stores.killSwitches ? await stores.killSwitches.list(tenantId) : [];
+  const switches = await stores.killSwitches.list(tenantId);
   const allIntents = await campaigns.listIntentsByCampaign(tenantId, campaignId);
   // Lease expiry NEVER authorizes retrying a possibly-external send. Stranded
   // dispatching/provider_unknown intents are reported, not retried: a real

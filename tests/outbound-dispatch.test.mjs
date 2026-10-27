@@ -8,6 +8,7 @@ const { MemoryDraftStore } = await import("../src/lib/outbound/drafts.ts");
 const { MemoryUsageStore } = await import("../src/lib/outbound/usage.ts");
 const { generateDrafts, approveDraft } = await import("../src/lib/outbound/draft-run.ts");
 const { MockDispatchProvider, runDispatch } = await import("../src/lib/outbound/dispatch.ts");
+const { MemoryKillSwitchStore } = await import("../src/lib/outbound/kill-switches.ts");
 
 const NOW = new Date("2026-10-27T12:00:00Z");
 const ISO = NOW.toISOString();
@@ -77,7 +78,7 @@ async function setup(senderList, contactId = "k1") {
   assert.equal(gen.rendered.length, 1);
   const draft = (await drafts.listDrafts("t1"))[0];
   const senders = new StaticSenderReader(senderList);
-  const stores = { campaigns, ledger, drafts, senders, contacts, usage };
+  const stores = { campaigns, ledger, drafts, senders, contacts, usage, killSwitches: new MemoryKillSwitchStore() };
   return { stores, campaign, intent, draft, ledger, usage, campaigns };
 }
 
