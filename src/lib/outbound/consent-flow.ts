@@ -30,7 +30,7 @@ export type BeginConsentResult =
 
 export async function beginConsent(
   senders: ConsentSenderStore,
-  input: { tenantId: string; senderId: string }
+  input: { tenantId: string; senderId: string; purpose?: "send" | "calendar" }
 ): Promise<BeginConsentResult> {
   const sender = await senders.getSender(input.tenantId, input.senderId);
   if (!sender) return { ok: false, status: 404, error: "Sender not found." };
@@ -46,12 +46,16 @@ export async function beginConsent(
       requiredEnvs: [...requiredEnvsFor(sender.provider), "OUTBOUND_OAUTH_STATE_KEY", "OUTBOUND_TOKEN_KEY"],
     };
   }
-  const { state, expiresAt } = createOAuthState({ tenantId: sender.tenantId, senderId: sender.senderId });
-  const consentUrl = mailAdapter(sender.provider).buildConsentUrl({
+  const purpose = input.purpose ?? "send";
+  const adapter = mailAdapter(sender.provider);
+  const { state, expiresAt } = createOAuthState({ tenantId: sender.tenantId, senderId: sender.senderId, purpose });
+  const requestedScopes = purpose === "calendar" ? adapter.calendarScopes : adapter.consentScopes;
+  const consentUrl = adapter.buildConsentUrl({
     clientId: config.clientId,
     redirectUri: config.redirectUri,
     state,
     loginHint: sender.email,
+    scopes: requestedScopes,
   });
   return { ok: true, consentUrl, expiresAt, provider: sender.provider };
 }
@@ -65,7 +69,7 @@ export async function completeConsent(
   records: ConsentRecords,
   input: { expectedTenantId: string; state: string; code: string; fetchImpl?: FetchImpl }
 ): Promise<CompleteConsentResult> {
-  let stateData: { tenantId: string; senderId: string };
+  let stateData: { tenantId: string; senderId: string; purpose: "send" | "calendar" };
   try {
     stateData = verifyOAuthState(input.state);
   } catch (error) {
@@ -86,7 +90,11 @@ export async function completeConsent(
   const adapter = mailAdapter(sender.provider, input.fetchImpl);
   let tokens;
   try {
-    tokens = await adapter.exchangeCode({ ...config, code: input.code });
+    tokens = await adapter.exchangeCode({
+      ...config,
+      code: input.code,
+      scopes: stateData.purpose === "calendar" ? adapter.calendarScopes : adapter.consentScopes,
+    });
   } catch (error) {
     return { ok: false, status: 502, error: `Provider token exchange failed: ${String(error)}` };
   }
@@ -110,7 +118,7 @@ export async function completeConsent(
     consentTraceId: `ctc_${crypto.randomUUID()}`,
     senderId: sender.senderId,
     provider: sender.provider,
-    scopes: tokens.scopes.length > 0 ? tokens.scopes : [...adapter.consentScopes],
+    scopes: tokens.scopes.length > 0 ? tokens.scopes : [...(stateData.purpose === "calendar" ? adapter.calendarScopes : adapter.consentScopes)],
     consentedAt: now,
     consentorIdentity: profile.email,
     revokedAt: null,

@@ -7,6 +7,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 interface StatePayload {
   tenantId: string;
   senderId: string;
+  purpose?: "send" | "calendar";
   nonce: string;
   exp: number; // epoch ms
 }
@@ -27,11 +28,12 @@ function sign(payloadB64: string): string {
   return createHmac("sha256", stateKey()).update(payloadB64, "utf8").digest("hex");
 }
 
-export function createOAuthState(input: { tenantId: string; senderId: string; ttlMs?: number }): { state: string; expiresAt: string } {
+export function createOAuthState(input: { tenantId: string; senderId: string; purpose?: "send" | "calendar"; ttlMs?: number }): { state: string; expiresAt: string } {
   const ttl = input.ttlMs ?? 10 * 60 * 1000;
   const payload: StatePayload = {
     tenantId: input.tenantId,
     senderId: input.senderId,
+    ...(input.purpose ? { purpose: input.purpose } : {}),
     nonce: randomBytes(16).toString("hex"),
     exp: Date.now() + ttl,
   };
@@ -39,7 +41,7 @@ export function createOAuthState(input: { tenantId: string; senderId: string; tt
   return { state: `${payloadB64}.${sign(payloadB64)}`, expiresAt: new Date(payload.exp).toISOString() };
 }
 
-export function verifyOAuthState(state: string): { tenantId: string; senderId: string } {
+export function verifyOAuthState(state: string): { tenantId: string; senderId: string; purpose: "send" | "calendar" } {
   const dot = state.lastIndexOf(".");
   if (dot <= 0) throw new Error("malformed oauth state");
   const payloadB64 = state.slice(0, dot);
@@ -52,5 +54,5 @@ export function verifyOAuthState(state: string): { tenantId: string; senderId: s
   if (typeof payload.exp !== "number" || payload.exp < Date.now()) {
     throw new Error("expired oauth state");
   }
-  return { tenantId: payload.tenantId, senderId: payload.senderId };
+  return { tenantId: payload.tenantId, senderId: payload.senderId, purpose: payload.purpose === "calendar" ? "calendar" : "send" };
 }

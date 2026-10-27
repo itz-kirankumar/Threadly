@@ -225,9 +225,38 @@ export interface Meeting extends CreationMeta {
   attendees: string[];
   timezone: string;
   startsAt: ISODate;
-  booked: boolean; // event creation confirmed only
-  attendeeAccepted: boolean | null;
-  held: boolean | null;
+  durationMinutes: number;
+  booked: boolean; // provider event creation confirmed only
+  attendeeAccepted: boolean | null; // observed response, separate outcome
+  held: boolean | null; // meeting actually occurred, separate outcome
+  cancelledAt: ISODate | null;
+  // True when the confirming provider was the mock calendar adapter: no real
+  // calendar event exists. Never count toward real meeting metrics.
+  synthetic?: boolean;
+}
+
+export interface BookingPolicy extends CreationMeta {
+  tenantId: string;
+  policyId: string;
+  hostPool: string[]; // senderIds eligible to host
+  durationMinutes: number;
+  bufferMinutes: number; // gap required around existing events
+  workingHours: { timezone: string; days: number[]; startHour: number; endHour: number }; // days: 0=Sun
+  directBooking: boolean; // false = booking links only
+}
+
+// Public recipient-facing booking link. Only a sha256 token hash is stored.
+export interface BookingLink extends CreationMeta {
+  tenantId: string;
+  bookingLinkId: string;
+  tokenHash: string;
+  conversationId: string | null;
+  contactId: string;
+  organizerSenderId: string;
+  policyId: string;
+  expiresAt: ISODate;
+  usedAt: ISODate | null;
+  meetingId: string | null;
 }
 
 export interface CRMMapping extends CreationMeta {

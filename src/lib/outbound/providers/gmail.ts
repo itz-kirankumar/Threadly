@@ -51,6 +51,7 @@ async function tokenRequest(fetchImpl: FetchImpl, params: Record<string, string>
 export class GmailAdapter implements MailProviderAdapter {
   readonly provider = "gmail" as const;
   readonly consentScopes = ["https://www.googleapis.com/auth/gmail.send"];
+  readonly calendarScopes = ["https://www.googleapis.com/auth/calendar.events"];
 
   private readonly fetchImpl: FetchImpl;
 
@@ -58,12 +59,12 @@ export class GmailAdapter implements MailProviderAdapter {
     this.fetchImpl = fetchImpl;
   }
 
-  buildConsentUrl(input: { clientId: string; redirectUri: string; state: string; loginHint: string }): string {
+  buildConsentUrl(input: { clientId: string; redirectUri: string; state: string; loginHint: string; scopes?: string[] }): string {
     const params = new URLSearchParams({
       client_id: input.clientId,
       redirect_uri: input.redirectUri,
       response_type: "code",
-      scope: this.consentScopes.join(" "),
+      scope: (input.scopes ?? this.consentScopes).join(" "),
       access_type: "offline",
       prompt: "consent",
       state: input.state,
@@ -72,7 +73,7 @@ export class GmailAdapter implements MailProviderAdapter {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
-  async exchangeCode(input: { clientId: string; clientSecret: string; redirectUri: string; code: string }): Promise<ProviderTokens> {
+  async exchangeCode(input: { clientId: string; clientSecret: string; redirectUri: string; code: string; scopes?: string[] }): Promise<ProviderTokens> {
     return tokenRequest(this.fetchImpl, {
       client_id: input.clientId,
       client_secret: input.clientSecret,
@@ -82,7 +83,7 @@ export class GmailAdapter implements MailProviderAdapter {
     });
   }
 
-  async refreshTokens(input: { clientId: string; clientSecret: string; refreshToken: string }): Promise<ProviderTokens> {
+  async refreshTokens(input: { clientId: string; clientSecret: string; refreshToken: string; scopes?: string[] }): Promise<ProviderTokens> {
     return tokenRequest(this.fetchImpl, {
       client_id: input.clientId,
       client_secret: input.clientSecret,

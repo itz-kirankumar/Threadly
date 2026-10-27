@@ -66,7 +66,7 @@ test("token crypto round-trips and rejects tampering and wrong keys", () => {
 
 test("oauth state signs, verifies, and rejects tampering and expiry", () => {
   const { state } = createOAuthState({ tenantId: "t1", senderId: "snd_1" });
-  assert.deepEqual(verifyOAuthState(state), { tenantId: "t1", senderId: "snd_1" });
+  assert.deepEqual(verifyOAuthState(state), { tenantId: "t1", senderId: "snd_1", purpose: "send" });
   assert.throws(() => verifyOAuthState(state.slice(0, -2) + "zz"));
   const { state: expired } = createOAuthState({ tenantId: "t1", senderId: "snd_1", ttlMs: -1000 });
   assert.throws(() => verifyOAuthState(expired), /expired/);

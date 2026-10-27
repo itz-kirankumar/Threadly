@@ -30,12 +30,13 @@ export interface SendRequest {
 
 export interface MailProviderAdapter {
   readonly provider: SenderProvider;
-  // Scopes requested at consent. Send-only by default: reply ingestion needs
-  // additional restricted scopes and is a separate consent decision.
+  // Scopes requested at consent. Send-only by default: reply ingestion and
+  // calendar access are separate consent decisions with their own scopes.
   readonly consentScopes: string[];
-  buildConsentUrl(input: { clientId: string; redirectUri: string; state: string; loginHint: string }): string;
-  exchangeCode(input: { clientId: string; clientSecret: string; redirectUri: string; code: string }): Promise<ProviderTokens>;
-  refreshTokens(input: { clientId: string; clientSecret: string; refreshToken: string }): Promise<ProviderTokens>;
+  readonly calendarScopes: string[];
+  buildConsentUrl(input: { clientId: string; redirectUri: string; state: string; loginHint: string; scopes?: string[] }): string;
+  exchangeCode(input: { clientId: string; clientSecret: string; redirectUri: string; code: string; scopes?: string[] }): Promise<ProviderTokens>;
+  refreshTokens(input: { clientId: string; clientSecret: string; refreshToken: string; scopes?: string[] }): Promise<ProviderTokens>;
   // Provider-reported mailbox identity, used to verify the consented mailbox
   // matches the registered sender before activation.
   fetchProfile(input: { accessToken: string }): Promise<{ email: string }>;

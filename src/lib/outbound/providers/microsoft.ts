@@ -32,6 +32,7 @@ async function tokenRequest(fetchImpl: FetchImpl, params: Record<string, string>
 export class MicrosoftAdapter implements MailProviderAdapter {
   readonly provider = "microsoft" as const;
   readonly consentScopes = ["offline_access", "Mail.Send"];
+  readonly calendarScopes = ["offline_access", "Calendars.ReadWrite"];
 
   private readonly fetchImpl: FetchImpl;
 
@@ -39,37 +40,37 @@ export class MicrosoftAdapter implements MailProviderAdapter {
     this.fetchImpl = fetchImpl;
   }
 
-  buildConsentUrl(input: { clientId: string; redirectUri: string; state: string; loginHint: string }): string {
+  buildConsentUrl(input: { clientId: string; redirectUri: string; state: string; loginHint: string; scopes?: string[] }): string {
     const params = new URLSearchParams({
       client_id: input.clientId,
       redirect_uri: input.redirectUri,
       response_type: "code",
       response_mode: "query",
-      scope: this.consentScopes.join(" "),
+      scope: (input.scopes ?? this.consentScopes).join(" "),
       state: input.state,
       login_hint: input.loginHint,
     });
     return `${AUTH_URL}?${params.toString()}`;
   }
 
-  async exchangeCode(input: { clientId: string; clientSecret: string; redirectUri: string; code: string }): Promise<ProviderTokens> {
+  async exchangeCode(input: { clientId: string; clientSecret: string; redirectUri: string; code: string; scopes?: string[] }): Promise<ProviderTokens> {
     return tokenRequest(this.fetchImpl, {
       client_id: input.clientId,
       client_secret: input.clientSecret,
       redirect_uri: input.redirectUri,
       code: input.code,
       grant_type: "authorization_code",
-      scope: this.consentScopes.join(" "),
+      scope: (input.scopes ?? this.consentScopes).join(" "),
     });
   }
 
-  async refreshTokens(input: { clientId: string; clientSecret: string; refreshToken: string }): Promise<ProviderTokens> {
+  async refreshTokens(input: { clientId: string; clientSecret: string; refreshToken: string; scopes?: string[] }): Promise<ProviderTokens> {
     return tokenRequest(this.fetchImpl, {
       client_id: input.clientId,
       client_secret: input.clientSecret,
       refresh_token: input.refreshToken,
       grant_type: "refresh_token",
-      scope: this.consentScopes.join(" "),
+      scope: (input.scopes ?? this.consentScopes).join(" "),
     });
   }
 
