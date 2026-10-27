@@ -1,6 +1,7 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { beginConsent, revokeConsent } from "@/lib/outbound/consent-flow";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import type { Sender } from "@/lib/outbound/types";
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     if (action === "revoke-consent") {
       const senderId = typeof body.senderId === "string" ? body.senderId : "";
       if (!senderId) return Response.json({ error: "senderId is required." }, { status: 400 });
-      const result = await revokeConsent(new RtdbSenderStore(), new RtdbConsentStore(), { tenantId: access.workspaceUid, senderId });
+      const result = await revokeConsent(new RtdbSenderStore(), new RtdbConsentStore(), { tenantId: access.workspaceUid, senderId, actor: access.identity.uid, audit: new RtdbAuditStore() });
       if (!result.ok) {
         return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });
       }

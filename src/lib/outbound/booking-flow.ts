@@ -9,6 +9,7 @@ import { commitBooking, computeSlots } from "./booking.ts";
 import type { CalendarAdapter } from "./providers/calendar.ts";
 import type { BookingLink, BookingPolicy, Contact, Meeting, Sender } from "./types.ts";
 import type { ConversationStore } from "./conversations.ts";
+import { auditEvent, type AuditStore } from "./audit.ts";
 
 export interface BookingPolicyStore {
   savePolicy(p: BookingPolicy): Promise<void>;
@@ -118,7 +119,7 @@ export async function getBookingOffer(
 export async function selectSlot(
   stores: BookingStores,
   calendar: CalendarRuntime,
-  input: { token: string; startISO: string; actor: string; now: Date }
+  input: { token: string; startISO: string; actor: string; now: Date; audit?: AuditStore }
 ): Promise<{ ok: true; meeting: Meeting; synthetic: boolean } | { ok: false; status: number; error: string }> {
   const link = await loadLink(stores, input.token);
   if (!link) return { ok: false, status: 404, error: "Booking link not found." };
@@ -147,6 +148,11 @@ export async function selectSlot(
   if (!committed.ok) return { ok: false, status: 409, error: committed.error };
   await stores.conversations.saveMeeting(committed.meeting);
   await stores.links.updateLink({ ...link, usedAt: new Date().toISOString(), meetingId: committed.meeting.meetingId });
+  await input.audit?.append(auditEvent({
+    tenantId: link.tenantId, actor: input.actor, action: "booking.committed",
+    target: `meeting:${committed.meeting.meetingId}`, outcome: "success",
+    detail: committed.synthetic ? "synthetic (mock calendar)" : "provider-confirmed",
+  }));
   return { ok: true, meeting: committed.meeting, synthetic: committed.synthetic };
 }
 

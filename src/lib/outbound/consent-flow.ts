@@ -9,6 +9,7 @@ import { encryptSecret } from "./token-crypto.ts";
 import { createOAuthState, verifyOAuthState } from "./oauth-state.ts";
 import { mailAdapter, oauthConfigFor, requiredEnvsFor } from "./providers/registry.ts";
 import type { FetchImpl } from "./providers/types.ts";
+import { auditEvent, type AuditStore } from "./audit.ts";
 import type { ConsentTrace, Sender } from "./types.ts";
 
 export interface ConsentSenderStore {
@@ -67,7 +68,7 @@ export type CompleteConsentResult =
 export async function completeConsent(
   senders: ConsentSenderStore,
   records: ConsentRecords,
-  input: { expectedTenantId: string; state: string; code: string; fetchImpl?: FetchImpl }
+  input: { expectedTenantId: string; state: string; code: string; fetchImpl?: FetchImpl; audit?: AuditStore }
 ): Promise<CompleteConsentResult> {
   let stateData: { tenantId: string; senderId: string; purpose: "send" | "calendar" };
   try {
@@ -128,6 +129,10 @@ export async function completeConsent(
   await records.saveSenderTokens(sender.tenantId, sender.senderId, encryptSecret(JSON.stringify(tokens)));
   await records.saveConsentTrace(trace);
   await senders.activateSenderFromConsent(sender.tenantId, sender.senderId, trace.consentTraceId, trace.scopes);
+  await input.audit?.append(auditEvent({
+    tenantId: sender.tenantId, actor: "oauth-callback", action: "sender.consent_completed",
+    target: `sender:${sender.senderId}`, outcome: "success", detail: `scopes:${trace.scopes.join(" ")}`,
+  }));
   return { ok: true, senderId: sender.senderId, consentTraceId: trace.consentTraceId, consentorIdentity: profile.email };
 }
 
@@ -137,7 +142,7 @@ export async function completeConsent(
 export async function revokeConsent(
   senders: ConsentSenderStore,
   records: ConsentRecords,
-  input: { tenantId: string; senderId: string }
+  input: { tenantId: string; senderId: string; actor?: string; audit?: AuditStore }
 ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   const sender = await senders.getSender(input.tenantId, input.senderId);
   if (!sender) return { ok: false, status: 404, error: "Sender not found." };
@@ -149,5 +154,9 @@ export async function revokeConsent(
   }
   await records.deleteSenderTokens(input.tenantId, input.senderId);
   await senders.revokeSender(input.tenantId, input.senderId);
+  await input.audit?.append(auditEvent({
+    tenantId: input.tenantId, actor: input.actor ?? "unknown", action: "sender.consent_revoked",
+    target: `sender:${input.senderId}`, outcome: "success", detail: null,
+  }));
   return { ok: true };
 }

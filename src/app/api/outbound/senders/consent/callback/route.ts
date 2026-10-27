@@ -1,6 +1,7 @@
 import { errorResponse } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { completeConsent } from "@/lib/outbound/consent-flow";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
       expectedTenantId: access.workspaceUid,
       state,
       code,
+      audit: new RtdbAuditStore(),
     });
     if (!result.ok) {
       return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });

@@ -2,6 +2,7 @@ import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { getBookingOffer, selectSlot } from "@/lib/outbound/booking-flow";
 import { resolveCalendarRuntime } from "@/lib/outbound/calendar-runtime";
 import { hashBookingToken } from "@/lib/outbound/booking-flow";
+import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { RtdbBookingStore } from "@/lib/outbound/rtdb-booking-store";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
@@ -65,6 +66,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       startISO,
       actor: "recipient",
       now: new Date(),
+      audit: new RtdbAuditStore(),
     });
     if (!result.ok) return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });
     return Response.json(
