@@ -19,7 +19,7 @@ type DispatchResult = { dispatchedCount: number; dispatched: { intentId: string;
 type UsageEvent = { usageId: string; kind: string; units: number; costMinorUnits: number | null; currency: string | null; synthetic?: boolean; createdAt: string };
 type UsageSummary = { totalCostMinorUnits: number; costComplete: boolean; unpricedEvents: number; events: UsageEvent[] };
 type Conversation = { conversationId: string; contactId: string; humanReplySeenAt: string | null; classification: string | null; classifiedBy: string | null };
-type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: boolean; attendeeAccepted: boolean | null; held: boolean | null };
+type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: boolean; attendeeAccepted: boolean | null; held: boolean | null; synthetic?: boolean };
 type Experiment = { experimentId: string; campaignId: string; status: string; holdoutPercent: number; variants: { key: string }[]; variantsApprovedBy: string | null };
 type ImportPreview = { validCount: number; invalidCount: number; invalid: { row: number; reason: string }[]; sample: { email: string }[] };
 type ImportCommit = { importId: string; created: number; reconciled: number; invalid: { row: number; reason: string }[] };
@@ -504,7 +504,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
               <ul className="grid gap-1 text-sm text-zinc-300">
                 {meetings.map((m) => (
                   <li key={m.meetingId} className="rounded-lg border border-white/10 px-3 py-2">
-                    {m.startsAt} ({m.timezone}) · {m.booked ? "booked" : "not booked"} · held: {(m.held ?? null) === null ? "unknown" : m.held ? "yes" : "no"}
+                    {m.startsAt} ({m.timezone}) · {m.booked ? "booked" : "not booked"}{m.synthetic ? " · synthetic (mock calendar, no real event)" : ""} · held: {(m.held ?? null) === null ? "unknown" : m.held ? "yes" : "no"}
                   </li>
                 ))}
               </ul>
