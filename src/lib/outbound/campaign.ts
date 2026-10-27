@@ -29,6 +29,7 @@ export interface CampaignStore {
   getApprovalForVersion(tenantId: string, campaignId: string, version: number): Promise<Approval | null>;
 
   saveEnrollment(e: Enrollment): Promise<void>;
+  getEnrollmentById(tenantId: string, enrollmentId: string): Promise<Enrollment | null>;
   listEnrollments(tenantId: string, campaignId: string): Promise<Enrollment[]>;
   findActiveEnrollmentInGroup(tenantId: string, exclusionGroup: string): Promise<Enrollment | null>;
 
@@ -309,6 +310,12 @@ export class MemoryCampaignStore implements CampaignStore {
   }
   async saveEnrollment(e: Enrollment): Promise<void> {
     this.enrollments.set(e.enrollmentId, e);
+  }
+  async getEnrollmentById(tenantId: string, enrollmentId: string): Promise<Enrollment | null> {
+    for (const e of this.enrollments.values()) {
+      if (e.tenantId === tenantId && e.enrollmentId === enrollmentId) return e;
+    }
+    return null;
   }
   async listEnrollments(tenantId: string, campaignId: string): Promise<Enrollment[]> {
     return [...this.enrollments.values()].filter(

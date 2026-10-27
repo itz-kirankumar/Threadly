@@ -126,6 +126,14 @@ export class RtdbCampaignStore implements CampaignStore {
     await database.ref(`${root}/enrollmentByCampaign/${safeKey(e.campaignId)}/${safeKey(e.enrollmentId)}`).set(true);
   }
 
+  async getEnrollmentById(tenantId: string, enrollmentId: string): Promise<Enrollment | null> {
+    const database = await db();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/enrollments/${safeKey(enrollmentId)}`).get();
+    if (!snap.exists()) return null;
+    const val = snap.val() as Enrollment;
+    return val.tenantId === tenantId ? val : null;
+  }
+
   async listEnrollments(tenantId: string, campaignId: string): Promise<Enrollment[]> {
     const database = await db();
     const root = tenantRoot(tenantId);

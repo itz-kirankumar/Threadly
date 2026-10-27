@@ -13,6 +13,8 @@ import type { DraftStore } from "./drafts.ts";
 import type { ContactStore } from "./planner.ts";
 import { checkDispatch, suppressionTokenFor } from "./policy.ts";
 import type { UsageStore } from "./usage.ts";
+import type { IngestionStore } from "./ingestion.ts";
+import { syncHealth } from "./ingestion.ts";
 import type { DeliveryAttempt, MessageIntent, Sender } from "./types.ts";
 
 export interface SenderReader {
@@ -60,6 +62,9 @@ export interface DispatchStores {
   senders: SenderReader;
   contacts: ContactStore;
   usage: UsageStore;
+  // Optional: when present, a sender whose provider sync is stale or never
+  // ran defers dispatch (inbound state may be out of date: replies/bounces).
+  ingestion?: IngestionStore;
 }
 
 export interface DispatchResult {
@@ -155,6 +160,17 @@ export async function runDispatch(
       tenantCostComplete,
       now,
     });
+
+    // Stale-sync pause: without a fresh inbound sync the reply/bounce state
+    // used by the gates may be out of date, so defer rather than send.
+    if (decision.allow && stores.ingestion && sender) {
+      const cursor = await stores.ingestion.getCursor(tenantId, sender.senderId);
+      const health = syncHealth(cursor, now);
+      if (health !== "ok") {
+        decision.reasons.push(health === "never_synced" ? "sender_sync_never_synced" : "sender_sync_stale");
+        decision.allow = false;
+      }
+    }
 
     if (!decision.allow) {
       const back = transition(current, "scheduled", { actor, now });
