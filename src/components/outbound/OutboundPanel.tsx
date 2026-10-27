@@ -11,6 +11,7 @@ type Approval = { approvalId: string; campaignVersion: number } | null;
 type Enrollment = { enrollmentId: string; contactId: string; status: string; currentStep: number };
 type Intent = { intentId: string; contactId: string; step: number; status: string };
 type PlanResult = { plannedCount: number; skipped: { contactId: string; reasons: string[] }[]; blocked: string[] };
+type Sender = { senderId: string; email: string; provider: string; status: string };
 
 export default function OutboundPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -21,11 +22,15 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   const [error, setError] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
+  const [senders, setSenders] = useState<Sender[]>([]);
+  const [senderEmail, setSenderEmail] = useState("");
   const [form, setForm] = useState({ campaignId: "", subject: "", body: "", contactEmail: "", contactName: "" });
 
   const refresh = useCallback(async () => {
     const data = (await authedFetch("/api/outbound/campaigns")) as { campaigns: Campaign[] };
     setCampaigns(data.campaigns);
+    const snd = (await authedFetch("/api/outbound/senders")) as { senders: Sender[] };
+    setSenders(snd.senders);
   }, [authedFetch]);
 
   const refreshDetail = useCallback(async (campaignId: string) => {
@@ -85,6 +90,25 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           setForm({ ...form, campaignId: "", subject: "", body: "" });
           await refresh();
         })}>Create version</button>
+      </div>
+
+      <div className={card}>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Senders</h3>
+        <p className="mb-2 text-xs text-zinc-500">Registered mailboxes stay pending_consent until a real OAuth consent flow activates them. Nothing can dispatch without an active sender.</p>
+        {!senders.length && <p className="text-sm text-zinc-500">None registered.</p>}
+        <ul className="mb-2 grid gap-1 text-sm text-zinc-300">
+          {senders.map((sd) => (
+            <li key={sd.senderId} className="rounded-lg border border-white/10 px-3 py-2">{sd.email} · {sd.provider} · {sd.status}</li>
+          ))}
+        </ul>
+        <div className="flex gap-2">
+          <input className={input} placeholder="Sender mailbox" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} />
+          <button className={btn} disabled={busy || !senderEmail.includes("@")} onClick={() => act(async () => {
+            await authedFetch("/api/outbound/senders", { method: "POST", body: JSON.stringify({ email: senderEmail, provider: "gmail" }) });
+            setSenderEmail("");
+            await refresh();
+          })}>Register</button>
+        </div>
       </div>
 
       <div className={card}>
