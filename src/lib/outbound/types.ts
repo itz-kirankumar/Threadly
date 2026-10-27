@@ -48,6 +48,7 @@ export interface Account extends CreationMeta {
   domain: string;
   employeeBand?: string;
   region?: string;
+  sector?: string;
 }
 
 export type ContactVerificationState = "valid" | "invalid" | "unknown" | "stale" | "catch_all";
@@ -79,6 +80,10 @@ export interface SourceEvidence extends CreationMeta {
   inference: string; // what we infer, kept separate from fact
   uncertainty: "fact" | "inferred" | "unknown";
   uri?: string;
+  // Optional: the contact/account field this evidence supports (title,
+  // region, employeeBand, sector). Only tagged evidence can back an F04
+  // fit-score criterion; untagged evidence never fabricates a score reason.
+  field?: string;
 }
 
 export interface RightsRecord extends CreationMeta {

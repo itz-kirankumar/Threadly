@@ -23,6 +23,14 @@ function emailKey(email: string): string {
 }
 
 export class RtdbAccountStore {
+  async getAccount(tenantId: string, accountId: string): Promise<Account | null> {
+    const database = await db();
+    const acc = await database.ref(`${tenantRoot(tenantId)}/accounts/${safeKey(accountId)}`).get();
+    if (!acc.exists()) return null;
+    const val = acc.val() as Account;
+    return val.tenantId === tenantId ? val : null;
+  }
+
   async findByDomain(tenantId: string, domain: string): Promise<Account | null> {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/accountsByDomain/${safeKey(domain)}`).get();

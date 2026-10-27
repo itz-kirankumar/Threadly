@@ -18,7 +18,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export interface UnsubscribeConfig {
   baseUrl: string; // e.g. https://www.gothreadly.live - no trailing slash
   secret: string; // signs new links
-  previousSecret?: string; // still verifies links signed before a rotation (transition window)
+  // Verifies links signed with the immediately previous secret: exactly ONE
+  // transition window. Repeated rotations retire older links as their
+  // generation falls out of the window, and removing this value ends the
+  // transition - links from before then stop verifying by design.
+  // Readiness documentation must carry this operational limit explicitly.
+  previousSecret?: string;
 }
 
 export function unsubscribeConfigFromEnv(): UnsubscribeConfig | null {
