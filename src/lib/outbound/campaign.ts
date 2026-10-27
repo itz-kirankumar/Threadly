@@ -22,6 +22,7 @@ export interface CampaignStore {
   saveCampaignVersion(c: CampaignVersion): Promise<void>;
   getCampaignVersion(tenantId: string, campaignId: string, version: number): Promise<CampaignVersion | null>;
   latestCampaignVersion(tenantId: string, campaignId: string): Promise<CampaignVersion | null>;
+  listCampaigns(tenantId: string): Promise<CampaignVersion[]>;
 
   saveApproval(a: Approval): Promise<void>;
   getApprovalById(tenantId: string, approvalId: string): Promise<Approval | null>;
@@ -283,6 +284,14 @@ export class MemoryCampaignStore implements CampaignStore {
       (c) => c.tenantId === tenantId && c.campaignId === campaignId
     );
     return all.sort((a, b) => b.version - a.version)[0] ?? null;
+  }
+  async listCampaigns(tenantId: string): Promise<CampaignVersion[]> {
+    const byId = new Map<string, CampaignVersion[]>();
+    for (const c of this.versions.values()) {
+      if (c.tenantId !== tenantId) continue;
+      byId.set(c.campaignId, [...(byId.get(c.campaignId) ?? []), c]);
+    }
+    return [...byId.values()].map((vs) => vs.sort((a, b) => b.version - a.version)[0]);
   }
   async saveApproval(a: Approval): Promise<void> {
     this.approvals.set(a.approvalId, a);

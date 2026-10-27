@@ -19,6 +19,7 @@ import ActivityPanel from "./ActivityPanel";
 import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import CrmOutreachPanel from "@/components/crm/CrmOutreachPanel";
+import OutboundPanel from "@/components/outbound/OutboundPanel";
 import GeoFlowOptimizerPanel from "./GeoFlowOptimizerPanel";
 import ThemeToggle from "./ThemeToggle";
 import {
@@ -39,7 +40,7 @@ function providerErrorTitle(run: ScanRun, id: string): string {
   return `Scan failed for this provider: ${label}`;
 }
 
-type Tab = "overview" | "queries" | "citations" | "runs" | "optimizer" | "outreach" | "social" | "settings";
+type Tab = "overview" | "queries" | "citations" | "runs" | "optimizer" | "outreach" | "enterprise" | "social" | "settings";
 
 interface Props {
   user: User | null;
@@ -492,7 +493,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     { id: "citations", label: "Citations" },
     { id: "optimizer", label: "Optimization" },
     { id: "runs", label: `Scans (${state.runs.length})` },
-    ...(!readOnly ? [{ id: "outreach" as Tab, label: "Leads & Outreach" }, { id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
+    ...(!readOnly ? [{ id: "outreach" as Tab, label: "Leads & Outreach" }, { id: "enterprise" as Tab, label: "Enterprise" }, { id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
   ];
 
   const body = (
@@ -849,6 +850,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       {tab === "outreach" && !readOnly && (
         <CrmOutreachPanel authedFetch={authedFetch} />
       )}
+      {tab === "enterprise" && !readOnly && (
+        <OutboundPanel authedFetch={authedFetch} />
+      )}
       {tab === "social" && !readOnly && (
         <SocialPanel authedFetch={authedFetch} />
       )}
@@ -1128,6 +1132,11 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 }
 
 const TAB_ICONS: Record<Tab, React.ReactNode> = {
+  enterprise: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M2 13.5h12" /><path d="M3.5 13.5V6.5l4.5-3 4.5 3v7" /><path d="M6.5 13.5v-4h3v4" />
+    </svg>
+  ),
   overview: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
       <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" /><rect x="9" y="1.5" width="5.5" height="5.5" rx="1" />

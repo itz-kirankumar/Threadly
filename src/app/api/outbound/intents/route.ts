@@ -74,7 +74,15 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: { "Cache-Control": "no-store" } });
     }
     const access = await resolveWorkspaceAccess(request, "view");
-    const id = new URL(request.url).searchParams.get("id") ?? "";
+    const url = new URL(request.url);
+    const id = url.searchParams.get("id") ?? "";
+    const campaignId = url.searchParams.get("campaignId") ?? "";
+    if (!id && campaignId) {
+      const { RtdbCampaignStore } = await import("@/lib/outbound/rtdb-campaign-store");
+      const cs = new RtdbCampaignStore();
+      const intents = await cs.listIntentsByCampaign(access.workspaceUid, campaignId);
+      return Response.json({ intents }, { headers: { "Cache-Control": "no-store" } });
+    }
     if (!id) return Response.json({ error: "id is required." }, { status: 400 });
     const store = new RtdbLedgerStore();
     const intent = await store.getIntent(access.workspaceUid, id);

@@ -69,6 +69,20 @@ export class RtdbCampaignStore implements CampaignStore {
     return this.getCampaignVersion(tenantId, campaignId, latestSnap.val() as number);
   }
 
+  async listCampaigns(tenantId: string): Promise<CampaignVersion[]> {
+    const database = await db();
+    const root = tenantRoot(tenantId);
+    const snap = await database.ref(`${root}/campaigns`).get();
+    if (!snap.exists()) return [];
+    const ids = Object.keys(snap.val() as Record<string, unknown>);
+    const out: CampaignVersion[] = [];
+    for (const id of ids) {
+      const latest = await this.latestCampaignVersion(tenantId, id);
+      if (latest) out.push(latest);
+    }
+    return out;
+  }
+
   async saveApproval(a: Approval): Promise<void> {
     const database = await db();
     const root = tenantRoot(a.tenantId);

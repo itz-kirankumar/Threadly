@@ -105,8 +105,11 @@ export async function GET(request: Request) {
     }
     const access = await resolveWorkspaceAccess(request, "view");
     const campaignId = new URL(request.url).searchParams.get("campaignId") ?? "";
-    if (!campaignId) return Response.json({ error: "campaignId is required." }, { status: 400 });
     const store = new RtdbCampaignStore();
+    if (!campaignId) {
+      const campaigns = await store.listCampaigns(access.workspaceUid);
+      return Response.json({ campaigns }, { headers: NO_STORE });
+    }
     const campaign = await store.latestCampaignVersion(access.workspaceUid, campaignId);
     if (!campaign) return Response.json({ error: "Not found." }, { status: 404 });
     const approval = await store.getApprovalForVersion(access.workspaceUid, campaignId, campaign.version);
