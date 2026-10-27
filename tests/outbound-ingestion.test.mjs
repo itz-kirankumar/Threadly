@@ -176,7 +176,10 @@ test("webhook verification: constant-time secret compare, gmail push parsing, gr
     { subscriptionId: "s1", clientState: "secret1", resource: "users/u1/messages/m1", changeType: "created" },
     { subscriptionId: "s1", clientState: "secret1", resource: "users/u1/messages/m2", changeType: "created" },
   ]};
-  assert.deepEqual(parseGraphNotifications(body, "secret1"), ["users/u1/messages/m1", "users/u1/messages/m2"]);
+  assert.deepEqual(parseGraphNotifications(body, "secret1"), [
+    { subscriptionId: "s1", resource: "users/u1/messages/m1" },
+    { subscriptionId: "s1", resource: "users/u1/messages/m2" },
+  ]);
   // any entry with a wrong clientState voids the whole batch (fail closed)
   const mixed = { value: [body.value[0], { ...body.value[1], clientState: "wrong" }] };
   assert.equal(parseGraphNotifications(mixed, "secret1"), null);

@@ -62,4 +62,14 @@ export class RtdbContactStore implements ContactStore {
     const database = await db();
     await database.ref(`${tenantRoot(rights.tenantId)}/rightsByContact/${safeKey(rights.contactId)}`).set(rights);
   }
+
+  async deleteContact(tenantId: string, contactId: string): Promise<void> {
+    const database = await db();
+    await database.ref(`${tenantRoot(tenantId)}/contacts/${safeKey(contactId)}`).remove();
+  }
+
+  async deleteRights(tenantId: string, contactId: string): Promise<void> {
+    const database = await db();
+    await database.ref(`${tenantRoot(tenantId)}/rightsByContact/${safeKey(contactId)}`).remove();
+  }
 }

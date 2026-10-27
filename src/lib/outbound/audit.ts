@@ -44,6 +44,10 @@ export interface AuditEvent {
 export interface AuditStore {
   append(event: AuditEvent): Promise<void>;
   list(tenantId: string, limit?: number): Promise<AuditEvent[]>;
+  // Retention purge (PRD proposal: audit metadata 365 days). Removes primary
+  // log events strictly older than the cutoff and returns the count. The
+  // purge itself is audited by the caller as a NEW event, which survives.
+  purgeOlderThan(tenantId: string, cutoffIso: string): Promise<number>;
   // Degraded-mode write used ONLY when append fails: the event plus the
   // failure cause land on a separate durable path so a required audit record
   // is not silently lost. Implementations may share the primary store.
@@ -69,6 +73,11 @@ export class MemoryAuditStore implements AuditStore {
   }
   async list(tenantId: string): Promise<AuditEvent[]> {
     return this.events.filter((e) => e.tenantId === tenantId);
+  }
+  async purgeOlderThan(tenantId: string, cutoffIso: string): Promise<number> {
+    const doomed = this.events.filter((e) => e.tenantId === tenantId && e.at < cutoffIso);
+    this.events = this.events.filter((e) => !(e.tenantId === tenantId && e.at < cutoffIso));
+    return doomed.length;
   }
   degraded: { event: AuditEvent; cause: string }[] = [];
   async appendDegraded(event: AuditEvent, cause: string): Promise<void> {

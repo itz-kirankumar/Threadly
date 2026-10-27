@@ -44,19 +44,29 @@ export interface GraphNotification {
   value?: { subscriptionId?: string; clientState?: string; resource?: string; changeType?: string }[];
 }
 
+export interface ParsedGraphEntry {
+  subscriptionId: string | null;
+  resource: string | null;
+}
+
 // Microsoft Graph change notifications carry clientState per notification;
 // the caller compares each against the configured secret. Returns the
-// resource strings only when every entry verifies (fail closed on any miss).
-export function parseGraphNotifications(body: unknown, expectedClientState: string): string[] | null {
+// parsed entries only when every entry verifies (fail closed on any miss).
+// subscriptionId is what binds a notification to a registered sender
+// subscription; entries without one cannot be bound.
+export function parseGraphNotifications(body: unknown, expectedClientState: string): ParsedGraphEntry[] | null {
   if (typeof body !== "object" || body === null) return null;
   const val = (body as GraphNotification).value;
   if (!Array.isArray(val) || val.length === 0) return null;
-  const resources: string[] = [];
+  const entries: ParsedGraphEntry[] = [];
   for (const n of val) {
     if (typeof n?.clientState !== "string" || !secretMatches(n.clientState, expectedClientState)) return null;
-    if (typeof n?.resource === "string") resources.push(n.resource);
+    entries.push({
+      subscriptionId: typeof n?.subscriptionId === "string" ? n.subscriptionId : null,
+      resource: typeof n?.resource === "string" ? n.resource : null,
+    });
   }
-  return resources;
+  return entries;
 }
 
 export function eventKeyHash(parts: string): string {

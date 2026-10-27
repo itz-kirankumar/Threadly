@@ -19,6 +19,11 @@ export interface ContactStore {
   getRightsForContact(tenantId: string, contactId: string): Promise<RightsRecord | null>;
   saveContact(contact: Contact): Promise<void>;
   saveRights(rights: RightsRecord): Promise<void>;
+  // Retention sweep only. Deleting a contact never touches suppressions:
+  // the suppression token survives so a re-import cannot resurrect outreach.
+  deleteContact(tenantId: string, contactId: string): Promise<void>;
+  deleteRights(tenantId: string, contactId: string): Promise<void>;
+  listContacts(tenantId: string): Promise<Contact[]>;
 }
 
 export class MemoryContactStore implements ContactStore {
@@ -38,6 +43,15 @@ export class MemoryContactStore implements ContactStore {
   }
   async saveRights(rights: RightsRecord): Promise<void> {
     this.rights.set(`${rights.tenantId}:${rights.contactId}`, rights);
+  }
+  async deleteContact(tenantId: string, contactId: string): Promise<void> {
+    this.contacts.delete(`${tenantId}:${contactId}`);
+  }
+  async deleteRights(tenantId: string, contactId: string): Promise<void> {
+    this.rights.delete(`${tenantId}:${contactId}`);
+  }
+  async listContacts(tenantId: string): Promise<Contact[]> {
+    return [...this.contacts.values()].filter((c) => c.tenantId === tenantId);
   }
 }
 

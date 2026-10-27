@@ -46,6 +46,32 @@ export class RtdbEvidenceStore {
     const database = await db();
     await database.ref(`${tenantRoot(e.tenantId)}/evidence/${safeKey(e.evidenceId)}`).set(e);
   }
+
+  async listEvidence(tenantId: string): Promise<SourceEvidence[]> {
+    const database = await db();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/evidence`).get();
+    if (!snap.exists()) return [];
+    return Object.values(snap.val() as Record<string, SourceEvidence>).filter((e) => e && e.tenantId === tenantId);
+  }
+
+  async deleteEvidence(tenantId: string, evidenceId: string): Promise<void> {
+    const database = await db();
+    await database.ref(`${tenantRoot(tenantId)}/evidence/${safeKey(evidenceId)}`).remove();
+  }
+}
+
+// Memory counterpart for tests and dry-run composition.
+export class MemoryEvidenceStore {
+  items = new Map<string, SourceEvidence>();
+  async saveEvidence(e: SourceEvidence): Promise<void> {
+    this.items.set(`${e.tenantId}:${e.evidenceId}`, e);
+  }
+  async listEvidence(tenantId: string): Promise<SourceEvidence[]> {
+    return [...this.items.values()].filter((e) => e.tenantId === tenantId);
+  }
+  async deleteEvidence(tenantId: string, evidenceId: string): Promise<void> {
+    this.items.delete(`${tenantId}:${evidenceId}`);
+  }
 }
 
 export function contactEmailIndexKey(email: string): string {

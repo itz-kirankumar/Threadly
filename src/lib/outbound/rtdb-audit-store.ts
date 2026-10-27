@@ -82,6 +82,24 @@ export class RtdbAuditStore implements AuditStore {
     return { recovered, remaining };
   }
 
+  // Purges the PRIMARY log only. Fallback records that old indicate an
+  // unresolved recovery problem; they are left for the recovery sweep, not
+  // silently discarded.
+  async purgeOlderThan(tenantId: string, cutoffIso: string): Promise<number> {
+    const database = await db();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/audit`).get();
+    if (!snap.exists()) return 0;
+    const val = snap.val() as Record<string, AuditEvent>;
+    let purged = 0;
+    for (const [eventId, event] of Object.entries(val)) {
+      if (event && typeof event.at === "string" && event.at < cutoffIso) {
+        await database.ref(`${tenantRoot(tenantId)}/audit/${eventId}`).remove();
+        purged++;
+      }
+    }
+    return purged;
+  }
+
   async list(tenantId: string, limit = 200): Promise<AuditEvent[]> {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/audit`).orderByChild("at").limitToLast(limit).get();
