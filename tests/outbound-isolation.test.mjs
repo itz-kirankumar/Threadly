@@ -73,3 +73,32 @@ test("data root: explicit OUTBOUND_DATA_ROOT changes paths, default is outbound,
   assert.throws(() => tenantRoot("ws1"));
   delete process.env.OUTBOUND_DATA_ROOT;
 });
+
+test("campaign normalize: RTDB-dropped empty arrays come back as []", async () => {
+  // RTDB omits empty arrays; the store must tolerate their absence on read.
+  const mod = await import("../src/lib/outbound/rtdb-campaign-store.ts");
+  const src = mod.normalizeCampaignForTest ? null : undefined; // not exported; verify via planner instead
+  const { planCampaignIntents, MemoryContactStore } = await import("../src/lib/outbound/planner.ts");
+  const { MemoryCampaignStore, approveCampaign, enrollContact } = await import("../src/lib/outbound/campaign.ts");
+  const { MemoryLedgerStore } = await import("../src/lib/outbound/ledger.ts");
+  const now = new Date("2026-10-27T12:00:00Z");
+  const campaigns = new MemoryCampaignStore();
+  const campaign = {
+    tenantId: "t1", campaignId: "c9", version: 1,
+    // simulate an RTDB round-trip that dropped the empty arrays
+    senderAllowlist: undefined, exclusions: undefined, templates: [{ step: 1, subject: "s", body: "b" }],
+    allowedPersonalization: undefined, followUpCount: 1, countries: undefined,
+    sendWindows: undefined, dailyCapPerSender: 25, costCeiling: { currency: "USD", amount: 100 },
+    bookingPolicy: { directBooking: false, hostPool: [] }, expiresAt: "2026-12-31T00:00:00Z",
+    createdAt: now.toISOString(), createdBy: "u1",
+  };
+  await campaigns.saveCampaignVersion(campaign);
+  const approval = await approveCampaign(campaigns, { tenantId: "t1", campaign, approverUserId: "u1", approverRole: "campaign_approver", now });
+  await enrollContact(campaigns, { tenantId: "t1", campaign, approvalId: approval.approvalId, contactId: "k9", exclusionGroup: "k9", actor: "u1", now });
+  const contacts = new MemoryContactStore();
+  await contacts.saveContact({ tenantId: "t1", contactId: "k9", accountId: "a", email: "k9@corp.example", fullName: "P", verification: { state: "valid", verifiedAt: now.toISOString(), verifier: "t" }, employerChangedAt: null, createdAt: now.toISOString(), createdBy: "u1" });
+  await contacts.saveRights({ tenantId: "t1", rightsId: "r9", contactId: "k9", sourceEvidenceId: "e", intendedUse: "b2b_marketing", licensePermitsUse: true, subscriberClass: "corporate", lawfulBasis: "li", country: "US", createdAt: now.toISOString(), createdBy: "u1" });
+  const ledger = new MemoryLedgerStore();
+  const res = await planCampaignIntents({ campaigns, ledger, contacts }, { tenantId: "t1", campaignId: "c9", actor: "u1", now });
+  assert.equal(res.planned.length, 1); // must not throw on undefined allowlist
+});

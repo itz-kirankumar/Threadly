@@ -101,7 +101,7 @@ export async function planCampaignIntents(
       campaignId: campaign.campaignId,
       campaignVersion: campaign.version,
       contactId: enrollment.contactId,
-      senderId: campaign.senderAllowlist[0] ?? "",
+      senderId: (Array.isArray(campaign.senderAllowlist) ? campaign.senderAllowlist : [])[0] ?? "",
       step,
       status: "drafted",
       statusUpdatedAt: nowIso,

@@ -13,6 +13,20 @@ import type {
 import type { CampaignStore } from "./campaign.ts";
 import { tenantRoot } from "./rtdb-store.ts";
 
+// RTDB drops empty arrays/objects on write, so a stored campaign version can
+// come back with array fields missing. Normalize every read.
+function normalizeCampaign(val: CampaignVersion): CampaignVersion {
+  return {
+    ...val,
+    senderAllowlist: Array.isArray(val.senderAllowlist) ? val.senderAllowlist : [],
+    exclusions: Array.isArray(val.exclusions) ? val.exclusions : [],
+    templates: Array.isArray(val.templates) ? val.templates : [],
+    allowedPersonalization: Array.isArray(val.allowedPersonalization) ? val.allowedPersonalization : [],
+    countries: Array.isArray(val.countries) ? val.countries : [],
+    sendWindows: Array.isArray(val.sendWindows) ? val.sendWindows : [],
+  };
+}
+
 async function db() {
   const { getAdminDatabase } = await import("../geo/admin-store.ts");
   const database = await getAdminDatabase();
@@ -58,7 +72,7 @@ export class RtdbCampaignStore implements CampaignStore {
     const snap = await database.ref(`${tenantRoot(tenantId)}/campaigns/${safeKey(campaignId)}/versions/${version}`).get();
     if (!snap.exists()) return null;
     const val = snap.val() as CampaignVersion;
-    return val.tenantId === tenantId ? val : null;
+    return val.tenantId === tenantId ? normalizeCampaign(val) : null;
   }
 
   async latestCampaignVersion(tenantId: string, campaignId: string): Promise<CampaignVersion | null> {
