@@ -58,8 +58,22 @@ touches provider accounts, or spends money:
   found and fixed (undefined rejection, empty-array drop). All enabled
   deployments and the flag were deleted afterwards; every preview URL and
   production re-verified to return 404 for outbound routes.
+- 2026-10-28, run 3 (same scoped-flag window protocol): new draft generation
+  worker exercised live on preview. Verified: allowlisted evidence-backed
+  variable renders a stored draft ("Quick idea for Draft"); idempotent re-run
+  skips with `draft_exists` and records no duplicate usage; a template variable
+  outside `allowedPersonalization` fails closed with
+  `variable_not_allowed:<name>` (no draft, no usage event); unverified contacts
+  and contacts without a verification timestamp fail closed in planning
+  (`verification_unknown`, `verification_missing_timestamp`). One `generation`
+  usage event recorded at true-zero cost. Flag and enabled deployment deleted;
+  every preview URL, the branch alias, and production re-verified 404.
 - Synthetic fixtures remain under the RTDB `outbound-test` root, documented
-  for the D01 cleanup point. They contain no real contacts or tokens.
+  for the D01 cleanup point. They contain no real contacts or tokens. Run 3
+  added: campaigns draftcamp1 v1 and failcamp1 v1 with approvals, contacts
+  ct_b35e0a87 (unverified), ct_f9eb1f7d (valid, no timestamp), ct_1166c6c9
+  (verified), three enrollments, two intents, one draft, one generation usage
+  event.
 
 ## Deployment model
 
