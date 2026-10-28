@@ -1,7 +1,8 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
-import type { Contact, ContactVerificationState, RightsRecord } from "@/lib/outbound/types";
+import { RtdbAccountStore } from "@/lib/outbound/rtdb-import-store";
+import type { Account, Contact, ContactVerificationState, RightsRecord } from "@/lib/outbound/types";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 
@@ -61,6 +62,28 @@ export async function POST(request: Request) {
       createdAt: now,
       createdBy: access.identity.uid,
     };
+    // Link the account like csv-import does: explicit correction assignment
+    // wins, then domain match, else create the account record.
+    const accountDomain = typeof body.accountDomain === "string" ? body.accountDomain.trim().toLowerCase() : "";
+    if (accountDomain) {
+      const accounts = new RtdbAccountStore();
+      let account: Account | null = null;
+      const assignedId = await accounts.getAssignment(tenantId, accountDomain);
+      if (assignedId) account = await accounts.getAccount(tenantId, assignedId);
+      if (!account) account = await accounts.findByDomain(tenantId, accountDomain);
+      if (!account) {
+        account = {
+          tenantId,
+          accountId: `acc_${crypto.randomUUID()}`,
+          name: typeof body.accountName === "string" && body.accountName.trim() ? body.accountName.trim() : accountDomain,
+          domain: accountDomain,
+          createdAt: now,
+          createdBy: access.identity.uid,
+        };
+        await accounts.saveAccount(account);
+      }
+      contact.accountId = account.accountId;
+    }
     const store = new RtdbContactStore();
     await store.saveContact(contact);
 

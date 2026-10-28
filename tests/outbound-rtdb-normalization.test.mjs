@@ -79,3 +79,10 @@ test("licensed source missing revocation markers normalizes to nulls (live sourc
   assert.equal(s.revokedAt, null);
   assert.equal(s.termsUrl, null);
 });
+
+import { RtdbAccountStore } from "../src/lib/outbound/rtdb-import-store.ts";
+
+test("getAccount with empty accountId returns null instead of throwing (direct-created contacts carry no account; hosted real-RTDB finding 2026-10-28)", async () => {
+  const store = new RtdbAccountStore();
+  assert.equal(await store.getAccount("t1", ""), null);
+});

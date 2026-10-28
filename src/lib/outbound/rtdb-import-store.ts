@@ -30,6 +30,9 @@ function domainKey(domain: string): string {
 
 export class RtdbAccountStore {
   async getAccount(tenantId: string, accountId: string): Promise<Account | null> {
+    // Direct-created contacts can carry an empty accountId: treat as no
+    // account instead of letting safeKey throw (real-RTDB hosted finding).
+    if (!accountId) return null;
     const database = await db();
     const acc = await database.ref(`${tenantRoot(tenantId)}/accounts/${safeKey(accountId)}`).get();
     if (!acc.exists()) return null;
