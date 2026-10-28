@@ -1,7 +1,9 @@
 export class RequestError extends Error {
-  constructor(message: string, readonly status: number) {
+  readonly status: number;
+  constructor(message: string, status: number) {
     super(message);
     this.name = "RequestError";
+    this.status = status;
   }
 }
 
@@ -55,7 +57,7 @@ export async function readJsonBody(request: Request, maxBytes = 32 * 1024): Prom
 export function errorStatus(error: unknown, fallback = 500) {
   if (error instanceof RequestError) return error.status;
   const message = error instanceof Error ? error.message : "";
-  if (/sign in|Firebase is not configured|FIREBASE_API_KEY|sign-in expired/i.test(message)) return 401;
+  if (/sign in|Firebase is not configured|FIREBASE_API_KEY|sign-in expired|demo mode is not enabled|could not be verified/i.test(message)) return 401;
   if (/rate limit service is unavailable/i.test(message)) return 503;
   if (/between 3 and 100|customer problem|topic to search|enter a customer|enter a valid company website/i.test(message)) return 400;
   if (/service returned HTTP|could not|timed out|temporarily unavailable|provider|failed to/i.test(message)) return 502;
