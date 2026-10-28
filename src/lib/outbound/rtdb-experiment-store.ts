@@ -25,6 +25,7 @@ export class RtdbExperimentStore implements ExperimentStore {
     const snap = await database.ref(`${tenantRoot(tenantId)}/experiments/${safeKey(experimentId)}`).get();
     if (!snap.exists()) return null;
     const val = snap.val() as Experiment;
+    val.variants = val.variants ?? []; // RTDB drops empty arrays
     // RTDB drops null fields on write: variantsApprovedBy may be absent.
     return val.tenantId === tenantId ? { ...val, variantsApprovedBy: val.variantsApprovedBy ?? null } : null;
   }

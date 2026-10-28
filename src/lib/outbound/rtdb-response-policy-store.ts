@@ -25,7 +25,7 @@ export class RtdbResponsePolicyStore implements ResponsePolicyStore {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/responsePolicies`).get();
     if (!snap.exists()) return [];
-    return Object.values(snap.val() as Record<string, ResponsePolicy>)
+    return Object.values(snap.val() as Record<string, ResponsePolicy>).map((x) => ({ ...x, rules: x.rules ?? [] })) // RTDB drops empty arrays
       .filter((p) => p && p.tenantId === tenantId)
       .sort((a, b) => b.version - a.version);
   }

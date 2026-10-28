@@ -47,6 +47,7 @@ export class RtdbSenderStore {
     const snap = await database.ref(`${tenantRoot(tenantId)}/senders/${safeKey(senderId)}`).get();
     if (!snap.exists()) return null;
     const val = snap.val() as Sender;
+    val.scopes = val.scopes ?? []; // RTDB drops empty arrays
     return val.tenantId === tenantId ? val : null;
   }
 
@@ -84,6 +85,6 @@ export class RtdbSenderStore {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/senders`).get();
     if (!snap.exists()) return [];
-    return Object.values(snap.val() as Record<string, Sender>).filter((s) => s.tenantId === tenantId);
+    return Object.values(snap.val() as Record<string, Sender>).filter((s) => s.tenantId === tenantId).map((s) => ({ ...s, scopes: s.scopes ?? [] }));
   }
 }

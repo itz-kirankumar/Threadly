@@ -22,6 +22,14 @@ test("kill switch missing liftedAt normalizes to null (still active, liftable)",
   assert.equal(normalizeKillSwitch(raw).liftedAt, null);
 });
 
+test("icp version missing array fields (RTDB drops empty arrays) normalizes to empty arrays", () => {
+  const raw = { ...base, icpVersionId: "i2", version: 2, status: "confirmed", source: { kind: "manual" } };
+  const v = normalizeIcp(raw);
+  for (const f of ["sectors", "roles", "employeeBands", "regions", "exclusions", "approvedClaims"]) {
+    assert.deepEqual(v[f], [], `${f} must read as []`);
+  }
+});
+
 test("icp version missing confirmed/activated markers normalizes to nulls", () => {
   const raw = { ...base, icpVersionId: "i1", version: 1, status: "draft", sectors: [], roles: [], employeeBands: [], regions: [], exclusions: [], approvedClaims: [], source: { kind: "manual" } };
   const v = normalizeIcp(raw);

@@ -21,7 +21,19 @@ function safeKey(id: string): string {
 // RTDB drops null fields; confirmed/activated markers must read as explicit
 // null (confirmed without activatedAt = never activated, fail closed).
 export function normalizeIcp(v: IcpVersion): IcpVersion {
-  return { ...v, confirmedAt: v.confirmedAt ?? null, confirmedBy: v.confirmedBy ?? null, activatedAt: v.activatedAt ?? null };
+  // RTDB also drops EMPTY arrays; every list field must read as an array.
+  return {
+    ...v,
+    confirmedAt: v.confirmedAt ?? null,
+    confirmedBy: v.confirmedBy ?? null,
+    activatedAt: v.activatedAt ?? null,
+    sectors: v.sectors ?? [],
+    roles: v.roles ?? [],
+    employeeBands: v.employeeBands ?? [],
+    regions: v.regions ?? [],
+    exclusions: v.exclusions ?? [],
+    approvedClaims: v.approvedClaims ?? [],
+  };
 }
 
 export class RtdbIcpStore implements IcpStore {

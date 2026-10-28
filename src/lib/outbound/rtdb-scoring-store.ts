@@ -26,7 +26,7 @@ export class RtdbFitScoreStore implements FitScoreStore {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/fitScores/${safeKey(contactId)}`).get();
     if (!snap.exists()) return [];
-    return Object.values(snap.val() as Record<string, FitScoreResult>)
+    return Object.values(snap.val() as Record<string, FitScoreResult>).map((r) => ({ ...r, reasons: r.reasons ?? [] })) // RTDB drops empty arrays
       .filter((r) => r && r.tenantId === tenantId)
       .sort((a, b) => b.computedAt.localeCompare(a.computedAt));
   }

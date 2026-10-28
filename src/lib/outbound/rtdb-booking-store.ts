@@ -40,6 +40,7 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
     const snap = await database.ref(`${tenantRoot(tenantId)}/bookingPolicies/${safeKey(policyId)}`).get();
     if (!snap.exists()) return null;
     const val = snap.val() as BookingPolicy;
+    val.hostPool = val.hostPool ?? []; // RTDB drops empty arrays
     return val.tenantId === tenantId ? val : null;
   }
 
@@ -47,7 +48,7 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/bookingPolicies`).get();
     if (!snap.exists()) return [];
-    return Object.values(snap.val() as Record<string, BookingPolicy>).filter((p) => p.tenantId === tenantId);
+    return Object.values(snap.val() as Record<string, BookingPolicy>).filter((p) => p.tenantId === tenantId).map((p) => ({ ...p, hostPool: p.hostPool ?? [] }));
   }
 
   async saveLink(l: BookingLink): Promise<void> {
