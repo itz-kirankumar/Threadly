@@ -19,6 +19,7 @@ import ActivityPanel from "./ActivityPanel";
 import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import CrmOutreachPanel from "@/components/crm/CrmOutreachPanel";
+import CrmAccountsPanel from "@/components/crm/CrmAccountsPanel";
 import OutboundPanel from "@/components/outbound/OutboundPanel";
 import GeoFlowOptimizerPanel from "./GeoFlowOptimizerPanel";
 import ThemeToggle from "./ThemeToggle";
@@ -40,7 +41,7 @@ function providerErrorTitle(run: ScanRun, id: string): string {
   return `Scan failed for this provider: ${label}`;
 }
 
-type Tab = "overview" | "queries" | "citations" | "runs" | "optimizer" | "outreach" | "enterprise" | "social" | "settings";
+type Tab = "overview" | "queries" | "citations" | "runs" | "optimizer" | "outreach" | "crm" | "enterprise" | "social" | "settings";
 
 interface Props {
   user: User | null;
@@ -86,7 +87,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     // callback redirect) land directly on the requested tab.
     if (typeof window === "undefined") return "overview";
     const requested = new URLSearchParams(window.location.search).get("tab");
-    const valid: Tab[] = ["overview", "queries", "citations", "runs", "optimizer", "outreach", "enterprise", "social", "settings"];
+    const valid: Tab[] = ["overview", "queries", "citations", "runs", "optimizer", "outreach", "crm", "enterprise", "social", "settings"];
     return valid.includes(requested as Tab) ? (requested as Tab) : "overview";
   });
   const [loading, setLoading] = useState(!initialState);
@@ -500,7 +501,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     { id: "citations", label: "Citations" },
     { id: "optimizer", label: "Optimization" },
     { id: "runs", label: `Scans (${state.runs.length})` },
-    ...(!readOnly ? [{ id: "outreach" as Tab, label: "Leads & Outreach" }, { id: "enterprise" as Tab, label: "Enterprise" }, { id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
+    ...(!readOnly ? [{ id: "outreach" as Tab, label: "Leads & Outreach" }, { id: "crm" as Tab, label: "CRM" }, { id: "enterprise" as Tab, label: "Enterprise" }, { id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
   ];
 
   const body = (
@@ -857,6 +858,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       {tab === "outreach" && !readOnly && (
         <CrmOutreachPanel authedFetch={authedFetch} />
       )}
+      {tab === "crm" && !readOnly && (
+        <CrmAccountsPanel authedFetch={authedFetch} />
+      )}
       {tab === "enterprise" && !readOnly && (
         <OutboundPanel authedFetch={authedFetch} />
       )}
@@ -1139,6 +1143,11 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 }
 
 const TAB_ICONS: Record<Tab, React.ReactNode> = {
+  crm: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <rect x="2" y="5" width="12" height="8.5" rx="1.5" /><path d="M5.5 5V3.8A1.3 1.3 0 0 1 6.8 2.5h2.4a1.3 1.3 0 0 1 1.3 1.3V5" /><path d="M2 8.5h12" />
+    </svg>
+  ),
   enterprise: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <path d="M2 13.5h12" /><path d="M3.5 13.5V6.5l4.5-3 4.5 3v7" /><path d="M6.5 13.5v-4h3v4" />

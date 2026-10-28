@@ -72,7 +72,7 @@ export default function RootLayout({
     offers: { "@type": "Offer", price: "7", priceCurrency: "USD", description: "7-day trial, one-time payment" },
   };
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable} ${display.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${mono.variable} ${display.variable}`}>
       <body className="font-sans">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
         {children}

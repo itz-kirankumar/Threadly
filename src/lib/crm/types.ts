@@ -84,3 +84,74 @@ export interface CrmStats {
   totalPipelineValue: number;
   averageScore: number;
 }
+
+// Relationship CRM objects (accounts, people, pipeline deals, next-step
+// activities). Ported from the itz-kirankumar-integrate-crm-features branch
+// onto the current workspace stack; storage lives under crm/ in the same
+// workspace tree as leads.
+export type CompanyStatus = "prospect" | "customer" | "inactive";
+
+export interface Company {
+  id: string;
+  name: string;
+  domain: string;
+  industry: string;
+  status: CompanyStatus;
+  owner: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmContact {
+  id: string;
+  companyId: string | null;
+  leadId: string | null;
+  name: string;
+  email: string;
+  title: string;
+  status: "active" | "inactive";
+  owner: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DealStage = "qualification" | "discovery" | "proposal" | "negotiation" | "won" | "lost";
+
+export interface Deal {
+  id: string;
+  companyId: string | null;
+  contactId: string | null;
+  name: string;
+  value: number;
+  currency: string;
+  stage: DealStage;
+  probability: number;
+  expectedClose: string | null;
+  owner: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkspaceActivityType = "note" | "task" | "meeting" | "email";
+
+export interface WorkspaceActivity {
+  id: string;
+  type: WorkspaceActivityType;
+  subject: string;
+  body: string;
+  companyId: string | null;
+  contactId: string | null;
+  dealId: string | null;
+  dueAt: string | null;
+  completedAt: string | null;
+  owner: string;
+  createdAt: string;
+}
+
+export interface CrmAccountsState {
+  companies: Company[];
+  contacts: CrmContact[];
+  deals: Deal[];
+  activities: WorkspaceActivity[];
+}

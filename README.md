@@ -18,6 +18,11 @@ your competitors — scan after scan.
   snapshots across runs.
 - **Citation leaderboard** — which domains the assistants cite in your
   category, labelled yours / competitor / source.
+- **Relationship CRM** — the portal's CRM workspace keeps companies,
+  contacts, deals and next-step activities; saving a lead creates or updates
+  the matching account and contact without duplicates. The consolidated
+  navigation model is documented in [the enterprise information
+  architecture](docs/enterprise-information-architecture.md).
 - **Public demo** — `/demo` renders a read-only workspace with clearly
   labelled sample data (fictional brand "Loomify"), no sign-in required.
 - **Scheduled scans** — daily Vercel cron scans every workspace when the

@@ -1,6 +1,7 @@
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadLeads, saveLead, loadCrmStats, appendLeadActivity } from "@/lib/crm/store";
+import { syncLeadToAccounts } from "@/lib/crm/accounts-store";
 import type { CrmLead, LeadStage, LeadSource } from "@/lib/crm/types";
 import { randomUUID } from "node:crypto";
 
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
 
     await inWorkspace(access, async () => {
       await saveLead(lead);
+      await syncLeadToAccounts(lead, access.identity.email || access.identity.name || "User");
       await appendLeadActivity({
         leadId: lead.id,
         type: "stage_change",
