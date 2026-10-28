@@ -2,6 +2,7 @@ import { errorResponse } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { completeConsent } from "@/lib/outbound/consent-flow";
+import { verifyOAuthState } from "@/lib/outbound/oauth-state";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
@@ -30,24 +31,44 @@ export async function GET(request: Request) {
     if (providerError) {
       return Response.json({ error: `Consent was not completed at the provider: ${providerError}` }, { status: 400, headers: NO_STORE });
     }
-    const access = await resolveWorkspaceAccess(request, "manageTeam");
-    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
-    if (access.role !== "owner" && access.role !== "admin") {
-      return Response.json({ error: "Only workspace admins can complete sender consent." }, { status: 403, headers: NO_STORE });
-    }
     const state = url.searchParams.get("state") ?? "";
     const code = url.searchParams.get("code") ?? "";
     if (!state || !code) {
       return Response.json({ error: "state and code are required." }, { status: 400, headers: NO_STORE });
     }
+    // Browser redirects from Google carry no Firebase bearer token. For that
+    // path the HMAC-signed, tenant-bound, expiring, single-use state is the
+    // credential: it is minted only by an authenticated, owner-gated admin
+    // via POST .../senders/consent and is consumed before the token
+    // exchange. Bearer callers (SPA/API) keep the session + role checks.
+    let expectedTenantId: string;
+    let browserFlow = false;
+    if (/^Bearer\s+.+$/i.test(request.headers.get("authorization") || "")) {
+      const access = await resolveWorkspaceAccess(request, "manageTeam");
+      if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
+      if (access.role !== "owner" && access.role !== "admin") {
+        return Response.json({ error: "Only workspace admins can complete sender consent." }, { status: 403, headers: NO_STORE });
+      }
+      expectedTenantId = access.workspaceUid;
+    } else {
+      browserFlow = true;
+      try {
+        expectedTenantId = verifyOAuthState(state).tenantId;
+      } catch (error) {
+        return Response.json({ error: `Invalid consent state: ${String(error)}` }, { status: 400, headers: NO_STORE });
+      }
+    }
     const result = await completeConsent(new RtdbSenderStore(), new RtdbConsentStore(), {
-      expectedTenantId: access.workspaceUid,
+      expectedTenantId,
       state,
       code,
       audit: new RtdbAuditStore(),
     });
     if (!result.ok) {
       return Response.json({ error: result.error }, { status: result.status, headers: NO_STORE });
+    }
+    if (browserFlow) {
+      return Response.redirect(new URL("/portal?tab=enterprise&sender=connected", url.origin), 303);
     }
     return Response.json(
       { senderId: result.senderId, status: "active", consentTraceId: result.consentTraceId, consentorIdentity: result.consentorIdentity },

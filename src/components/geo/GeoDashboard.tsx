@@ -81,7 +81,14 @@ function MetricCard({ label, value, suffix, change }: { label: string; value: st
 
 export default function GeoDashboard({ user, readOnly = false, initialState, demoRunDetails }: Props) {
   const [state, setState] = useState<WorkspaceState | null>(initialState ?? null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(() => {
+    // Deep links such as /portal?tab=enterprise (used by the OAuth consent
+    // callback redirect) land directly on the requested tab.
+    if (typeof window === "undefined") return "overview";
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    const valid: Tab[] = ["overview", "queries", "citations", "runs", "optimizer", "outreach", "enterprise", "social", "settings"];
+    return valid.includes(requested as Tab) ? (requested as Tab) : "overview";
+  });
   const [loading, setLoading] = useState(!initialState);
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
