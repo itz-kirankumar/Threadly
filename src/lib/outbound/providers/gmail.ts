@@ -7,7 +7,9 @@ import type { FetchImpl, MailProviderAdapter, ProviderTokens, SendOutcome, SendR
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
-const PROFILE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/profile";
+// Verified identity uses the DOCUMENTED oauth2 userinfo surface (the
+// gmail.send-only grant does not document users/me/profile access).
+const PROFILE_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 
 function base64url(value: string): string {
   return Buffer.from(value, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -54,8 +56,12 @@ async function tokenRequest(fetchImpl: FetchImpl, params: Record<string, string>
 
 export class GmailAdapter implements MailProviderAdapter {
   readonly provider = "gmail" as const;
-  readonly consentScopes = ["https://www.googleapis.com/auth/gmail.send"];
-  readonly calendarScopes = ["https://www.googleapis.com/auth/calendar.events"];
+  // gmail.send is sensitive; userinfo.email is the non-sensitive minimum
+  // for the verified-identity check at consent completion.
+  readonly consentScopes = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/userinfo.email"];
+  // calendar.events alone does NOT authorize freeBusy.query per Google's
+  // live freeBusy reference; calendar.events.freebusy is the minimum.
+  readonly calendarScopes = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.events.freebusy"];
 
   private readonly fetchImpl: FetchImpl;
 
@@ -101,10 +107,23 @@ export class GmailAdapter implements MailProviderAdapter {
       headers: { Authorization: `Bearer ${input.accessToken}` },
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) throw new Error(`gmail profile lookup failed: HTTP ${res.status}`);
-    const data = (await res.json()) as { emailAddress?: string };
-    if (!data.emailAddress) throw new Error("gmail profile lookup returned no email address");
-    return { email: data.emailAddress };
+    if (!res.ok) throw new Error(`google userinfo lookup failed: HTTP ${res.status}`);
+    const data = (await res.json()) as { email?: string };
+    if (!data.email) throw new Error("google userinfo lookup returned no email address");
+    return { email: data.email };
+  }
+
+  async revokeTokens(input: { token: string }): Promise<boolean> {
+    try {
+      const res = await this.fetchImpl(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(input.token)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        signal: AbortSignal.timeout(15000),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   async send(input: { accessToken: string; request: SendRequest }): Promise<SendOutcome> {

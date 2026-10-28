@@ -43,6 +43,10 @@ export interface MailProviderAdapter {
   // Provider-reported mailbox identity, used to verify the consented mailbox
   // matches the registered sender before activation.
   fetchProfile(input: { accessToken: string }): Promise<{ email: string }>;
+  // Best-effort provider-side token revocation at disconnect. Returns true
+  // only when the provider confirmed; false on any failure (network, 4xx).
+  // Local behavior is fail-closed regardless of this result.
+  revokeTokens(input: { token: string }): Promise<boolean>;
   send(input: { accessToken: string; request: SendRequest }): Promise<SendOutcome>;
 }
 

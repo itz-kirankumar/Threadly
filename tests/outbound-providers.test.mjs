@@ -50,6 +50,7 @@ function memoryRecords() {
     async saveConsentTrace(t) { traces.set(t.consentTraceId, t); },
     async getConsentTrace(tenantId, id) { return traces.get(id) ?? null; },
     async saveSenderTokens(tenantId, senderId, ciphertext) { tokens.set(senderId, ciphertext); },
+    async getSenderTokens(tenantId, senderId) { const c = tokens.get(senderId); return c ? { ciphertext: c } : null; },
     async deleteSenderTokens(tenantId, senderId) { tokens.delete(senderId); },
   };
 }
@@ -72,10 +73,10 @@ test("oauth state signs, verifies, and rejects tampering and expiry", () => {
   assert.throws(() => verifyOAuthState(expired), /expired/);
 });
 
-test("gmail consent url requests send-only scope with offline access", () => {
+test("gmail consent url requests send + documented identity scope with offline access", () => {
   const url = new GmailAdapter().buildConsentUrl({ clientId: "cid", redirectUri: "https://app/cb", state: "st", loginHint: "rep@example.com" });
   const params = new URL(url).searchParams;
-  assert.equal(params.get("scope"), "https://www.googleapis.com/auth/gmail.send");
+  assert.equal(params.get("scope"), "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email");
   assert.equal(params.get("access_type"), "offline");
   assert.equal(params.get("login_hint"), "rep@example.com");
   assert.equal(params.get("state"), "st");
@@ -141,7 +142,7 @@ test("completeConsent activates only when the consented mailbox matches the send
     if (url.includes("oauth2.googleapis.com/token")) {
       return new Response(JSON.stringify({ access_token: "at", refresh_token: "rt", expires_in: 3600, scope: "https://www.googleapis.com/auth/gmail.send" }), { status: 200 });
     }
-    return new Response(JSON.stringify({ emailAddress: "rep@example.com" }), { status: 200 });
+    return new Response(JSON.stringify({ email: "rep@example.com" }), { status: 200 });
   };
   const done = await completeConsent(senders, records, { expectedTenantId: "t1", state, code: "code1", fetchImpl: goodFetch });
   assert.equal(done.ok, true);
@@ -168,7 +169,7 @@ test("completeConsent activates only when the consented mailbox matches the send
     if (url.includes("oauth2.googleapis.com/token")) {
       return new Response(JSON.stringify({ access_token: "at", expires_in: 3600 }), { status: 200 });
     }
-    return new Response(JSON.stringify({ emailAddress: "someone-else@example.com" }), { status: 200 });
+    return new Response(JSON.stringify({ email: "someone-else@example.com" }), { status: 200 });
   };
   const mismatch = await completeConsent(senders2, memoryRecords(), { expectedTenantId: "t1", state: state2, code: "c", fetchImpl: badFetch });
   assert.equal(mismatch.ok, false);
@@ -201,7 +202,7 @@ test("replayed consent state cannot activate twice", async () => {
     if (url.includes("oauth2.googleapis.com/token")) {
       return new Response(JSON.stringify({ access_token: "at", refresh_token: "rt", expires_in: 3600, scope: "https://www.googleapis.com/auth/gmail.send" }), { status: 200 });
     }
-    return new Response(JSON.stringify({ emailAddress: "rep@example.com" }), { status: 200 });
+    return new Response(JSON.stringify({ email: "rep@example.com" }), { status: 200 });
   };
   const senders = memorySenders([sender()]);
   const first = await completeConsent(senders, memoryRecords(), { expectedTenantId: "t1", state, code: "code1", fetchImpl: goodFetch });
@@ -212,4 +213,56 @@ test("replayed consent state cannot activate twice", async () => {
   delete process.env.OUTBOUND_GMAIL_CLIENT_ID;
   delete process.env.OUTBOUND_GMAIL_CLIENT_SECRET;
   delete process.env.OUTBOUND_GMAIL_REDIRECT_URI;
+});
+
+test("gmail adapter scopes: documented identity + freebusy minimums", () => {
+  const a = new GmailAdapter(async () => { throw new Error("no fetch"); });
+  assert.ok(a.consentScopes.includes("https://www.googleapis.com/auth/gmail.send"));
+  assert.ok(a.consentScopes.includes("https://www.googleapis.com/auth/userinfo.email"));
+  assert.ok(a.calendarScopes.includes("https://www.googleapis.com/auth/calendar.events"));
+  assert.ok(a.calendarScopes.includes("https://www.googleapis.com/auth/calendar.events.freebusy"));
+});
+
+test("gmail fetchProfile uses the documented oauth2 userinfo endpoint", async () => {
+  let seen = "";
+  const a = new GmailAdapter(async (url) => { seen = String(url); return new Response(JSON.stringify({ email: "rep@example.com" }), { status: 200 }); });
+  const profile = await a.fetchProfile({ accessToken: "x" });
+  assert.equal(profile.email, "rep@example.com");
+  assert.equal(seen, "https://www.googleapis.com/oauth2/v2/userinfo");
+});
+
+test("gmail revokeTokens reports truthful success/failure", async () => {
+  const ok = new GmailAdapter(async () => new Response("", { status: 200 }));
+  assert.equal(await ok.revokeTokens({ token: "r1" }), true);
+  const bad = new GmailAdapter(async () => new Response("", { status: 400 }));
+  assert.equal(await bad.revokeTokens({ token: "r1" }), false);
+  const down = new GmailAdapter(async () => { throw new Error("network"); });
+  assert.equal(await down.revokeTokens({ token: "r1" }), false);
+});
+
+test("revokeConsent audits provider revocation truthfully and stays fail-closed locally", async () => {
+  const senders = memorySenders([sender({ status: "active", consentTraceId: "ctc_1" })]);
+  const records = memoryRecords();
+  await records.saveConsentTrace({ tenantId: "t1", consentTraceId: "ctc_1", senderId: "snd_1", provider: "gmail", scopes: [], consentedAt: "2026-10-28T00:00:00Z", consentorIdentity: "rep@example.com", revokedAt: null, createdAt: "2026-10-28T00:00:00Z", createdBy: "oauth-callback" });
+  await records.saveSenderTokens("t1", "snd_1", encryptSecret(JSON.stringify({ accessToken: "at", refreshToken: "rt" })));
+  const audits = [];
+  const audit = { async append(e) { audits.push(e); } };
+  // Provider confirms revocation.
+  const okFetch = async () => new Response("", { status: 200 });
+  const r1 = await revokeConsent(senders, records, { tenantId: "t1", senderId: "snd_1", fetchImpl: okFetch, audit });
+  assert.equal(r1.ok, true);
+  assert.match(audits.at(-1).detail, /provider_revoked:true/);
+  assert.equal(records.tokens.has("snd_1"), false);
+  assert.equal((await senders.getSender("t1", "snd_1")).status, "revoked");
+  // Provider revocation fails: local delete still happens, audit says false.
+  const senders2 = memorySenders([sender({ status: "active", consentTraceId: "ctc_2" })]);
+  const records2 = memoryRecords();
+  await records2.saveSenderTokens("t1", "snd_1", encryptSecret(JSON.stringify({ accessToken: "at" })));
+  const audits2 = [];
+  const failFetch = async () => new Response("", { status: 400 });
+  const r2 = await revokeConsent(senders2, records2, { tenantId: "t1", senderId: "snd_1", fetchImpl: failFetch, audit: { async append(e) { audits2.push(e); } } });
+  assert.equal(r2.ok, true);
+  assert.match(audits2.at(-1).detail, /provider_revoked:false/);
+  assert.equal(records2.tokens.has("snd_1"), false);
+  assert.equal((await senders2.getSender("t1", "snd_1")).status, "revoked");
 });

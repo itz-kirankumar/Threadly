@@ -5,7 +5,7 @@
 // OUTBOUND_PROVIDERS_LIVE for any live send. Executing a real consent is an
 // owner-authorized action; this code existing is not authorization.
 
-import { encryptSecret } from "./token-crypto.ts";
+import { decryptSecret, encryptSecret } from "./token-crypto.ts";
 import { createOAuthState, verifyOAuthState } from "./oauth-state.ts";
 import { mailAdapter, oauthConfigFor, requiredEnvsFor } from "./providers/registry.ts";
 import type { FetchImpl } from "./providers/types.ts";
@@ -22,6 +22,7 @@ export interface ConsentRecords {
   saveConsentTrace(trace: ConsentTrace): Promise<void>;
   getConsentTrace(tenantId: string, consentTraceId: string): Promise<ConsentTrace | null>;
   saveSenderTokens(tenantId: string, senderId: string, ciphertext: string): Promise<void>;
+  getSenderTokens(tenantId: string, senderId: string): Promise<{ ciphertext: string } | null>;
   deleteSenderTokens(tenantId: string, senderId: string): Promise<void>;
 }
 
@@ -142,7 +143,7 @@ export async function completeConsent(
 export async function revokeConsent(
   senders: ConsentSenderStore,
   records: ConsentRecords,
-  input: { tenantId: string; senderId: string; actor?: string; audit?: AuditStore }
+  input: { tenantId: string; senderId: string; actor?: string; audit?: AuditStore; fetchImpl?: FetchImpl }
 ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   const sender = await senders.getSender(input.tenantId, input.senderId);
   if (!sender) return { ok: false, status: 404, error: "Sender not found." };
@@ -152,11 +153,29 @@ export async function revokeConsent(
       await records.saveConsentTrace({ ...trace, revokedAt: new Date().toISOString() });
     }
   }
+  // Google-side token revocation, best-effort BEFORE local deletion. Local
+  // behavior is fail-closed either way: tokens are deleted and the sender is
+  // revoked, so dispatch stays stopped. A failed/absent provider revocation is
+  // audited truthfully, never silently claimed.
+  let providerRevoked = "skipped";
+  const stored = await records.getSenderTokens(input.tenantId, input.senderId);
+  if (stored) {
+    try {
+      const tokens = JSON.parse(decryptSecret(stored.ciphertext)) as { refreshToken?: string | null; accessToken?: string | null };
+      const token = tokens.refreshToken ?? tokens.accessToken;
+      if (token) {
+        const adapter = mailAdapter(sender.provider, input.fetchImpl);
+        providerRevoked = (await adapter.revokeTokens({ token })) ? "true" : "false";
+      }
+    } catch {
+      providerRevoked = "false";
+    }
+  }
   await records.deleteSenderTokens(input.tenantId, input.senderId);
   await senders.revokeSender(input.tenantId, input.senderId);
   await input.audit?.append(auditEvent({
     tenantId: input.tenantId, actor: input.actor ?? "unknown", action: "sender.consent_revoked",
-    target: `sender:${input.senderId}`, outcome: "success", detail: null,
+    target: `sender:${input.senderId}`, outcome: "success", detail: `provider_revoked:${providerRevoked}`,
   }));
   return { ok: true };
 }

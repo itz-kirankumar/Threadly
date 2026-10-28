@@ -74,6 +74,13 @@ export class MicrosoftAdapter implements MailProviderAdapter {
     });
   }
 
+  // Microsoft identity platform revokes refresh tokens only via user action
+  // (myapps.microsoft.com) or CA policies; no documented app-initiated token
+  // revocation endpoint. Report false truthfully; local delete is fail-closed.
+  async revokeTokens(_input: { token: string }): Promise<boolean> {
+    return false;
+  }
+
   async fetchProfile(input: { accessToken: string }): Promise<{ email: string }> {
     const res = await this.fetchImpl(PROFILE_URL, {
       headers: { Authorization: `Bearer ${input.accessToken}` },
