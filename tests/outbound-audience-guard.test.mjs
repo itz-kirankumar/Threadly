@@ -27,3 +27,27 @@ test("empty allowlist string behaves as unset", () => {
   assert.equal(outboundUidAllowed("anyone"), true);
   delete process.env.OUTBOUND_ALLOWED_UIDS;
 });
+
+test("owner-only posture fails CLOSED when allowlist missing or malformed", () => {
+  process.env.OUTBOUND_OWNER_ONLY = "true";
+  delete process.env.OUTBOUND_ALLOWED_UIDS;
+  assert.equal(outboundUidAllowed("anyone"), false);
+  process.env.OUTBOUND_ALLOWED_UIDS = "";
+  assert.equal(outboundUidAllowed("anyone"), false);
+  process.env.OUTBOUND_ALLOWED_UIDS = "  , ,";
+  assert.equal(outboundUidAllowed("anyone"), false);
+  process.env.OUTBOUND_ALLOWED_UIDS = "owner-uid";
+  assert.equal(outboundUidAllowed("owner-uid"), true);
+  assert.equal(outboundUidAllowed("other"), false);
+  delete process.env.OUTBOUND_OWNER_ONLY;
+  delete process.env.OUTBOUND_ALLOWED_UIDS;
+});
+
+test("outside owner-only posture, set allowlist still restricts; unset allows", () => {
+  delete process.env.OUTBOUND_OWNER_ONLY;
+  process.env.OUTBOUND_ALLOWED_UIDS = "owner-uid";
+  assert.equal(outboundUidAllowed("owner-uid"), true);
+  assert.equal(outboundUidAllowed("other"), false);
+  delete process.env.OUTBOUND_ALLOWED_UIDS;
+  assert.equal(outboundUidAllowed("other"), true);
+});

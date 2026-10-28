@@ -1,5 +1,6 @@
 import { errorResponse } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { completeConsent } from "@/lib/outbound/consent-flow";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
       return Response.json({ error: `Consent was not completed at the provider: ${providerError}` }, { status: 400, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can complete sender consent." }, { status: 403, headers: NO_STORE });
     }
