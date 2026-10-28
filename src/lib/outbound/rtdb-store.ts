@@ -29,7 +29,7 @@ export function outboundDataRoot(): string {
 // independent of the client SDK's local transaction cache (which aborts on a
 // stale empty cache in fresh serverless processes). check() decides whether
 // the CURRENT server state allows the write; returns false on real conflict.
-export async function rtdbCasPut<T>(path: string, check: (current: T | null) => boolean, next: T): Promise<boolean> {
+export async function rtdbCasPut<T>(path: string, check: (current: T | null) => boolean, next: T, opts?: { verifyReadback?: (stored: T | null) => boolean }): Promise<boolean> {
   const { getAdminDatabase } = await import("../geo/admin-store.ts");
   const database = await getAdminDatabase();
   if (!database) throw new Error("RTDB admin not configured");
@@ -65,7 +65,21 @@ export async function rtdbCasPut<T>(path: string, check: (current: T | null) => 
       headers: { "Content-Type": "application/json", "if-match": etag },
       body: JSON.stringify(next),
     });
-    if (putRes.ok) return true;
+    if (putRes.ok) {
+      // Optional independent readback: a FRESH GET (new round trip, never the
+      // SDK cache) verifies the state the server actually persisted. Catches
+      // structural drift between the intended write and the stored record
+      // (RTDB null/empty dropping, serialization surprises) at write time
+      // rather than at the next read. A mismatch throws loudly; the CAS has
+      // already landed, so callers treat a throw as needs-reconciliation.
+      if (opts?.verifyReadback) {
+        const verifyRes = await fetch(`${base}/${path}.json?${authSuffix}`, { cache: "no-store" });
+        if (!verifyRes.ok) throw new Error(`cas_readback_failed:${verifyRes.status}`);
+        const stored = (await verifyRes.json()) as T | null;
+        if (!opts.verifyReadback(stored)) throw new Error("cas_readback_mismatch");
+      }
+      return true;
+    }
     if (putRes.status === 412) continue;
     throw new Error(`cas_write_failed:${putRes.status}`);
   }

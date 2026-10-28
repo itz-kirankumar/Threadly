@@ -138,3 +138,63 @@ test("reconciler quarantines legacy claims that predate claimedAt tracking", asy
   assert.equal(after.claimState, "claim_unknown");
   assert.match(after.claimError, /legacy claim predates claimedAt/);
 });
+
+test("intent write failure releases the claim; nothing is booked and the link stays usable", async () => {
+  const intents = new MemoryOperationIntentStore();
+  intents.putIntent = async () => { throw new Error("RTDB unavailable"); };
+  const s = stores({ intents });
+  const adapter = new MockCalendarAdapter();
+  let providerCalls = 0;
+  adapter.createEvent = async () => { providerCalls++; return { providerEventId: "mockcal_x" }; };
+  const token = await makeLink(s);
+  const result = await selectSlot(s, { adapter, accessToken: null }, { token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 503);
+  assert.match(result.error, /intent_record_unavailable/);
+  assert.equal(providerCalls, 0, "no provider call may happen when the durable intent cannot be recorded");
+  const link = [...s._links.values()][0];
+  assert.equal(link.claimState, null, "pre-effect failure releases the claim instead of quarantining it");
+  // And the link genuinely remains redeemable afterwards: same store (the
+  // released link), now with a working intent store.
+  s.intents = new MemoryOperationIntentStore();
+  const adapter2 = new MockCalendarAdapter();
+  const retry = await selectSlot(s, { adapter: adapter2, accessToken: null }, { token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  assert.equal(retry.ok, true);
+});
+
+test("commit-time free/busy failure releases the claim (no provider write attempted)", async () => {
+  const intents = new MemoryOperationIntentStore();
+  const s = stores({ intents });
+  const adapter = new MockCalendarAdapter();
+  let fbCalls = 0;
+  let providerCalls = 0;
+  const origFb = adapter.getFreeBusy.bind(adapter);
+  adapter.getFreeBusy = async (input) => { fbCalls++; if (fbCalls === 2) throw new Error("calendar read timeout"); return origFb(input); };
+  adapter.createEvent = async () => { providerCalls++; return { providerEventId: "mockcal_y" }; };
+  const token = await makeLink(s);
+  const result = await selectSlot(s, { adapter, accessToken: null }, { token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 503);
+  assert.match(result.error, /freebusy_unavailable/);
+  assert.equal(providerCalls, 0, "a failed recheck is pre-effect: no event creation attempted");
+  const link = [...s._links.values()][0];
+  assert.equal(link.claimState, null, "claim released, not quarantined: no provider outcome is unknown");
+  assert.equal((await intents.listIntents("t1")).length, 1);
+});
+
+test("pre-claim free/busy failure claims nothing and books nothing", async () => {
+  const intents = new MemoryOperationIntentStore();
+  const s = stores({ intents });
+  const adapter = new MockCalendarAdapter();
+  adapter.getFreeBusy = async () => { throw new Error("calendar down"); };
+  let providerCalls = 0;
+  adapter.createEvent = async () => { providerCalls++; return { providerEventId: "mockcal_z" }; };
+  const token = await makeLink(s);
+  const result = await selectSlot(s, { adapter, accessToken: null }, { token, startISO: "2026-11-02T09:00:00.000Z", actor: "recipient", now: NOW });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 503);
+  assert.equal(providerCalls, 0);
+  const link = [...s._links.values()][0];
+  assert.equal(link.claimState, null);
+  assert.equal((await intents.listIntents("t1")).length, 0);
+});

@@ -147,7 +147,12 @@ export async function selectSlot(
   // The chosen start must be a currently valid slot: arbitrary times are
   // rejected before any provider call.
   const windowEnd = new Date(input.now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
-  const busy = await calendar.adapter.getFreeBusy({ accessToken: calendar.accessToken, windowStartISO: input.now.toISOString(), windowEndISO: windowEnd });
+  let busy;
+  try {
+    busy = await calendar.adapter.getFreeBusy({ accessToken: calendar.accessToken, windowStartISO: input.now.toISOString(), windowEndISO: windowEnd });
+  } catch {
+    return { ok: false, status: 503, error: "freebusy_unavailable: the calendar could not be read; nothing was claimed or booked. Retry." };
+  }
   const valid = computeSlots(policy, busy, input.now, 14).some((s) => s.startISO === new Date(input.startISO).toISOString());
   if (!valid) return { ok: false, status: 409, error: "Selected start is not an available slot." };
   // Atomic claim BEFORE the provider call: simultaneous redemptions cannot
@@ -160,7 +165,10 @@ export async function selectSlot(
   // crash between claim and this write is closed by the reconciler
   // (reconcileBookingIntents) via the claimedAt timestamp.
   const opId = `opi_${crypto.randomUUID()}`;
-  let committed;
+  // Pre-effect intent write in its own guard: if it fails, NO provider call
+  // has happened or will happen in this attempt, so the claim is RELEASED
+  // (usable again), never quarantined. Quarantine is reserved for genuinely
+  // unknown provider-write outcomes.
   try {
     await stores.intents?.putIntent({
       tenantId: link.tenantId,
@@ -178,6 +186,13 @@ export async function selectSlot(
       resolvedAt: null,
       error: null,
     });
+  } catch (error) {
+    console.error("booking intent write failed before any provider call; claim released", error instanceof Error ? { name: error.name, message: error.message } : error);
+    await stores.links.releaseLinkClaim(link);
+    return { ok: false, status: 503, error: "intent_record_unavailable: the commit could not be recorded durably; nothing was booked and the link remains usable. Retry." };
+  }
+  let committed;
+  try {
     // Second recheck happens inside commitBooking immediately before creation.
     committed = await commitBooking(calendar.adapter, calendar.accessToken, {
       tenantId: link.tenantId,
@@ -190,10 +205,12 @@ export async function selectSlot(
       actor: input.actor,
     });
     if (!committed.ok) {
-      // Conflict found before the provider call: no event attempt happened, so
-      // the claim is safely released for another slot choice.
+      // Every ok:false from commitBooking is pre-effect (slot conflict or a
+      // failed free/busy recheck): no provider write was attempted, so the
+      // claim is safely released for another attempt. Only a THROW from
+      // commitBooking (the createEvent call itself) means unknown outcome.
       await stores.links.releaseLinkClaim(link);
-      return { ok: false, status: 409, error: committed.error };
+      return { ok: false, status: committed.retriable ? 503 : 409, error: committed.error };
     }
     await stores.conversations.saveMeeting(committed.meeting);
     await stores.links.updateLink({ ...link, usedAt: new Date().toISOString(), meetingId: committed.meeting.meetingId, claimState: "claimed" });

@@ -75,7 +75,12 @@ export class RtdbBookingStore implements BookingPolicyStore, BookingLinkStore {
     return rtdbCasPut<BookingLink>(
       `${outboundDataRoot()}/bookingLinksByToken/${safeKey(l.tokenHash)}`,
       linkClaimable,
-      claimed
+      claimed,
+      {
+        // Independent post-write readback: the claim (the duplicate-redemption
+        // lock) is only considered held once a fresh read shows it persisted.
+        verifyReadback: (stored) => stored?.tokenHash === l.tokenHash && stored?.claimState === "claiming",
+      }
     );
   }
 

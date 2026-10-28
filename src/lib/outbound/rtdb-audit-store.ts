@@ -20,7 +20,12 @@ export class RtdbAuditStore implements AuditStore {
   // AuditConflictError when the eventId exists with different content.
   private async putPrimary(tenantId: string, event: AuditEvent): Promise<void> {
     const path = `${tenantRoot(tenantId)}/audit/${event.eventId}`;
-    const wrote = await rtdbCasPut<AuditEvent>(path, (current) => current === null || sameAuditEvent(current, event), event);
+    const wrote = await rtdbCasPut<AuditEvent>(path, (current) => current === null || sameAuditEvent(current, event), event, {
+      // Independent post-write readback: the audit record is only considered
+      // durable once a fresh read returns content equivalent to the event
+      // (sameAuditEvent already tolerates RTDB null-dropping).
+      verifyReadback: (stored) => stored !== null && sameAuditEvent(stored, event),
+    });
     if (!wrote) throw new AuditConflictError(event.eventId);
   }
   // Every append first runs a bounded recovery sweep so degraded records

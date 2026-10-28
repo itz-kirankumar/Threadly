@@ -82,7 +82,9 @@ export interface CommitBookingInput {
 
 export type CommitBookingResult =
   | { ok: true; meeting: Meeting; synthetic: boolean }
-  | { ok: false; error: string };
+  // retriable: the failure happened BEFORE any provider write (free/busy
+  // read failed); nothing was created, so the caller may release and retry.
+  | { ok: false; error: string; retriable?: boolean };
 
 // Commits a booking: rechecks free/busy for the exact window immediately
 // before creating the provider event, then persists the meeting. booked=true
@@ -96,12 +98,19 @@ export async function commitBooking(
   const start = Date.parse(input.startISO);
   const end = start + input.policy.durationMinutes * 60_000;
   const buf = input.policy.bufferMinutes * 60_000;
-  // Recheck conflicts at commit time, never trust an earlier slot list.
-  const busy = await adapter.getFreeBusy({
-    accessToken,
-    windowStartISO: new Date(start - buf).toISOString(),
-    windowEndISO: new Date(end + buf).toISOString(),
-  });
+  // Recheck conflicts at commit time, never trust an earlier slot list. A
+  // failed recheck is a PRE-EFFECT failure: no event was created, so this
+  // returns retriable instead of throwing into the unknown-outcome path.
+  let busy: BusyWindow[];
+  try {
+    busy = await adapter.getFreeBusy({
+      accessToken,
+      windowStartISO: new Date(start - buf).toISOString(),
+      windowEndISO: new Date(end + buf).toISOString(),
+    });
+  } catch {
+    return { ok: false, retriable: true, error: "freebusy_unavailable: the calendar could not be rechecked before commit; no event was created" };
+  }
   const conflict = busy.some((b) => overlaps(start - buf, end + buf, Date.parse(b.start), Date.parse(b.end)));
   if (conflict) {
     return { ok: false, error: "slot_conflict: the slot is no longer free at commit time" };
