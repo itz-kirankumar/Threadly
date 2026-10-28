@@ -25,6 +25,12 @@ type ImportPreview = { validCount: number; invalidCount: number; invalid: { row:
 type ImportCommit = { importId: string; created: number; reconciled: number; invalid: { row: number; reason: string }[] };
 type ConsentStart = { senderId: string; consentUrl?: string; expiresAt?: string; notice?: string; error?: string; requiredEnvs?: string[] };
 type BookingLinkResult = { bookingLinkId: string; expiresAt: string; bookingUrl: string };
+type IcpVersion = { icpVersionId: string; version: number; status: string; roles: string[]; regions: string[]; employeeBands: string[]; sectors: string[]; exclusions: string[]; approvedClaims: string[]; confirmedBy: string | null; source: { kind: string } };
+type LicensedSource = { sourceId: string; sourceName: string; licensePermitsUse: boolean; termsUrl: string | null; revokedAt: string | null };
+type FitScore = { scoreId: string; contactId: string; score: number | null; scoreVersion: string; coverage: { known: number; total: number }; computedAt: string; targetSource?: { kind: string; icpVersionId?: string }; reasons: { criterion: string; state: string; detail: string }[] };
+type KillSwitch = { switchId: string; scope: string; target: string; reason: string; active: boolean };
+type Preflight = { domain: string; state: string; spf: string; dkim: string; dmarc: string; checkedAt: string; failedChecks: string[] };
+type RespPolicy = { policyId: string; version: number; status: string; rules: { intent: string; category: string; templateId: string }[] };
 
 export default function OutboundPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -55,6 +61,20 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   const [policyId, setPolicyId] = useState<string>("");
   const [bookingLink, setBookingLink] = useState<BookingLinkResult | null>(null);
   const [bookingContactId, setBookingContactId] = useState("");
+  const [icp, setIcp] = useState<{ current: IcpVersion | null; versions: IcpVersion[] }>({ current: null, versions: [] });
+  const [icpForm, setIcpForm] = useState({ roles: "", regions: "", employeeBands: "", sectors: "", exclusions: "", approvedClaims: "" });
+  const [sources, setSources] = useState<LicensedSource[]>([]);
+  const [sourceForm, setSourceForm] = useState({ sourceName: "", licensePermitsUse: false, termsUrl: "" });
+  const [fitScores, setFitScores] = useState<FitScore[]>([]);
+  const [fitContactId, setFitContactId] = useState("");
+  const [verifyContactId, setVerifyContactId] = useState("");
+  const [verifyResult, setVerifyResult] = useState<{ verification: { state: string }; detail: string } | null>(null);
+  const [killSwitches, setKillSwitches] = useState<KillSwitch[]>([]);
+  const [ksForm, setKsForm] = useState({ scope: "campaign", target: "", reason: "" });
+  const [preflights, setPreflights] = useState<Preflight[]>([]);
+  const [pfDomain, setPfDomain] = useState("");
+  const [respPolicies, setRespPolicies] = useState<{ active: RespPolicy | null; policies: RespPolicy[] }>({ active: null, policies: [] });
+  const [rpForm, setRpForm] = useState({ intent: "interested", category: "scheduling", templateId: "", templateText: "" });
 
   const refresh = useCallback(async () => {
     const data = (await authedFetch("/api/outbound/campaigns")) as { campaigns: Campaign[] };
@@ -66,6 +86,12 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
     setMeetings(conv.meetings);
     const usg = (await authedFetch("/api/outbound/usage")) as UsageSummary;
     setUsage(usg);
+    authedFetch("/api/outbound/icp").then((x) => setIcp(x as { current: IcpVersion | null; versions: IcpVersion[] })).catch(() => setIcp({ current: null, versions: [] }));
+    authedFetch("/api/outbound/sources").then((x) => setSources((x as { sources: LicensedSource[] }).sources)).catch(() => setSources([]));
+    authedFetch("/api/outbound/killswitches").then((x) => setKillSwitches((x as { switches: KillSwitch[] }).switches)).catch(() => setKillSwitches([]));
+    authedFetch("/api/outbound/preflight").then((x) => setPreflights((x as { domains: Preflight[] }).domains)).catch(() => setPreflights([]));
+    authedFetch("/api/outbound/response-policies").then((x) => setRespPolicies(x as { active: RespPolicy | null; policies: RespPolicy[] })).catch(() => setRespPolicies({ active: null, policies: [] }));
+    authedFetch("/api/outbound/fit-scores").then((x) => setFitScores((x as { scores: FitScore[] }).scores)).catch(() => setFitScores([]));
   }, [authedFetch]);
 
   const refreshDetail = useCallback(async (campaignId: string) => {
@@ -112,6 +138,72 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
       </div>
       {error && <p className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
 
+      <div className={card}>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">ICP (targeting profile)</h3>
+        {icp.current ? (
+          <p className="mb-2 text-xs text-zinc-400">Active v{icp.current.version}: roles [{icp.current.roles.join(", ") || "-"}] regions [{icp.current.regions.join(", ") || "-"}] sizes [{icp.current.employeeBands.join(", ") || "-"}] sectors [{icp.current.sectors.join(", ") || "-"}] exclusions [{icp.current.exclusions.join(", ") || "-"}] - confirmed by {icp.current.confirmedBy}. Nothing activates without your confirmation below.</p>
+        ) : (
+          <p className="mb-2 text-xs text-zinc-500">No active ICP. Create a draft, then confirm it explicitly. Drafts never apply on their own.</p>
+        )}
+        <div className="grid gap-2 sm:grid-cols-3">
+          <input className={input} placeholder="roles, comma separated" value={icpForm.roles} onChange={(e) => setIcpForm({ ...icpForm, roles: e.target.value })} />
+          <input className={input} placeholder="regions, comma separated" value={icpForm.regions} onChange={(e) => setIcpForm({ ...icpForm, regions: e.target.value })} />
+          <input className={input} placeholder="size bands (e.g. 51-200)" value={icpForm.employeeBands} onChange={(e) => setIcpForm({ ...icpForm, employeeBands: e.target.value })} />
+          <input className={input} placeholder="sectors" value={icpForm.sectors} onChange={(e) => setIcpForm({ ...icpForm, sectors: e.target.value })} />
+          <input className={input} placeholder="exclusions (domains/keywords)" value={icpForm.exclusions} onChange={(e) => setIcpForm({ ...icpForm, exclusions: e.target.value })} />
+          <input className={input} placeholder="approved product claims" value={icpForm.approvedClaims} onChange={(e) => setIcpForm({ ...icpForm, approvedClaims: e.target.value })} />
+        </div>
+        <div className="mt-2 flex gap-2">
+          <button className={btn} disabled={busy} onClick={() => act(async () => {
+            const list = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean);
+            const draft = (await authedFetch("/api/outbound/icp", { method: "POST", body: JSON.stringify({
+              action: "create", source: { kind: "manual" },
+              roles: list(icpForm.roles), regions: list(icpForm.regions), employeeBands: list(icpForm.employeeBands),
+              sectors: list(icpForm.sectors), exclusions: list(icpForm.exclusions), approvedClaims: list(icpForm.approvedClaims),
+            }) })) as IcpVersion;
+            await refresh();
+            setError("");
+            alert(`Draft v${draft.version} created. It is NOT active until confirmed.`);
+          })}>Save draft</button>
+          {icp.versions.filter((v) => v.status === "draft").map((v) => (
+            <button key={v.icpVersionId} className={btn} disabled={busy} onClick={() => act(async () => {
+              await authedFetch("/api/outbound/icp", { method: "POST", body: JSON.stringify({ action: "confirm", icpVersionId: v.icpVersionId }) });
+              await refresh();
+            })}>Confirm v{v.version}</button>
+          ))}
+        </div>
+        {icp.versions.length > 0 && <p className="mt-2 text-xs text-zinc-500">Versions: {icp.versions.map((v) => `v${v.version} ${v.status}`).join(" · ")}</p>}
+      </div>
+      <div className={card}>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Licensed sources</h3>
+        <p className="mb-2 text-xs text-zinc-500">Registry only: registering a source records its license terms; it activates no provider and spends nothing. Imports naming a licensed API are blocked unless the source here permits it.</p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <input className={input} placeholder="source name" value={sourceForm.sourceName} onChange={(e) => setSourceForm({ ...sourceForm, sourceName: e.target.value })} />
+          <input className={input} placeholder="terms URL (optional)" value={sourceForm.termsUrl} onChange={(e) => setSourceForm({ ...sourceForm, termsUrl: e.target.value })} />
+          <label className="flex items-center gap-2 text-xs text-zinc-400">
+            <input type="checkbox" checked={sourceForm.licensePermitsUse} onChange={(e) => setSourceForm({ ...sourceForm, licensePermitsUse: e.target.checked })} />
+            License permits B2B marketing use
+          </label>
+        </div>
+        <button className={`${btn} mt-2`} disabled={busy || !sourceForm.sourceName} onClick={() => act(async () => {
+          await authedFetch("/api/outbound/sources", { method: "POST", body: JSON.stringify({ sourceName: sourceForm.sourceName, licensePermitsUse: sourceForm.licensePermitsUse, termsUrl: sourceForm.termsUrl || undefined }) });
+          setSourceForm({ sourceName: "", licensePermitsUse: false, termsUrl: "" });
+          await refresh();
+        })}>Register source</button>
+        {sources.length > 0 && (
+          <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+            {sources.map((src) => (
+              <li key={src.sourceId} className="flex items-center justify-between gap-2">
+                <span>{src.sourceName} - {src.revokedAt ? `revoked ${src.revokedAt.slice(0, 10)}` : src.licensePermitsUse ? "permits use" : "does NOT permit use"}</span>
+                {!src.revokedAt && <button className="text-red-400 hover:underline" disabled={busy} onClick={() => act(async () => {
+                  await authedFetch("/api/outbound/sources", { method: "POST", body: JSON.stringify({ action: "revoke", sourceName: src.sourceName }) });
+                  await refresh();
+                })}>revoke</button>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <div className={card}>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">New campaign</h3>
         <div className="grid gap-2 md:grid-cols-2">
@@ -550,6 +642,128 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
                 ))}
               </ul>
             </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className={card}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Fit scores</h3>
+              <p className="mb-2 text-xs text-zinc-500">Evidence-based only: criteria without dated evidence are unknown, never zero. Scores inform review; nothing sends on a score.</p>
+              <div className="flex gap-2">
+                <input className={input} placeholder="contactId" value={fitContactId} onChange={(e) => setFitContactId(e.target.value)} />
+                <button className={btn} disabled={busy || !fitContactId} onClick={() => act(async () => {
+                  await authedFetch("/api/outbound/fit-scores", { method: "POST", body: JSON.stringify({ contactId: fitContactId, icpVersionId: "current" }) });
+                  setFitContactId("");
+                  await refresh();
+                })}>Score vs active ICP</button>
+              </div>
+              <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+                {fitScores.slice(0, 10).map((f) => (
+                  <li key={f.scoreId} className="rounded-lg border border-white/10 px-3 py-2">
+                    <span className="text-zinc-200">{f.score === null ? "unknown" : f.score}</span> · {f.contactId.slice(0, 14)}... · {f.scoreVersion} · evidence {f.coverage.known}/{f.coverage.total} · {f.computedAt.slice(0, 16).replace("T", " ")}
+                    <ul className="mt-1 space-y-0.5 text-zinc-500">
+                      {f.reasons.map((r, i) => <li key={i}>[{r.state}] {r.detail}</li>)}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className={card}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Verification (domain MX)</h3>
+              <p className="mb-2 text-xs text-zinc-500">Free domain-level check only: it can mark a domain that cannot receive mail as invalid. It can never prove a mailbox exists or mark one valid.</p>
+              <div className="flex gap-2">
+                <input className={input} placeholder="contactId" value={verifyContactId} onChange={(e) => setVerifyContactId(e.target.value)} />
+                <button className={btn} disabled={busy || !verifyContactId} onClick={() => act(async () => {
+                  const res = (await authedFetch("/api/outbound/verification", { method: "POST", body: JSON.stringify({ contactId: verifyContactId }) })) as { verification: { state: string }; detail: string };
+                  setVerifyResult(res);
+                })}>Run MX check</button>
+              </div>
+              {verifyResult && <p className="mt-2 text-xs text-zinc-400">State: {verifyResult.verification.state} - {verifyResult.detail}</p>}
+            </div>
+          </div>
+          <div className={card}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Control center</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <h4 className="mb-1 text-xs font-semibold text-zinc-300">Kill switches (pause without redeploy)</h4>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <select className={input} value={ksForm.scope} onChange={(e) => setKsForm({ ...ksForm, scope: e.target.value })}>
+                    <option value="tenant">tenant (everything)</option>
+                    <option value="campaign">campaign</option>
+                    <option value="domain">domain</option>
+                    <option value="sender">sender</option>
+                  </select>
+                  <input className={input} placeholder={ksForm.scope === "tenant" ? "(not needed)" : "target id/domain"} value={ksForm.target} onChange={(e) => setKsForm({ ...ksForm, target: e.target.value })} disabled={ksForm.scope === "tenant"} />
+                  <input className={input} placeholder="visible reason" value={ksForm.reason} onChange={(e) => setKsForm({ ...ksForm, reason: e.target.value })} />
+                </div>
+                <button className={`${btn} mt-2`} disabled={busy || !ksForm.reason || (ksForm.scope !== "tenant" && !ksForm.target)} onClick={() => act(async () => {
+                  await authedFetch("/api/outbound/killswitches", { method: "POST", body: JSON.stringify({ scope: ksForm.scope, target: ksForm.target, reason: ksForm.reason }) });
+                  setKsForm({ ...ksForm, reason: "" });
+                  await refresh();
+                })}>Engage switch</button>
+                <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+                  {killSwitches.map((k) => (
+                    <li key={k.switchId} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 px-3 py-2">
+                      <span className={k.active ? "text-amber-300" : "text-zinc-500"}>{k.active ? "ACTIVE" : "lifted"} · {k.scope}:{k.target} - {k.reason}</span>
+                      {k.active && <button className="text-teal-400 hover:underline" disabled={busy} onClick={() => act(async () => {
+                        await authedFetch("/api/outbound/killswitches", { method: "POST", body: JSON.stringify({ action: "lift", switchId: k.switchId }) });
+                        await refresh();
+                      })}>lift</button>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="mb-1 text-xs font-semibold text-zinc-300">Domain preflight (SPF/DKIM/DMARC)</h4>
+                <p className="mb-2 text-xs text-zinc-500">Live DNS check of sending identity. No inbox-placement promise; dispatch blocks domains without a passing fresh record.</p>
+                <div className="flex gap-2">
+                  <input className={input} placeholder="domain (e.g. example.com)" value={pfDomain} onChange={(e) => setPfDomain(e.target.value)} />
+                  <button className={btn} disabled={busy || !pfDomain} onClick={() => act(async () => {
+                    await authedFetch("/api/outbound/preflight", { method: "POST", body: JSON.stringify({ domain: pfDomain }) });
+                    setPfDomain("");
+                    await refresh();
+                  })}>Run preflight</button>
+                </div>
+                <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+                  {preflights.map((pf) => (
+                    <li key={pf.domain} className="rounded-lg border border-white/10 px-3 py-2">
+                      <span className={pf.state === "pass" ? "text-teal-300" : "text-amber-300"}>{pf.state}</span> · {pf.domain} · spf {pf.spf} dkim {pf.dkim} dmarc {pf.dmarc} · checked {pf.checkedAt.slice(0, 16).replace("T", " ")}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div className={card}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Automated response policy</h3>
+            <p className="mb-2 text-xs text-zinc-500">Approved factual/scheduling replies only. Legal, security, pricing and uncertain replies always reach a person. Creating a policy approves nothing to send by itself; automatic acting on decisions stays off.</p>
+            {respPolicies.active ? (
+              <p className="mb-2 text-xs text-zinc-400">Active policy v{respPolicies.active.version}: {respPolicies.active.rules.map((r) => `${r.intent} -> ${r.templateId} (${r.category})`).join(" · ")}</p>
+            ) : (
+              <p className="mb-2 text-xs text-zinc-500">No active policy.</p>
+            )}
+            <div className="grid gap-2 sm:grid-cols-4">
+              <select className={input} value={rpForm.intent} onChange={(e) => setRpForm({ ...rpForm, intent: e.target.value })}>
+                <option value="interested">interested</option>
+                <option value="not_now">not_now</option>
+                <option value="wrong_person">wrong_person</option>
+                <option value="out_of_office">out_of_office</option>
+              </select>
+              <select className={input} value={rpForm.category} onChange={(e) => setRpForm({ ...rpForm, category: e.target.value })}>
+                <option value="scheduling">scheduling</option>
+                <option value="factual">factual</option>
+              </select>
+              <input className={input} placeholder="template id" value={rpForm.templateId} onChange={(e) => setRpForm({ ...rpForm, templateId: e.target.value })} />
+              <input className={input} placeholder="frozen template text" value={rpForm.templateText} onChange={(e) => setRpForm({ ...rpForm, templateText: e.target.value })} />
+            </div>
+            <button className={`${btn} mt-2`} disabled={busy || !rpForm.templateId || !rpForm.templateText} onClick={() => act(async () => {
+              const existing = respPolicies.active ? respPolicies.active.rules.map((r) => ({ ...r })) : [];
+              await authedFetch("/api/outbound/response-policies", { method: "POST", body: JSON.stringify({ rules: [...existing, { intent: rpForm.intent, category: rpForm.category, templateId: rpForm.templateId, templateText: rpForm.templateText }] }) });
+              setRpForm({ ...rpForm, templateId: "", templateText: "" });
+              await refresh();
+            })}>Save as new policy version</button>
+            {respPolicies.active && <button className="ml-2 mt-2 text-xs text-red-400 hover:underline" disabled={busy} onClick={() => act(async () => {
+              await authedFetch("/api/outbound/response-policies", { method: "POST", body: JSON.stringify({ action: "retire", policyId: respPolicies.active!.policyId }) });
+              await refresh();
+            })}>retire active policy</button>}
           </div>
         </>
       )}
