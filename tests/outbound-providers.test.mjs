@@ -30,7 +30,7 @@ function memorySenders(initial) {
     async saveSender(s) { map.set(s.senderId, { ...s }); },
     async activateSenderFromConsent(tenantId, senderId, consentTraceId, scopes) {
       const s = map.get(senderId);
-      assert.equal(s.status === "pending_consent" || s.status === "revoked", true);
+      assert.equal(s.status === "pending_consent" || s.status === "revoked" || s.status === "active", true);
       const updated = { ...s, status: "active", consentTraceId, scopes };
       map.set(senderId, updated);
       return updated;
@@ -434,5 +434,63 @@ test("partial token-save failure never activates the sender", async () => {
   );
   assert.equal((await senders.getSender("t1", "snd_1")).status, "pending_consent");
   assert.equal(records.traces.size, 0);
+  GMAIL_ENV_CLEAR();
+});
+
+test("consent-first calendar purpose extends an active sender's scopes (union, never narrow)", async () => {
+  GMAIL_ENV();
+  // Active gmail sender from an earlier send consent.
+  const senders = memorySenders([sender({ status: "active", consentTraceId: "ctc_old", scopes: ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/userinfo.email"] })]);
+  const records = memoryRecords();
+  const calendarFetch = async (url) => {
+    if (url.includes("oauth2.googleapis.com/token")) {
+      return new Response(JSON.stringify({ access_token: "at2", refresh_token: "rt2", expires_in: 3600, scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.freebusy" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ email: "rep@example.com" }), { status: 200 });
+  };
+  const { state } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail", purpose: "calendar" });
+  const done = await completeConsent(senders, records, { expectedTenantId: "t1", state, code: "c", fetchImpl: calendarFetch });
+  assert.equal(done.ok, true);
+  assert.equal(done.senderId, "snd_1", "extends the SAME sender, no duplicate");
+  const all = await senders.listSenders("t1");
+  assert.equal(all.length, 1);
+  assert.equal(all[0].status, "active");
+  assert.ok(all[0].scopes.includes("https://www.googleapis.com/auth/gmail.send"), "keeps existing send grant");
+  assert.ok(all[0].scopes.includes("https://www.googleapis.com/auth/calendar.events"), "adds calendar events");
+  assert.ok(all[0].scopes.includes("https://www.googleapis.com/auth/calendar.events.freebusy"), "adds freebusy");
+  assert.equal(all[0].scopes.length, 4, "union, no duplicates");
+  assert.equal(records.traces.size, 1, "new consent trace recorded");
+  const trace = [...records.traces.values()][0];
+  assert.equal(trace.scopes.length, 4);
+  GMAIL_ENV_CLEAR();
+});
+
+test("consent-first send purpose on an active sender still refuses; calendar mismatch still refuses", async () => {
+  GMAIL_ENV();
+  const senders = memorySenders([sender({ status: "active", consentTraceId: "ctc_old", scopes: ["https://www.googleapis.com/auth/gmail.send"] })]);
+  const records = memoryRecords();
+  // Send purpose on active sender: 409 (no silent re-grant).
+  const { state: s1 } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail", purpose: "send" });
+  const again = await completeConsent(senders, records, { expectedTenantId: "t1", state: s1, code: "c", fetchImpl: goodFetchFor("rep@example.com") });
+  assert.equal(again.ok, false);
+  assert.equal(again.status, 409);
+  assert.match(again.error, /already connected/);
+  // Calendar purpose with a DIFFERENT mailbox: consent-first registers that
+  // mailbox as its own sender; the existing active sender is untouched.
+  const { state: s2 } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail", purpose: "calendar" });
+  const calendarFetchOther = async (url) => {
+    if (url.includes("oauth2.googleapis.com/token")) {
+      return new Response(JSON.stringify({ access_token: "a", refresh_token: "r", expires_in: 3600, scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.freebusy" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ email: "someoneelse@example.com" }), { status: 200 });
+  };
+  const other = await completeConsent(senders, records, { expectedTenantId: "t1", state: s2, code: "c", fetchImpl: calendarFetchOther });
+  assert.equal(other.ok, true);
+  assert.notEqual(other.senderId, "snd_1");
+  const after = await senders.getSender("t1", "snd_1");
+  assert.deepEqual(after.scopes, ["https://www.googleapis.com/auth/gmail.send"], "existing sender scopes untouched");
+  const added = await senders.getSender("t1", other.senderId);
+  assert.ok(added.scopes.every((sc) => sc.includes("calendar")), "new sender carries calendar scopes only");
+  assert.equal(added.dailyCap, 0, "dispatch stays gated");
   GMAIL_ENV_CLEAR();
 });

@@ -23,7 +23,7 @@ type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: 
 type Experiment = { experimentId: string; campaignId: string; status: string; holdoutPercent: number; variants: { key: string; templates: { step: number; subject: string; body: string }[] }[]; variantsApprovedBy: string | null };
 type ImportPreview = { validCount: number; invalidCount: number; invalid: { row: number; reason: string }[]; sample: { email: string }[] };
 type ImportCommit = { importId: string; created: number; reconciled: number; invalid: { row: number; reason: string }[] };
-type ConsentStart = { senderId: string; consentUrl?: string; expiresAt?: string; notice?: string; error?: string; requiredEnvs?: string[]; consentFirst?: boolean };
+type ConsentStart = { senderId: string; consentUrl?: string; expiresAt?: string; notice?: string; error?: string; requiredEnvs?: string[]; consentFirst?: boolean; purpose?: "send" | "calendar" };
 type BookingLinkResult = { bookingLinkId: string; expiresAt: string; bookingUrl: string };
 type IcpVersion = { icpVersionId: string; version: number; status: string; roles: string[]; regions: string[]; employeeBands: string[]; sectors: string[]; exclusions: string[]; approvedClaims: string[]; confirmedBy: string | null; source: { kind: string } };
 type LicensedSource = { sourceId: string; sourceName: string; licensePermitsUse: boolean; termsUrl: string | null; revokedAt: string | null };
@@ -233,6 +233,14 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
             setConsent({ senderId: "(auto-detect)", consentFirst: true, error: e instanceof Error ? e.message : "Consent flow unavailable." });
           }
         })}>Connect Google</button>
+        <button className="mb-2 ml-2 rounded-lg border border-teal-600 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-600/10 disabled:opacity-50 dark:text-teal-300" disabled={busy} onClick={() => act(async () => {
+          try {
+            const res = (await authedFetch("/api/outbound/senders/consent", { method: "POST", body: JSON.stringify({ purpose: "calendar" }) })) as ConsentStart;
+            setConsent({ ...res, senderId: "(auto-detect)", consentFirst: true, purpose: "calendar" });
+          } catch (e) {
+            setConsent({ senderId: "(auto-detect)", consentFirst: true, purpose: "calendar", error: e instanceof Error ? e.message : "Consent flow unavailable." });
+          }
+        })}>Connect calendar</button>
         {!senders.length && <p className="text-sm text-zinc-500">None registered.</p>}
         <ul className="mb-2 grid gap-1 text-sm text-zinc-300">
           {senders.map((sd) => (
@@ -255,7 +263,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           <div className="mb-2 rounded-lg border border-white/10 p-3 text-xs text-zinc-400">
             {consent.consentUrl ? (
               <>
-                <p className="text-zinc-300">{consent.consentFirst ? "Connect link — the approved Google account becomes the sender (expires " : `Consent link for sender ${consent.senderId.slice(0, 12)}... (expires `}{consent.expiresAt?.slice(0, 10)}):</p>
+                <p className="text-zinc-300">{consent.consentFirst ? (consent.purpose === "calendar" ? "Calendar connect link — grants free/busy time windows and the booking events Threadly creates; the approved Google account is verified by Google (expires " : "Connect link — the approved Google account becomes the sender (expires ") : `Consent link for sender ${consent.senderId.slice(0, 12)}... (expires `}{consent.expiresAt?.slice(0, 10)}):</p>
                 <a className="mt-1 block break-all text-teal-700 underline dark:text-teal-300" href={consent.consentUrl} target="_blank" rel="noreferrer">{consent.consentUrl}</a>
                 <p className="mt-1">{consent.notice}</p>
               </>

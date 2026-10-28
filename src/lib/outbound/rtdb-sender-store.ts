@@ -57,7 +57,9 @@ export class RtdbSenderStore {
   async activateSenderFromConsent(tenantId: string, senderId: string, consentTraceId: string, scopes: string[]): Promise<Sender> {
     const sender = await this.getSender(tenantId, senderId);
     if (!sender) throw new Error("sender not found");
-    if (sender.status !== "pending_consent" && sender.status !== "revoked") {
+    // active is allowed: a second (calendar) consent re-verified by the
+    // provider legitimately widens an already-active sender's scopes.
+    if (sender.status !== "pending_consent" && sender.status !== "revoked" && sender.status !== "active") {
       throw new Error(`cannot activate sender in status ${sender.status}`);
     }
     const updated: Sender = { ...sender, status: "active", consentTraceId, scopes };
@@ -65,7 +67,7 @@ export class RtdbSenderStore {
     // activate; the loser sees a real conflict.
     const ok = await rtdbCasPut<Sender>(
       `${tenantRoot(tenantId)}/senders/${safeKey(senderId)}`,
-      (current) => !!current && current.tenantId === tenantId && (current.status === "pending_consent" || current.status === "revoked"),
+      (current) => !!current && current.tenantId === tenantId && (current.status === "pending_consent" || current.status === "revoked" || current.status === "active"),
       updated
     );
     if (!ok) throw new Error("sender_activation_conflict");

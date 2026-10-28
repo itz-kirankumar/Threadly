@@ -54,7 +54,8 @@ export async function POST(request: Request) {
     }
     // Consent-first ("Connect Google"): no sender yet; the sender is created
     // from the consented account's verified identity at the callback.
-    const first = await beginConsentFirst({ tenantId: access.workspaceUid, provider });
+    const purpose = body.purpose === "calendar" ? "calendar" : "send";
+    const first = await beginConsentFirst({ tenantId: access.workspaceUid, provider, purpose });
     if (!first.ok) {
       return Response.json(
         { error: first.error, ...(first.requiredEnvs ? { requiredEnvs: first.requiredEnvs } : {}) },
@@ -67,7 +68,10 @@ export async function POST(request: Request) {
         expiresAt: first.expiresAt,
         provider,
         consentFirst: true,
-        notice: "You will be asked to sign in to the Google account you want to connect and approve Threadly's access. Threadly connects the exact account you approve, verified by Google.",
+        purpose,
+        notice: purpose === "calendar"
+          ? "You will be asked to sign in to the Google account you want to connect and approve Threadly's calendar access: free/busy time windows and the booking events Threadly creates itself. Threadly connects the exact account you approve, verified by Google."
+          : "You will be asked to sign in to the Google account you want to connect and approve Threadly's access. Threadly connects the exact account you approve, verified by Google.",
       },
       { status: 200, headers: NO_STORE }
     );

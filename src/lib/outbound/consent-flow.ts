@@ -175,7 +175,11 @@ export async function completeConsent(
       if (existing.provider !== provider) {
         return { ok: false, status: 409, error: `Mailbox ${consentedEmail} is already registered for ${existing.provider}; cannot connect it as ${provider}.` };
       }
-      if (existing.status !== "pending_consent" && existing.status !== "revoked") {
+      // Calendar purpose EXTENDS an already-active sender (a second consent
+      // grant widens its scopes); send purpose on an active sender stays a
+      // no-op refusal.
+      const calendarExtend = stateData.purpose === "calendar" && existing.status === "active";
+      if (!calendarExtend && existing.status !== "pending_consent" && existing.status !== "revoked") {
         return { ok: false, status: 409, error: `Mailbox ${consentedEmail} is already connected (${existing.status}); nothing to consent.` };
       }
       sender = existing;
@@ -213,12 +217,16 @@ export async function completeConsent(
     };
   }
   const now = new Date().toISOString();
+  const granted = tokens.scopes.length > 0 ? tokens.scopes : [...(stateData.purpose === "calendar" ? adapter.calendarScopes : adapter.consentScopes)];
+  // A calendar re-consent widens an active sender: keep its existing grants
+  // and add the newly granted scopes (union), never narrow.
+  const effectiveScopes = stateData.purpose === "calendar" ? [...new Set([...sender.scopes, ...granted])] : granted;
   const trace: ConsentTrace = {
     tenantId: sender.tenantId,
     consentTraceId: `ctc_${crypto.randomUUID()}`,
     senderId: sender.senderId,
     provider: sender.provider,
-    scopes: tokens.scopes.length > 0 ? tokens.scopes : [...(stateData.purpose === "calendar" ? adapter.calendarScopes : adapter.consentScopes)],
+    scopes: effectiveScopes,
     consentedAt: now,
     consentorIdentity: consentedEmail,
     revokedAt: null,
