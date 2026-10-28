@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { approveDraft, generateDrafts } from "@/lib/outbound/draft-run";
 import { RtdbDraftStore } from "@/lib/outbound/drafts-rtdb";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can run draft generation." }, { status: 403, headers: NO_STORE });
     }
@@ -103,6 +105,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const url = new URL(request.url);
     const campaignId = url.searchParams.get("campaignId");
     const store = new RtdbDraftStore();

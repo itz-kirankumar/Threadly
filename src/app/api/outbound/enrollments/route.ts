@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { enrollContact } from "@/lib/outbound/campaign";
 import { isExcludedByIcp, resolveCurrentIcp } from "@/lib/outbound/icp";
 import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can enroll contacts." }, { status: 403, headers: NO_STORE });
     }
@@ -87,6 +89,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const campaignId = new URL(request.url).searchParams.get("campaignId") ?? "";
     if (!campaignId) return Response.json({ error: "campaignId is required." }, { status: 400 });
     const store = new RtdbCampaignStore();

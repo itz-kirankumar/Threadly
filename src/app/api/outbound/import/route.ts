@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { commitImport, mapRows, parseCsv, type CsvMapping } from "@/lib/outbound/csv-import";
 import { requireLicensedSource } from "@/lib/outbound/discovery";
 import { RtdbLicensedSourceStore } from "@/lib/outbound/rtdb-source-store";
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can import." }, { status: 403, headers: NO_STORE });
     }

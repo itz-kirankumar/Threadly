@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { assignConversationOwner, classifyReplyText, INTENTS, reclassifyConversation, routeUncertain } from "@/lib/outbound/conversations";
 import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
 import type { Conversation, ConversationIntent } from "@/lib/outbound/types";
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const body = (await readJsonBody(request, 16 * 1024)) as Record<string, unknown>;
     // F16 follow-up actions on an existing conversation.
     if (body.action === "reclassify" || body.action === "assign-owner") {
@@ -93,6 +95,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const store = new RtdbConversationStore();
     const conversations = await store.listConversations(access.workspaceUid);
     const meetings = await store.listMeetings(access.workspaceUid);

@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { computeFitScore, DEFAULT_FIT_SCORE_CONFIG } from "@/lib/outbound/scoring";
 import type { FitScoreConfig, TargetProfile } from "@/lib/outbound/scoring";
 import { RtdbFitScoreStore } from "@/lib/outbound/rtdb-scoring-store";
@@ -57,6 +58,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const contactId = new URL(request.url).searchParams.get("contactId");
     const store = new RtdbFitScoreStore();
     const scores = contactId ? await store.listForContact(access.workspaceUid, contactId) : await store.list(access.workspaceUid);
@@ -72,6 +74,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can compute fit scores." }, { status: 403, headers: NO_STORE });
     }

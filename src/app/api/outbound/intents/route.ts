@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { intentUniqueKey } from "@/lib/outbound/ledger";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import type { MessageIntent } from "@/lib/outbound/types";
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: { "Cache-Control": "no-store" } });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can create send intents." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
@@ -86,6 +88,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: { "Cache-Control": "no-store" } });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const url = new URL(request.url);
     const id = url.searchParams.get("id") ?? "";
     const campaignId = url.searchParams.get("campaignId") ?? "";

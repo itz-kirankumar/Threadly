@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { NodeDnsResolver, checkDomain, evaluatePreflight } from "@/lib/outbound/preflight";
 import { RtdbPreflightStore } from "@/lib/outbound/rtdb-preflight-store";
 import { auditEvent } from "@/lib/outbound/audit";
@@ -32,6 +33,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const records = await new RtdbPreflightStore().list(access.workspaceUid);
     const now = new Date();
     return Response.json(
@@ -49,6 +51,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can run preflight checks." }, { status: 403, headers: NO_STORE });
     }

@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { validateActivation, validateExperiment } from "@/lib/outbound/experiments";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
 import type { Experiment, ExperimentVariant } from "@/lib/outbound/types";
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can manage experiments." }, { status: 403, headers: NO_STORE });
     }
@@ -127,6 +129,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const campaignId = new URL(request.url).searchParams.get("campaignId") ?? "";
     const experiments = await new RtdbExperimentStore().listExperiments(access.workspaceUid, campaignId);
     return Response.json({ experiments }, { headers: NO_STORE });

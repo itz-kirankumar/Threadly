@@ -1,5 +1,6 @@
 import { errorResponse } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { RtdbUsageStore } from "@/lib/outbound/rtdb-usage-store";
 
 export const runtime = "nodejs";
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const store = new RtdbUsageStore();
     const events = await store.listUsage(access.workspaceUid);
     const total = await store.sumCostMinorUnits(access.workspaceUid);

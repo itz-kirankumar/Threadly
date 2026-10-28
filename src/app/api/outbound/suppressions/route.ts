@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { addSuppression } from "@/lib/outbound/campaign";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import type { SuppressionReason } from "@/lib/outbound/types";
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can manage suppressions." }, { status: 403, headers: NO_STORE });
     }
@@ -62,6 +64,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const store = new RtdbCampaignStore();
     const suppressions = await store.listSuppressions(access.workspaceUid);
     // Never return raw emails; suppressions store tokens only.

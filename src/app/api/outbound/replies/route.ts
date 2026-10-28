@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { recordHumanReply } from "@/lib/outbound/campaign";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { auditEvent } from "@/lib/outbound/audit";
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const body = (await readJsonBody(request, 4 * 1024)) as Record<string, unknown>;
     const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
     const enrollmentId = typeof body.enrollmentId === "string" ? body.enrollmentId : "";

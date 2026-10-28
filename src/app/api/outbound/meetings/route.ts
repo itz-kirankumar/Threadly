@@ -1,5 +1,6 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
+import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { cancelMeeting, createBookingLink } from "@/lib/outbound/booking-flow";
 import { resolveCalendarRuntime } from "@/lib/outbound/calendar-runtime";
 import { RtdbBookingStore, RtdbOperationIntentStore } from "@/lib/outbound/rtdb-booking-store";
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     if (access.role !== "owner" && access.role !== "admin") {
       return Response.json({ error: "Only workspace admins can manage meetings." }, { status: 403, headers: NO_STORE });
     }
@@ -145,6 +147,7 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
+    if (!outboundUidAllowed(access.identity.uid)) return outboundAudienceDeny();
     const store = new RtdbBookingStore();
     const policies = await store.listPolicies(access.workspaceUid);
     // Reconciliation surface for admins: booking links with the token hash
