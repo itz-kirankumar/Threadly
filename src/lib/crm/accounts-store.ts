@@ -1,4 +1,5 @@
 import { readData, writeData, patchData } from "@/lib/portal-db";
+import { RequestError } from "@/lib/api-request";
 import { randomUUID } from "node:crypto";
 import type {
   Company, CompanyStatus, CrmContact, Deal, DealStage,
@@ -19,7 +20,7 @@ function toArray<T>(value: unknown): T[] {
 }
 
 function safeId(id: string): string {
-  if (!/^[A-Za-z0-9_.-]{1,128}$/.test(id)) throw new Error("Invalid record id.");
+  if (!/^[A-Za-z0-9_.-]{1,128}$/.test(id)) throw new RequestError("Invalid record id.", 400);
   return id;
 }
 
@@ -58,7 +59,7 @@ export async function saveCompany(input: {
   id?: string; name: string; domain?: string; industry?: string;
   status?: CompanyStatus; owner: string; source?: string;
 }): Promise<Company> {
-  if (!input.name.trim()) throw new Error("Company name is required.");
+  if (!input.name.trim()) throw new RequestError("Company name is required.", 400);
   const timestamp = now();
   const id = input.id ? safeId(input.id) : `co-${randomUUID().slice(0, 8)}`;
   const existing = input.id ? await readData<Company>(`${ROOT}/companies/${id}`) : null;
@@ -81,9 +82,9 @@ export async function saveContact(input: {
   id?: string; companyId?: string; leadId?: string; name: string;
   email?: string; title?: string; owner: string;
 }): Promise<CrmContact> {
-  if (!input.name.trim()) throw new Error("Contact name is required.");
+  if (!input.name.trim()) throw new RequestError("Contact name is required.", 400);
   const email = input.email?.trim().toLowerCase() || "";
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid contact email address.");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new RequestError("Enter a valid contact email address.", 400);
   const id = input.id ? safeId(input.id) : `ct-${randomUUID().slice(0, 8)}`;
   const existing = input.id ? await readData<CrmContact>(`${ROOT}/contacts/${id}`) : null;
   const timestamp = now();
@@ -114,9 +115,10 @@ export async function saveDeal(input: {
   value?: number; currency?: string; stage?: DealStage; probability?: number;
   expectedClose?: string; owner: string;
 }): Promise<Deal> {
-  if (!input.name.trim()) throw new Error("Deal name is required.");
+  if (!input.name.trim()) throw new RequestError("Deal name is required.", 400);
   const value = typeof input.value === "number" && Number.isFinite(input.value) && input.value >= 0 ? input.value : undefined;
   const probability = typeof input.probability === "number" ? Math.min(100, Math.max(0, input.probability)) : undefined;
+  if (input.stage !== undefined && !DEAL_STAGES.includes(input.stage)) throw new RequestError("Unknown deal stage.", 400);
   const id = input.id ? safeId(input.id) : `dl-${randomUUID().slice(0, 8)}`;
   const existing = input.id ? await readData<Deal>(`${ROOT}/deals/${id}`) : null;
   const timestamp = now();
@@ -139,9 +141,9 @@ export async function saveDeal(input: {
 }
 
 export async function updateDealStage(id: string, stage: DealStage): Promise<void> {
-  if (!DEAL_STAGES.includes(stage)) throw new Error("Unknown deal stage.");
+  if (!DEAL_STAGES.includes(stage)) throw new RequestError("Unknown deal stage.", 400);
   const deal = await readData<Deal>(`${ROOT}/deals/${safeId(id)}`);
-  if (!deal) throw new Error("Deal not found.");
+  if (!deal) throw new RequestError("Deal not found.", 404);
   await patchData(`${ROOT}/deals/${safeId(id)}`, { stage, probability: STAGE_PROBABILITY[stage], updatedAt: now() });
 }
 
@@ -149,8 +151,8 @@ export async function saveWorkspaceActivity(input: {
   type: WorkspaceActivityType; subject: string; body?: string;
   companyId?: string; contactId?: string; dealId?: string; dueAt?: string; owner: string;
 }): Promise<WorkspaceActivity> {
-  if (!input.subject.trim()) throw new Error("Activity subject is required.");
-  if (input.dueAt && Number.isNaN(Date.parse(input.dueAt))) throw new Error("Choose a valid activity date.");
+  if (!input.subject.trim()) throw new RequestError("Activity subject is required.", 400);
+  if (input.dueAt && Number.isNaN(Date.parse(input.dueAt))) throw new RequestError("Choose a valid activity date.", 400);
   const activity: WorkspaceActivity = {
     id: `wa-${randomUUID().slice(0, 8)}`,
     type: input.type,

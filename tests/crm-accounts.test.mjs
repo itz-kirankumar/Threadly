@@ -100,3 +100,37 @@ test("syncLeadToAccounts creates company and contact once, then dedupes", async 
     assert.equal(state.contacts.length, 2);
   });
 });
+
+test("workspace isolation: another workspace sees no records and cannot update foreign deals", async () => {
+  const a = `crm-iso-a-${Date.now()}`;
+  const b = `crm-iso-b-${Date.now()}`;
+  let foreignDealId;
+  await withWorkspace(a, "demo-token", async () => {
+    const deal = await store.saveDeal({ name: "Tenant A deal", value: 5000, owner: "a@x.com" });
+    foreignDealId = deal.id;
+    await store.saveCompany({ name: "Tenant A Co", owner: "a@x.com" });
+    await store.syncLeadToAccounts(LEAD, "a@x.com");
+  });
+  await withWorkspace(b, "demo-token", async () => {
+    const state = await store.loadCrmAccountsState();
+    assert.equal(state.companies.length, 0);
+    assert.equal(state.contacts.length, 0);
+    assert.equal(state.deals.length, 0);
+    // A foreign deal id submitted from workspace B resolves in B's tree only.
+    await assert.rejects(() => store.updateDealStage(foreignDealId, "won"), /Deal not found/);
+    // Path-unsafe ids are rejected outright.
+    await assert.rejects(() => store.updateDealStage("../users", "won"), /Invalid record id/);
+    // A lead handoff in B creates B-local records, never touching A's tree.
+    await store.syncLeadToAccounts(LEAD, "b@x.com");
+    const after = await store.loadCrmAccountsState();
+    assert.equal(after.companies.length, 1);
+    assert.equal(after.contacts.length, 1);
+  });
+  await withWorkspace(a, "demo-token", async () => {
+    const state = await store.loadCrmAccountsState();
+    assert.equal(state.companies.length, 2); // Tenant A Co + Acme from the handoff
+    assert.equal(state.contacts.length, 1);
+    assert.equal(state.deals.length, 1);
+    assert.equal(state.deals[0].stage, "qualification"); // untouched by B
+  });
+});

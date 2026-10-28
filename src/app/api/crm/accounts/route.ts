@@ -1,4 +1,4 @@
-import { errorResponse, readJsonBody } from "@/lib/api-request";
+import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import {
   loadCrmAccountsState, saveCompany, saveContact, saveDeal, updateDealStage, saveWorkspaceActivity, DEAL_STAGES,
@@ -12,11 +12,11 @@ function text(body: Record<string, unknown>, key: string, max: number, optional 
   const raw = body[key];
   if (raw === undefined || raw === null || raw === "") {
     if (optional) return undefined;
-    throw new Error(`${key} is required.`);
+    throw new RequestError(`${key} is required.`, 400);
   }
-  if (typeof raw !== "string") throw new Error(`${key} must be text.`);
+  if (typeof raw !== "string") throw new RequestError(`${key} must be text.`, 400);
   const value = raw.trim();
-  if (!value && !optional) throw new Error(`${key} is required.`);
+  if (!value && !optional) throw new RequestError(`${key} is required.`, 400);
   return value.slice(0, max) || undefined;
 }
 
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
           }) };
         case "dealStage": {
           const stage = text(body, "stage", 30)! as DealStage;
-          if (!DEAL_STAGES.includes(stage)) throw new Error("Unknown deal stage.");
+          if (!DEAL_STAGES.includes(stage)) throw new RequestError("Unknown deal stage.", 400);
           await updateDealStage(text(body, "id", 160)!, stage);
           return { ok: true };
         }
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
             owner,
           }) };
         default:
-          throw new Error("Unknown CRM entity.");
+          throw new RequestError("Unknown CRM entity.", 400);
       }
     });
 
