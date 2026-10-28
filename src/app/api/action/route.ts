@@ -29,6 +29,12 @@ import {
   updateMemberProfile,
   updateOpportunity,
   updateTeamRole,
+  saveCompany,
+  saveContact,
+  saveDeal,
+  updateDealStage,
+  saveActivity,
+  type Deal,
 } from "@/lib/portal-data";
 import { withWorkspace } from "@/lib/portal-db";
 import { requireApprovedIdentity } from "@/lib/admin-auth";
@@ -309,6 +315,57 @@ export async function POST(request: Request) {
           break;
         case "moveLead":
           await moveLead(user.uid, text(body, "id", 160)!, text(body, "stage", 40)!);
+          break;
+        case "crmCompany":
+          await saveCompany(user.uid, {
+            id: text(body, "id", 160, true),
+            name: text(body, "name", 200)!,
+            domain: text(body, "domain", 240, true),
+            industry: text(body, "industry", 160, true),
+            status: (text(body, "status", 30, true) || "prospect") as "prospect" | "customer" | "inactive",
+            owner: user.email,
+            source: text(body, "source", 120, true),
+          });
+          break;
+        case "crmContact":
+          await saveContact(user.uid, {
+            id: text(body, "id", 160, true),
+            companyId: text(body, "companyId", 160, true),
+            leadId: text(body, "leadId", 160, true),
+            name: text(body, "name", 200)!,
+            email: text(body, "email", 254, true),
+            title: text(body, "title", 160, true),
+            owner: user.email,
+          });
+          break;
+        case "crmDeal":
+          await saveDeal(user.uid, {
+            id: text(body, "id", 160, true),
+            companyId: text(body, "companyId", 160, true),
+            contactId: text(body, "contactId", 160, true),
+            name: text(body, "name", 200)!,
+            value: typeof body.value === "number" ? body.value : Number(body.value || 0),
+            currency: text(body, "currency", 6, true),
+            stage: (text(body, "stage", 30, true) || "qualification") as Deal["stage"],
+            probability: typeof body.probability === "number" ? body.probability : Number(body.probability || 20),
+            expectedClose: text(body, "expectedClose", 40, true),
+            owner: user.email,
+          });
+          break;
+        case "crmDealStage":
+          await updateDealStage(user.uid, text(body, "id", 160)!, text(body, "stage", 30)! as Deal["stage"]);
+          break;
+        case "crmActivity":
+          await saveActivity(user.uid, {
+            type: (text(body, "type", 20, true) || "note") as "note" | "task" | "meeting" | "email",
+            subject: text(body, "subject", 240)!,
+            body: text(body, "body", 4000, true),
+            companyId: text(body, "companyId", 160, true),
+            contactId: text(body, "contactId", 160, true),
+            dealId: text(body, "dealId", 160, true),
+            dueAt: text(body, "dueAt", 80, true),
+            owner: user.email,
+          });
           break;
         case "scheduleLeadMeeting":
           await scheduleLeadMeeting(user.uid, text(body, "leadId", 160)!, {

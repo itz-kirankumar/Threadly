@@ -7,8 +7,10 @@ Threadly combines the public product site with a private founder portal.
 - `/` and the other public pages are the marketing site.
 - `/signal-radar` has public X search when a server-side provider is configured.
 - `/portal` is the Google-authenticated workspace for Agent-Reach real-time crawling, X discovery, saved conversations, reviewed outreach, drafts, the content calendar, leads, analytics, and company settings.
+- `/portal` also includes a synchronized relationship CRM: saved leads create company/contact records, while teams can manage deals, pipeline stages, and next-step activities from the CRM workspace.
 - The portal's **Discover** workspace includes the **Agent-Reach Real-Time Crawler** (zero API keys required) for deep URL crawls, multi-channel market signals (Hacker News, GitHub, News RSS, V2EX), and 16-channel doctor diagnostics. See [the Agent-Reach guide](docs/agent-reach-crawling.md).
 - The portal's **GEO** workspace tracks buyer questions and performs on-demand web-grounded scans through configured OpenAI and Gemini API keys. Results include provider-returned source URLs; unconfigured providers do not produce sample results.
+- Enterprise capability boundaries and the consolidated navigation model are documented in [the enterprise information architecture](docs/enterprise-information-architecture.md).
 - `/admin/waitlist` is the Google-authenticated beta review portal. `kiran160703kumar@gmail.com` can approve or reject requests and has direct workspace access; other accounts need an approved request to use the workspace and its APIs.
 
 ## Local setup
@@ -61,7 +63,8 @@ Configure the hosting proxy to overwrite `x-real-ip` and `x-forwarded-for` with 
 
 Portal records are stored in Firebase Realtime Database under `users/{uid}`. Beta requests are stored at `betaWaitlist/{uid}` and community signups at `communityMembers/{uid}`. Beta requests are bound to the verified Google account, reviewed at `/admin/waitlist`, and workspace access checks the approved status on both the page and API routes.
 
+CRM records are stored in the authenticated workspace at `companies`, `contacts`, `deals`, and `activities`. These records share the same tenant-scoped Firebase rules as leads, keeping discovery, outreach, and revenue operations in one system of record.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-

@@ -76,6 +76,60 @@ export type Lead = {
   meetingEnd?: string;
 };
 
+export type Company = {
+  id: string;
+  name: string;
+  domain: string;
+  industry: string;
+  status: "prospect" | "customer" | "inactive";
+  owner: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Contact = {
+  id: string;
+  company_id: string | null;
+  lead_id: string | null;
+  name: string;
+  email: string;
+  title: string;
+  status: "active" | "inactive";
+  owner: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Deal = {
+  id: string;
+  company_id: string | null;
+  contact_id: string | null;
+  name: string;
+  value: number;
+  currency: string;
+  stage: "qualification" | "discovery" | "proposal" | "negotiation" | "won" | "lost";
+  probability: number;
+  expected_close: string | null;
+  owner: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Activity = {
+  id: string;
+  type: "note" | "task" | "meeting" | "email";
+  subject: string;
+  body: string;
+  company_id: string | null;
+  contact_id: string | null;
+  deal_id: string | null;
+  due_at: string | null;
+  completed_at: string | null;
+  owner: string;
+  created_at: string;
+};
+
 export type OutreachEmail = {
   id: string;
   lead_id: string;
@@ -139,6 +193,10 @@ type WorkspaceData = {
   workflows?: Record<string, Workflow>;
   team?: Record<string, TeamMember>;
   invites?: Record<string, TeamInvite>;
+  companies?: Record<string, Company>;
+  contacts?: Record<string, Contact>;
+  deals?: Record<string, Deal>;
+  activities?: Record<string, Activity>;
 };
 
 const contextKeys = [
@@ -264,6 +322,10 @@ export async function ensureWorkspace(uid: string, founderEmail = "founder@threa
     await writeData("opportunities", {});
     await writeData("leads", {});
     await writeData("drafts", {});
+    await writeData("companies", {});
+    await writeData("contacts", {});
+    await writeData("deals", {});
+    await writeData("activities", {});
   }
 }
 
@@ -299,6 +361,8 @@ export async function getState(uid: string) {
       return list;
     })(),
     invites: values(data.invites).filter(item => item && item.id),
+    crm: {
+    },
     capabilities: {
       ai: Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY) || isDemo,
       liveSources: Boolean(xConnection.provider) || isDemo,
@@ -361,6 +425,16 @@ function selectRecords(uid: string, data: WorkspaceData) {
     leads: values(data.leads)
       .filter(item => !item.id.startsWith("lead-demo-"))
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    companies: values(data.companies).filter(item => item && item.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+    contacts: values(data.contacts).filter(item => item && item.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+    deals: values(data.deals).filter(item => item && item.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+    activities: values(data.activities).filter(item => item && item.id).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    crm: {
+      companies: values(data.companies).filter(item => item && item.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+      contacts: values(data.contacts).filter(item => item && item.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+      deals: values(data.deals).filter(item => item && item.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+      activities: values(data.activities).filter(item => item && item.id).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    },
     outreachEmails: values(data.outreachEmails)
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),
     workflows: finalWorkflows,
@@ -486,7 +560,144 @@ export async function saveLead(uid: string, input: { opportunityId?: string; nam
   const id = randomUUID();
   const lead: Lead = { id, opportunity_id: input.opportunityId || null, name: input.name.trim(), email: contactEmail || undefined, company: input.company || "", role: input.role || "", platform: input.platform, pain: input.pain || "", stage: "identified", notes: input.notes || "", owner: email || uid, created_at: now() };
   await writeData(`leads/${id}`, lead);
+  await syncLeadToCrm(lead, email || uid);
   return lead;
+}
+
+async function syncLeadToCrm(lead: Lead, owner: string) {
+  const companyName = lead.company.trim();
+  let companyId: string | null = null;
+  if (companyName) {
+    const companies = await readData<Record<string, Company>>("companies") || {};
+    const existing = Object.values(companies).find(item => item.name.toLowerCase() === companyName.toLowerCase());
+    companyId = existing?.id || randomUUID();
+    const timestamp = now();
+    const company: Company = existing || {
+      id: companyId,
+      name: companyName,
+      domain: "",
+      industry: "",
+      status: "prospect",
+      owner,
+      source: lead.platform,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    await writeData(`companies/${companyId}`, { ...company, updated_at: timestamp });
+  }
+  if (lead.email || lead.name) {
+    const contacts = await readData<Record<string, Contact>>("contacts") || {};
+    const existing = Object.values(contacts).find(item => lead.email && item.email === lead.email);
+    const timestamp = now();
+    const contact: Contact = existing || {
+      id: randomUUID(),
+      company_id: companyId,
+      lead_id: lead.id,
+      name: lead.name,
+      email: lead.email || "",
+      title: lead.role || "",
+      status: "active",
+      owner,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    await writeData(`contacts/${contact.id}`, { ...contact, company_id: companyId, lead_id: lead.id, updated_at: timestamp });
+  }
+}
+
+export async function saveCompany(_uid: string, input: { id?: string; name: string; domain?: string; industry?: string; status?: Company["status"]; owner: string; source?: string }) {
+  if (!input.name.trim()) throw new Error("Company name is required.");
+  const timestamp = now();
+  const id = input.id ? safeId(input.id) : randomUUID();
+  const existing = input.id ? await readData<Company>(`companies/${id}`) : null;
+  const company: Company = {
+    id,
+    name: input.name.trim(),
+    domain: input.domain?.trim() || "",
+    industry: input.industry?.trim() || "",
+    status: input.status || existing?.status || "prospect",
+    owner: input.owner || existing?.owner || _uid,
+    source: input.source?.trim() || existing?.source || "manual",
+    created_at: existing?.created_at || timestamp,
+    updated_at: timestamp,
+  };
+  await writeData(`companies/${id}`, company);
+  return company;
+}
+
+export async function saveContact(_uid: string, input: { id?: string; companyId?: string; leadId?: string; name: string; email?: string; title?: string; owner: string }) {
+  if (!input.name.trim()) throw new Error("Contact name is required.");
+  const email = input.email?.trim().toLowerCase() || "";
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid contact email address.");
+  const id = input.id ? safeId(input.id) : randomUUID();
+  const existing = input.id ? await readData<Contact>(`contacts/${id}`) : null;
+  const timestamp = now();
+  const contact: Contact = {
+    id,
+    company_id: input.companyId || existing?.company_id || null,
+    lead_id: input.leadId || existing?.lead_id || null,
+    name: input.name.trim(),
+    email,
+    title: input.title?.trim() || "",
+    status: existing?.status || "active",
+    owner: input.owner || existing?.owner || _uid,
+    created_at: existing?.created_at || timestamp,
+    updated_at: timestamp,
+  };
+  await writeData(`contacts/${id}`, contact);
+  return contact;
+}
+
+export async function saveDeal(_uid: string, input: { id?: string; companyId?: string; contactId?: string; name: string; value?: number; currency?: string; stage?: Deal["stage"]; probability?: number; expectedClose?: string; owner: string }) {
+  if (!input.name.trim()) throw new Error("Deal name is required.");
+  const value = typeof input.value === "number" && Number.isFinite(input.value) && input.value >= 0 ? input.value : 0;
+  const probability = Math.min(100, Math.max(0, typeof input.probability === "number" ? input.probability : 20));
+  const id = input.id ? safeId(input.id) : randomUUID();
+  const existing = input.id ? await readData<Deal>(`deals/${id}`) : null;
+  const timestamp = now();
+  const deal: Deal = {
+    id,
+    company_id: input.companyId || existing?.company_id || null,
+    contact_id: input.contactId || existing?.contact_id || null,
+    name: input.name.trim(),
+    value,
+    currency: input.currency?.trim().toUpperCase() || existing?.currency || "USD",
+    stage: input.stage || existing?.stage || "qualification",
+    probability,
+    expected_close: input.expectedClose || existing?.expected_close || null,
+    owner: input.owner || existing?.owner || _uid,
+    created_at: existing?.created_at || timestamp,
+    updated_at: timestamp,
+  };
+  await writeData(`deals/${id}`, deal);
+  return deal;
+}
+
+export async function updateDealStage(_uid: string, id: string, stage: Deal["stage"]) {
+  const deal = await readData<Deal>(`deals/${safeId(id)}`);
+  if (!deal) throw new Error("Deal not found.");
+  const probabilityByStage: Record<Deal["stage"], number> = { qualification: 20, discovery: 35, proposal: 55, negotiation: 75, won: 100, lost: 0 };
+  await patchData(`deals/${safeId(id)}`, { stage, probability: probabilityByStage[stage], updated_at: now() });
+}
+
+export async function saveActivity(_uid: string, input: { type: Activity["type"]; subject: string; body?: string; companyId?: string; contactId?: string; dealId?: string; dueAt?: string; owner: string }) {
+  if (!input.subject.trim()) throw new Error("Activity subject is required.");
+  if (input.dueAt && Number.isNaN(Date.parse(input.dueAt))) throw new Error("Choose a valid activity date.");
+  const activity: Activity = {
+    id: randomUUID(),
+    type: input.type,
+    subject: input.subject.trim(),
+    body: input.body?.trim() || "",
+    company_id: input.companyId || null,
+    contact_id: input.contactId || null,
+    deal_id: input.dealId || null,
+    due_at: input.dueAt || null,
+    completed_at: null,
+    owner: input.owner || _uid,
+    created_at: now(),
+  };
+  await writeData(`activities/${activity.id}`, activity);
+  return activity;
 }
 
 export async function updateLeadEmail(_uid: string, id: string, email: string) {

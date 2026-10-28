@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Activity, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, Bell, CalendarClock, CalendarDays,
+  Activity, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, Bell, BriefcaseBusiness, Building2, CalendarClock, CalendarDays,
   Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp, Clock3,
   Compass, Copy, ExternalLink, FileText, Filter, Flame, Globe, LayoutDashboard, Lightbulb,
-  LogOut, Mail, MapPin, Menu, MessageCircle, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Play,
+  ClipboardList, LogOut, Mail, MapPin, Menu, MessageCircle, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Play,
   Plus, Radio, RefreshCw, Search, Send, Settings, ShieldCheck, Sparkles, Target, Trash2,
   TrendingUp, UploadCloud, UserCheck, UserPlus, Users, Video, WandSparkles, Workflow as WorkflowIcon, X, Zap
 } from "lucide-react";
@@ -25,7 +25,7 @@ import {
   SequencesPage,
   useLiveStream,
 } from "./ThreadlyModules";
-import type { TeamInvite, TeamMember, Workflow } from "@/lib/portal-data";
+import type { Activity as CrmActivity, Company, Contact, Deal, TeamInvite, TeamMember, Workflow } from "@/lib/portal-data";
 import type { GrowthSnapshot } from "@/lib/threadly-engine";
 import {
   detectBrowserTimezone,
@@ -41,6 +41,7 @@ type Opportunity = { id: string; platform: string; community: string; author: st
 type Draft = { id: string; opportunity_id: string | null; platform: string; kind: string; text: string; status: string; origin: string; approved_at: string | null; scheduled_at: string | null; created_at: string };
 type Lead = { id: string; opportunity_id: string | null; name: string; email?: string; company: string; role: string; platform: string; pain: string; stage: string; notes: string; owner: string; created_at: string; qualification?: { fit: "strong_fit" | "possible_fit" | "weak_fit"; fitConfidence: number; buyingIntent: number; model: "Laya" | "AnyJev"; route: "language" | "confidence" | "fallback"; assessedAt: string }; meetingUrl?: string; calendarEventUrl?: string; googleCalendarEventId?: string; meetingStart?: string; meetingEnd?: string };
 type OutreachEmail = { id: string; lead_id: string; recipient: string; subject: string; body: string; status: "draft" | "sending" | "sent"; created_at: string; sent_at?: string };
+type CrmState = { companies: Company[]; contacts: Contact[]; deals: Deal[]; activities: CrmActivity[] };
 
 type State = {
   workspace: {
@@ -78,31 +79,65 @@ type State = {
     decisionModels: { laya: boolean; anyjev: boolean };
   };
   growth: GrowthSnapshot;
+  crm: CrmState;
   demo: boolean;
 };
 
 type Page =
   | "Dashboard" | "Discover" | "Outreach" | "Workflows" | "Radar" | "Content Studio"
-  | "Calendar" | "Leads" | "Team" | "Analytics" | "AI Insights" | "Workspace" | "Settings"
+  | "Calendar" | "Leads" | "CRM" | "Team" | "Analytics" | "AI Insights" | "Workspace" | "Settings"
   | "Campaigns" | "Sequences" | "Segments" | "Scheduler" | "Revenue" | "GEO" | "Maps Scraper";
 
-const nav: { label: Page; icon: typeof LayoutDashboard }[] = [
-  { label: "Dashboard", icon: LayoutDashboard },
-  { label: "Discover", icon: Compass },
-  { label: "Radar", icon: Radio },
-  { label: "Maps Scraper", icon: MapPin },
-  { label: "Segments", icon: Target },
-  { label: "Outreach", icon: Send },
-  { label: "Sequences", icon: Mail },
-  { label: "Campaigns", icon: CircleDollarSign },
-  { label: "Scheduler", icon: CalendarClock },
-  { label: "Content Studio", icon: WandSparkles },
-  { label: "Calendar", icon: CalendarDays },
-  { label: "Leads", icon: UserCheck },
-  { label: "GEO", icon: Globe },
-  { label: "Revenue", icon: Activity },
-  { label: "Workflows", icon: Zap },
-  { label: "Team", icon: Users },
+type NavigationItem = {
+  label: string;
+  target: Page;
+  aliases: Page[];
+  icon: typeof LayoutDashboard;
+  badge?: "opportunities" | "workflows" | "team";
+  children?: { label: string; target: Page }[];
+};
+
+const nav: NavigationItem[] = [
+  { label: "Overview", target: "Dashboard", aliases: [], icon: LayoutDashboard },
+  {
+    label: "Revenue",
+    target: "CRM",
+    aliases: ["Leads", "Outreach", "Content Studio", "Campaigns", "Sequences", "Calendar", "Scheduler", "Workflows"],
+    icon: Building2,
+    badge: "opportunities",
+    children: [
+      { label: "CRM", target: "CRM" },
+      { label: "Leads", target: "Leads" },
+      { label: "Workflows", target: "Workflows" },
+      { label: "Calendar", target: "Calendar" },
+      { label: "Content Studio", target: "Content Studio" },
+    ],
+  },
+  {
+    label: "Workspace",
+    target: "Workspace",
+    aliases: ["Team", "Settings"],
+    icon: Users,
+    badge: "team",
+    children: [
+      { label: "Company profile", target: "Workspace" },
+      { label: "Team", target: "Team" },
+      { label: "Settings", target: "Settings" },
+    ],
+  },
+  {
+    label: "Intelligence",
+    target: "Discover",
+    aliases: ["Radar", "Maps Scraper", "Analytics", "AI Insights", "Segments", "GEO"],
+    icon: Compass,
+    children: [
+      { label: "Discover", target: "Discover" },
+      { label: "Radar", target: "Radar" },
+      { label: "Maps Scraper", target: "Maps Scraper" },
+      { label: "Analytics", target: "Analytics" },
+      { label: "GEO", target: "GEO" },
+    ],
+  },
 ];
 
 const stages = ["identified", "engaged", "qualified", "conversation", "converted"];
@@ -241,6 +276,11 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
     targetSubreddits: "SaaS, startups, Entrepreneur, smallbusiness, webdev",
   });
   const [onboardingLaunching, setOnboardingLaunching] = useState(false);
+
+  const [crmCompanyForm, setCrmCompanyForm] = useState({ name: "", domain: "", industry: "" });
+  const [crmContactForm, setCrmContactForm] = useState({ name: "", email: "", title: "", companyId: "" });
+  const [crmDealForm, setCrmDealForm] = useState({ name: "", value: "", companyId: "", contactId: "", stage: "qualification" as Deal["stage"] });
+  const [crmActivityForm, setCrmActivityForm] = useState({ subject: "", type: "note" as CrmActivity["type"], body: "", dueAt: "" });
 
   // Topbar User Menu state
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -655,22 +695,35 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
       <nav className="nav-list" aria-label="Main navigation">
         {nav.map(item => {
           const Icon = item.icon;
-          return <button key={item.label} className={`nav-item ${page === item.label ? "active" : ""}`} onClick={() => go(item.label)} aria-label={item.label} title={sidebarCollapsed ? item.label : undefined}>
-            <Icon size={18}/>
-            <span>{item.label}</span>
-            {item.label === "Radar" && <i>{stats.opportunities}</i>}
-            {item.label === "Workflows" && <i>{stats.workflows}</i>}
-            {item.label === "Team" && <i>{stats.team}</i>}
-          </button>;
+          const active = page === item.target || item.aliases.includes(page);
+          const badgeValue = item.badge === "opportunities" ? stats.opportunities : item.badge === "workflows" ? stats.workflows : item.badge === "team" ? stats.team : null;
+          return <div key={item.label} className={`nav-group ${active ? "active" : ""}`}>
+            <button className={`nav-item ${active && page === item.target ? "active" : ""}`} onClick={() => go(item.target)} aria-label={item.label} title={sidebarCollapsed ? item.label : undefined}>
+              <Icon size={18}/>
+              <span>{item.label}</span>
+              {badgeValue !== null && <i>{badgeValue}</i>}
+            </button>
+            {!sidebarCollapsed && active && item.children && (
+              <div className="nav-children" aria-label={`${item.label} navigation`}>
+                {item.children.map(child => (
+                  <button
+                    key={child.target}
+                    type="button"
+                    className={`nav-child ${page === child.target ? "active" : ""}`}
+                    onClick={() => go(child.target)}
+                  >
+                    <span className="nav-child-dot" aria-hidden="true" />
+                    <span>{child.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>;
         })}
       </nav>
 
       <div className="sidebar-bottom">
         <div className="sidebar-label">ACCOUNT</div>
-        <button className={`nav-item ${page === "Settings" ? "active" : ""}`} onClick={() => go("Settings")} aria-label="Settings" title={sidebarCollapsed ? "Settings" : undefined}>
-          <Settings size={18}/>
-          <span>Settings</span>
-        </button>
         <button
           type="button"
           className="nav-item logout-nav-item"
@@ -879,9 +932,9 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                 <p>Real conversations, automated outreach, and team intelligence in one cockpit.</p>
               </div>
               <div className="page-actions">
-                <button className="btn btn-outline" onClick={openOnboarding}><Sparkles size={16}/> Onboard Company</button>
-                <button className="btn btn-outline" onClick={() => go("Workflows")}><Zap size={16}/> Workflows</button>
-                <button className="btn btn-dark" onClick={() => go("Radar")}>Explore Radar <ArrowUpRight size={17}/></button>
+                <button className="btn btn-outline" onClick={() => go("Discover")}><Search size={16}/> Find signals</button>
+                <button className="btn btn-outline" onClick={() => go("CRM")}><Building2 size={16}/> Review pipeline</button>
+                <button className="btn btn-dark" onClick={() => go("Workflows")}><Zap size={16}/> Automate follow-up <ArrowUpRight size={17}/></button>
               </div>
             </div>
 
@@ -909,9 +962,9 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
 
             <div className="stats-grid">
               <Stat label="PIPELINE" value={data.growth?.metrics.pipelineValue || 0} display={`$${Math.round(data.growth?.metrics.pipelineValue || 0).toLocaleString("en-US")}`} delta={`${stats.leads} leads in play`} icon={Target} onClick={() => go("Revenue")}/>
-              <Stat label="REPLY RATE" value={data.growth?.metrics.replyRate || 0} display={`${data.growth?.metrics.replyRate || 0}%`} delta={`${data.growth?.metrics.enrolledProspects || 0} enrolled`} icon={MessageCircle} onClick={() => go("Sequences")}/>
-              <Stat label="BLENDED ROAS" value={data.growth?.metrics.blendedRoas || 0} display={`${(data.growth?.metrics.blendedRoas || 0).toFixed(2)}×`} delta={`${data.growth?.metrics.activeCampaigns || 0} campaigns live`} icon={Flame} onClick={() => go("Campaigns")}/>
-              <Stat label="GEO SHARE" value={data.growth?.metrics.geoShare || 0} display={`${data.growth?.metrics.geoShare || 0}%`} delta="AI answer citations" icon={Globe} onClick={() => go("GEO")}/>
+              <Stat label="HIGH-INTENT SIGNALS" value={stats.conversations} display={`${stats.conversations}`} delta={`${stats.opportunities} signals captured`} icon={MessageCircle} onClick={() => go("Radar")}/>
+              <Stat label="REVIEW QUEUE" value={stats.drafts} display={`${stats.drafts}`} delta="drafts awaiting approval" icon={ClipboardList} onClick={() => go("Content Studio")}/>
+              <Stat label="TEAM" value={stats.team} display={`${stats.team}`} delta={`${stats.workflows} workflows enabled`} icon={Users} onClick={() => go("Workspace")}/>
             </div>
 
             <div className="dashboard-columns">
@@ -1661,6 +1714,99 @@ export default function Workspace({ email, name, isAdmin = false, getIdToken, si
                   </div>
                 </div>
               ))}
+            </div>
+          </>}
+
+          {/* CRM */}
+          {page === "CRM" && data.crm && <>
+            <div className="page-head">
+              <div>
+                <div className="eyebrow"><span className="pulse-dot"/> SYSTEM OF RECORD</div>
+                <h1>Relationship CRM<span className="accent-period">.</span></h1>
+                <p>Keep companies, people, deals, and next actions connected to every signal.</p>
+              </div>
+              <span className="source-notice"><span className="tiny-dot"/> Synced with Leads</span>
+            </div>
+
+            <div className="stats-grid">
+              <Stat label="COMPANIES" value={data.crm.companies.length} delta="Accounts in workspace" icon={Building2}/>
+              <Stat label="CONTACTS" value={data.crm.contacts.length} delta="Known people" icon={Users}/>
+              <Stat label="OPEN PIPELINE" value={data.crm.deals.filter(d => !["won", "lost"].includes(d.stage)).length} delta="Active opportunities" icon={BriefcaseBusiness}/>
+              <Stat label="NEXT ACTIONS" value={data.crm.activities.filter(a => !a.completed_at).length} delta="Tasks and notes" icon={ClipboardList}/>
+            </div>
+
+            <div className="workspace-grid" style={{ alignItems: "start" }}>
+              <section className="panel">
+                <div className="section-heading"><h3><Building2 size={17}/> Companies</h3><span>{data.crm.companies.length}</span></div>
+                <div className="inline-form">
+                  <input value={crmCompanyForm.name} onChange={e => setCrmCompanyForm({ ...crmCompanyForm, name: e.target.value })} placeholder="Company name" />
+                  <input value={crmCompanyForm.domain} onChange={e => setCrmCompanyForm({ ...crmCompanyForm, domain: e.target.value })} placeholder="Domain" />
+                  <input value={crmCompanyForm.industry} onChange={e => setCrmCompanyForm({ ...crmCompanyForm, industry: e.target.value })} placeholder="Industry" />
+                  <button className="btn btn-dark" disabled={busy || !crmCompanyForm.name.trim()} onClick={async () => {
+                    const result = await act("crmCompany", crmCompanyForm, "Company added");
+                    if (result) setCrmCompanyForm({ name: "", domain: "", industry: "" });
+                  }}><Plus size={15}/> Add</button>
+                </div>
+                <div className="list-stack">
+                  {data.crm.companies.slice(0, 8).map(company => (
+                    <div className="activity-row" key={company.id}><Building2 size={16}/><div><strong>{company.name}</strong><small>{company.domain || company.industry || "Prospect account"}</small></div><span className="status-pill">{company.status}</span></div>
+                  ))}
+                  {!data.crm.companies.length && <p className="empty-state">Save a lead with a company name to create the first account.</p>}
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="section-heading"><h3><Users size={17}/> Contacts</h3><span>{data.crm.contacts.length}</span></div>
+                <div className="inline-form">
+                  <input value={crmContactForm.name} onChange={e => setCrmContactForm({ ...crmContactForm, name: e.target.value })} placeholder="Full name" />
+                  <input value={crmContactForm.email} onChange={e => setCrmContactForm({ ...crmContactForm, email: e.target.value })} placeholder="Email" type="email" />
+                  <input value={crmContactForm.title} onChange={e => setCrmContactForm({ ...crmContactForm, title: e.target.value })} placeholder="Title" />
+                  <select value={crmContactForm.companyId} onChange={e => setCrmContactForm({ ...crmContactForm, companyId: e.target.value })}><option value="">No company</option>{data.crm.companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select>
+                  <button className="btn btn-dark" disabled={busy || !crmContactForm.name.trim()} onClick={async () => {
+                    const result = await act("crmContact", crmContactForm, "Contact added");
+                    if (result) setCrmContactForm({ name: "", email: "", title: "", companyId: "" });
+                  }}><Plus size={15}/> Add</button>
+                </div>
+                <div className="list-stack">
+                  {data.crm.contacts.slice(0, 8).map(contact => <div className="activity-row" key={contact.id}><UserPlus size={16}/><div><strong>{contact.name}</strong><small>{contact.title || "Contact"}{contact.email ? ` · ${contact.email}` : ""}</small></div></div>)}
+                  {!data.crm.contacts.length && <p className="empty-state">Contacts created from saved leads appear here.</p>}
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="section-heading"><h3><BriefcaseBusiness size={17}/> Deals</h3><span>{data.crm.deals.length}</span></div>
+                <div className="inline-form">
+                  <input value={crmDealForm.name} onChange={e => setCrmDealForm({ ...crmDealForm, name: e.target.value })} placeholder="Deal name" />
+                  <input value={crmDealForm.value} onChange={e => setCrmDealForm({ ...crmDealForm, value: e.target.value })} placeholder="Value" type="number" min="0" />
+                  <select value={crmDealForm.companyId} onChange={e => setCrmDealForm({ ...crmDealForm, companyId: e.target.value })}><option value="">Company</option>{data.crm.companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select>
+                  <select value={crmDealForm.stage} onChange={e => setCrmDealForm({ ...crmDealForm, stage: e.target.value as Deal["stage"] })}>{["qualification", "discovery", "proposal", "negotiation", "won", "lost"].map(stage => <option key={stage} value={stage}>{stage}</option>)}</select>
+                  <button className="btn btn-dark" disabled={busy || !crmDealForm.name.trim()} onClick={async () => {
+                    const result = await act("crmDeal", { ...crmDealForm, value: Number(crmDealForm.value || 0) }, "Deal added");
+                    if (result) setCrmDealForm({ name: "", value: "", companyId: "", contactId: "", stage: "qualification" });
+                  }}><Plus size={15}/> Add</button>
+                </div>
+                <div className="list-stack">
+                  {data.crm.deals.slice(0, 8).map(deal => <div className="activity-row" key={deal.id}><CircleDollarSign size={16}/><div><strong>{deal.name}</strong><small>{deal.currency} {deal.value.toLocaleString()} · {deal.probability}% likely</small></div><select value={deal.stage} onChange={e => act("crmDealStage", { id: deal.id, stage: e.target.value }, "Deal stage updated")}>{["qualification", "discovery", "proposal", "negotiation", "won", "lost"].map(stage => <option key={stage} value={stage}>{stage}</option>)}</select></div>)}
+                  {!data.crm.deals.length && <p className="empty-state">Create a deal when a qualified relationship becomes a real opportunity.</p>}
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="section-heading"><h3><ClipboardList size={17}/> Activity timeline</h3><span>{data.crm.activities.length}</span></div>
+                <div className="inline-form">
+                  <input value={crmActivityForm.subject} onChange={e => setCrmActivityForm({ ...crmActivityForm, subject: e.target.value })} placeholder="Next action or note" />
+                  <select value={crmActivityForm.type} onChange={e => setCrmActivityForm({ ...crmActivityForm, type: e.target.value as CrmActivity["type"] })}>{["note", "task", "meeting", "email"].map(type => <option key={type} value={type}>{type}</option>)}</select>
+                  <input value={crmActivityForm.dueAt} onChange={e => setCrmActivityForm({ ...crmActivityForm, dueAt: e.target.value })} type="datetime-local" />
+                  <button className="btn btn-dark" disabled={busy || !crmActivityForm.subject.trim()} onClick={async () => {
+                    const result = await act("crmActivity", crmActivityForm, "Activity added");
+                    if (result) setCrmActivityForm({ subject: "", type: "note", body: "", dueAt: "" });
+                  }}><Plus size={15}/> Add</button>
+                </div>
+                <div className="list-stack">
+                  {data.crm.activities.slice(0, 10).map(activity => <div className="activity-row" key={activity.id}><Activity size={16}/><div><strong>{activity.subject}</strong><small>{activity.type}{activity.due_at ? ` · due ${formatDate(activity.due_at)}` : ""}</small></div></div>)}
+                  {!data.crm.activities.length && <p className="empty-state">Record the next action so the team always knows what happens next.</p>}
+                </div>
+              </section>
             </div>
           </>}
 
