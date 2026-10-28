@@ -18,6 +18,14 @@ function safeKey(id: string): string {
   return id;
 }
 
+// RTDB drops null-valued fields on write; normalize on read so nullable
+// fields always come back as explicit null (never undefined). A missing
+// liftedAt MUST mean "still active" - undefined would silently read as
+// lifted in strict-null checks and disable the safety control.
+export function normalizeKillSwitch(s: KillSwitch): KillSwitch {
+  return { ...s, liftedAt: s.liftedAt ?? null };
+}
+
 export class RtdbKillSwitchStore implements KillSwitchStore {
   async save(s: KillSwitch): Promise<void> {
     const database = await db();
@@ -28,13 +36,13 @@ export class RtdbKillSwitchStore implements KillSwitchStore {
     const snap = await database.ref(`${tenantRoot(tenantId)}/killSwitches/${safeKey(switchId)}`).get();
     if (!snap.exists()) return null;
     const val = snap.val() as KillSwitch;
-    return val.tenantId === tenantId ? val : null;
+    return val.tenantId === tenantId ? normalizeKillSwitch(val) : null;
   }
   async list(tenantId: string): Promise<KillSwitch[]> {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/killSwitches`).get();
     if (!snap.exists()) return [];
-    return Object.values(snap.val() as Record<string, KillSwitch>).filter((s) => s && s.tenantId === tenantId);
+    return Object.values(snap.val() as Record<string, KillSwitch>).filter((s) => s && s.tenantId === tenantId).map(normalizeKillSwitch);
   }
   async lift(tenantId: string, switchId: string, liftedAt: ISODate): Promise<void> {
     const existing = await this.get(tenantId, switchId);

@@ -31,11 +31,6 @@ export async function POST(request: Request) {
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
     const body = (await readJsonBody(request, 16 * 1024)) as Record<string, unknown>;
-    const contactId = typeof body.contactId === "string" ? body.contactId : "";
-    const replyText = typeof body.replyText === "string" ? body.replyText : "";
-    if (!contactId || !replyText) {
-      return Response.json({ error: "contactId and replyText are required." }, { status: 400 });
-    }
     // F16 follow-up actions on an existing conversation.
     if (body.action === "reclassify" || body.action === "assign-owner") {
       if (access.role !== "owner" && access.role !== "admin") {
@@ -58,6 +53,11 @@ export async function POST(request: Request) {
       return Response.json({ conversation: updated }, { headers: NO_STORE });
     }
 
+    const contactId = typeof body.contactId === "string" ? body.contactId : "";
+    const replyText = typeof body.replyText === "string" ? body.replyText : "";
+    if (!contactId || !replyText) {
+      return Response.json({ error: "contactId and replyText are required." }, { status: 400 });
+    }
     const requested = INTENTS.find((i) => i === body.classification) as ConversationIntent | undefined;
     const now = new Date().toISOString();
     const conversation: Conversation = {

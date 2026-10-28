@@ -18,6 +18,12 @@ function safeKey(id: string): string {
   return id;
 }
 
+// RTDB drops null fields; confirmed/activated markers must read as explicit
+// null (confirmed without activatedAt = never activated, fail closed).
+export function normalizeIcp(v: IcpVersion): IcpVersion {
+  return { ...v, confirmedAt: v.confirmedAt ?? null, confirmedBy: v.confirmedBy ?? null, activatedAt: v.activatedAt ?? null };
+}
+
 export class RtdbIcpStore implements IcpStore {
   async save(version: IcpVersion): Promise<void> {
     const database = await db();
@@ -28,13 +34,13 @@ export class RtdbIcpStore implements IcpStore {
     const snap = await database.ref(`${tenantRoot(tenantId)}/icpVersions/${safeKey(icpVersionId)}`).get();
     if (!snap.exists()) return null;
     const val = snap.val() as IcpVersion;
-    return val.tenantId === tenantId ? val : null;
+    return val.tenantId === tenantId ? normalizeIcp(val) : null;
   }
   async list(tenantId: string): Promise<IcpVersion[]> {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/icpVersions`).get();
     if (!snap.exists()) return [];
-    return Object.values(snap.val() as Record<string, IcpVersion>)
+    return Object.values(snap.val() as Record<string, IcpVersion>).map((v) => normalizeIcp(v))
       .filter((v) => v && v.tenantId === tenantId)
       .sort((a, b) => b.version - a.version);
   }

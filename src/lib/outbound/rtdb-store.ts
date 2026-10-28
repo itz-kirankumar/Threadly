@@ -33,20 +33,34 @@ export async function rtdbCasPut<T>(path: string, check: (current: T | null) => 
   const { getAdminDatabase } = await import("../geo/admin-store.ts");
   const database = await getAdminDatabase();
   if (!database) throw new Error("RTDB admin not configured");
-  const app = (database as unknown as { app: { options: { databaseURL?: string } } }).app;
-  const base = (app.options.databaseURL ?? "").replace(/\/$/, "");
-  if (!base) throw new Error("RTDB databaseURL missing");
-  const credential = (app as unknown as { options: { credential?: { getAccessToken(): Promise<{ access_token: string }> } } }).options.credential;
-  if (!credential) throw new Error("RTDB admin credential missing");
+  const app = (database as unknown as { app: { options: { databaseURL?: string; projectId?: string } } }).app;
+  // TEST-ONLY local emulator path (same gate as admin-store): plain HTTP to
+  // the emulator with no Google access token, which a fake credential could
+  // never mint. Never active in any Vercel env (the var is never set there).
+  const emulatorHost = process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+  let base: string;
+  let authSuffix = "";
+  let credential: { getAccessToken(): Promise<{ access_token: string }> } | undefined;
+  if (emulatorHost) {
+    base = `http://${emulatorHost}`;
+    authSuffix = `ns=${encodeURIComponent(app.options.projectId ?? "demo-threadly")}`;
+  } else {
+    base = (app.options.databaseURL ?? "").replace(/\/$/, "");
+    if (!base) throw new Error("RTDB databaseURL missing");
+    credential = (app as unknown as { options: { credential?: { getAccessToken(): Promise<{ access_token: string }> } } }).options.credential;
+    if (!credential) throw new Error("RTDB admin credential missing");
+  }
   for (let attempt = 0; attempt < 3; attempt++) {
-    const token = (await credential.getAccessToken()).access_token;
-    const getRes = await fetch(`${base}/${path}.json?access_token=${encodeURIComponent(token)}`, { cache: "no-store", headers: { "X-Firebase-ETag": "true" } });
+    if (credential) {
+      authSuffix = `access_token=${encodeURIComponent((await credential.getAccessToken()).access_token)}`;
+    }
+    const getRes = await fetch(`${base}/${path}.json?${authSuffix}`, { cache: "no-store", headers: { "X-Firebase-ETag": "true" } });
     if (!getRes.ok) throw new Error(`cas_read_failed:${getRes.status}`);
     const etag = getRes.headers.get("ETag") ?? getRes.headers.get("etag");
     const current = (await getRes.json()) as T | null;
     if (!check(current)) return false;
     if (!etag) throw new Error("cas_etag_missing");
-    const putRes = await fetch(`${base}/${path}.json?access_token=${encodeURIComponent(token)}`, {
+    const putRes = await fetch(`${base}/${path}.json?${authSuffix}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "if-match": etag },
       body: JSON.stringify(next),
@@ -70,6 +84,19 @@ async function db() {
   const database = await getAdminDatabase();
   if (!database) throw new Error("RTDB admin not configured");
   return database;
+}
+
+// RTDB drops null-valued fields on write; normalize on read so nullable
+// fields come back as explicit null. leaseExpiresAt drives lease-expiry
+// checks with strict-null comparisons - undefined would corrupt them.
+export function normalizeIntent(i: MessageIntent): MessageIntent {
+  return {
+    ...i,
+    cancelReason: i.cancelReason ?? null,
+    leaseOwner: i.leaseOwner ?? null,
+    leaseExpiresAt: i.leaseExpiresAt ?? null,
+    reconciledAt: i.reconciledAt ?? null,
+  };
 }
 
 export class RtdbLedgerStore implements LedgerStore {
@@ -106,7 +133,7 @@ export class RtdbLedgerStore implements LedgerStore {
     if (!snap.exists()) return null;
     const val = snap.val() as MessageIntent;
     if (val.tenantId !== tenantId || val.intentId !== intentId) return null;
-    return val;
+    return normalizeIntent(val);
   }
 
   async findIntentByUniqueKey(uniqueKey: string): Promise<MessageIntent | null> {
@@ -125,34 +152,14 @@ export class RtdbLedgerStore implements LedgerStore {
     expected: MessageStatus,
     next: MessageIntent
   ): Promise<boolean> {
-    // ETag compare-and-put over the RTDB REST API: genuinely atomic, and not
-    // dependent on the client SDK's local transaction cache (which aborts on
-    // a stale empty cache in fresh serverless processes).
-    const database = await db();
-    const app = (database as unknown as { app: { options: { databaseURL?: string }; } }).app;
-    const base = (app.options.databaseURL ?? "").replace(/\/$/, "");
-    if (!base) throw new Error("RTDB databaseURL missing");
-    const credential = (app as unknown as { options: { credential?: { getAccessToken(): Promise<{ access_token: string }> } } }).options.credential;
-    if (!credential) throw new Error("RTDB admin credential missing");
+    // Shared ETag compare-and-put (rtdbCasPut): genuinely atomic, independent
+    // of the client SDK's local transaction cache, and emulator-aware.
     const path = `${tenantRoot(tenantId)}/intents/${intentId}`;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const token = (await credential.getAccessToken()).access_token;
-      const getRes = await fetch(`${base}/${path}.json?access_token=${encodeURIComponent(token)}`, { cache: "no-store", headers: { "X-Firebase-ETag": "true" } });
-      if (!getRes.ok) throw new Error(`cas_read_failed:${getRes.status}`);
-      const etag = getRes.headers.get("ETag") ?? getRes.headers.get("etag");
-      const current = (await getRes.json()) as MessageIntent | null;
-      if (!current || current.tenantId !== tenantId || current.status !== expected) return false; // real conflict
-      if (!etag) throw new Error("cas_etag_missing");
-      const putRes = await fetch(`${base}/${path}.json?access_token=${encodeURIComponent(token)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "if-match": etag },
-        body: JSON.stringify(next),
-      });
-      if (putRes.ok) return true;
-      if (putRes.status === 412) continue; // lost the race; retry against fresh state
-      throw new Error(`cas_write_failed:${putRes.status}`);
-    }
-    return false;
+    return rtdbCasPut<MessageIntent>(
+      path,
+      (current) => current !== null && current.tenantId === tenantId && current.status === expected,
+      next
+    );
   }
 
   async appendAttempt(attempt: DeliveryAttempt): Promise<void> {

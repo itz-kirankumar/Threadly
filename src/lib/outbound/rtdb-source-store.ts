@@ -17,6 +17,12 @@ function safeKey(id: string): string {
   return id;
 }
 
+// RTDB drops null fields; a live source must read revokedAt as explicit
+// null, not undefined (strict-null revocation checks would misfire).
+export function normalizeSource(s: LicensedSource): LicensedSource {
+  return { ...s, revokedAt: s.revokedAt ?? null, termsUrl: s.termsUrl ?? null };
+}
+
 export class RtdbLicensedSourceStore implements LicensedSourceStore {
   async save(source: LicensedSource): Promise<void> {
     const database = await db();
@@ -26,6 +32,8 @@ export class RtdbLicensedSourceStore implements LicensedSourceStore {
     const database = await db();
     const snap = await database.ref(`${tenantRoot(tenantId)}/licensedSources`).get();
     if (!snap.exists()) return [];
-    return Object.values(snap.val() as Record<string, LicensedSource>).filter((s) => s && s.tenantId === tenantId);
+    return Object.values(snap.val() as Record<string, LicensedSource>)
+      .filter((s) => s && s.tenantId === tenantId)
+      .map(normalizeSource);
   }
 }

@@ -22,6 +22,12 @@ function emailKey(email: string): string {
   return createHash("sha256").update(email.trim().toLowerCase(), "utf8").digest("hex");
 }
 
+// Domains contain dots, which are illegal in RTDB path keys: index them by
+// sha256 like emails (deterministic point lookups, no readable PII in keys).
+function domainKey(domain: string): string {
+  return createHash("sha256").update(domain.trim().toLowerCase(), "utf8").digest("hex");
+}
+
 export class RtdbAccountStore {
   async getAccount(tenantId: string, accountId: string): Promise<Account | null> {
     const database = await db();
@@ -33,19 +39,19 @@ export class RtdbAccountStore {
 
   async getAssignment(tenantId: string, domain: string): Promise<string | null> {
     const database = await db();
-    const snap = await database.ref(`${tenantRoot(tenantId)}/domainAssignments/${safeKey(domain.trim().toLowerCase())}`).get();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/domainAssignments/${domainKey(domain)}`).get();
     if (!snap.exists()) return null;
     return snap.val() as string;
   }
 
   async saveAssignment(tenantId: string, domain: string, accountId: string): Promise<void> {
     const database = await db();
-    await database.ref(`${tenantRoot(tenantId)}/domainAssignments/${safeKey(domain.trim().toLowerCase())}`).set(accountId);
+    await database.ref(`${tenantRoot(tenantId)}/domainAssignments/${domainKey(domain)}`).set(accountId);
   }
 
   async findByDomain(tenantId: string, domain: string): Promise<Account | null> {
     const database = await db();
-    const snap = await database.ref(`${tenantRoot(tenantId)}/accountsByDomain/${safeKey(domain)}`).get();
+    const snap = await database.ref(`${tenantRoot(tenantId)}/accountsByDomain/${domainKey(domain)}`).get();
     if (!snap.exists()) return null;
     const accountId = snap.val() as string;
     const acc = await database.ref(`${tenantRoot(tenantId)}/accounts/${safeKey(accountId)}`).get();
@@ -57,7 +63,7 @@ export class RtdbAccountStore {
   async saveAccount(a: Account): Promise<void> {
     const database = await db();
     await database.ref(`${tenantRoot(a.tenantId)}/accounts/${safeKey(a.accountId)}`).set(a);
-    await database.ref(`${tenantRoot(a.tenantId)}/accountsByDomain/${safeKey(a.domain)}`).set(a.accountId);
+    await database.ref(`${tenantRoot(a.tenantId)}/accountsByDomain/${domainKey(a.domain)}`).set(a.accountId);
   }
 }
 

@@ -173,7 +173,15 @@ export class RtdbCampaignStore implements CampaignStore {
       const snap = await database.ref(`${root}/intents/${safeKey(id)}`).get();
       if (!snap.exists()) continue;
       const val = snap.val() as MessageIntent;
-      if (val.tenantId === tenantId) out.push(val);
+      if (val.tenantId !== tenantId) continue;
+      // RTDB drops null fields; keep nullable lease/cancel fields explicit.
+      out.push({
+        ...val,
+        cancelReason: val.cancelReason ?? null,
+        leaseOwner: val.leaseOwner ?? null,
+        leaseExpiresAt: val.leaseExpiresAt ?? null,
+        reconciledAt: val.reconciledAt ?? null,
+      });
     }
     return out;
   }
