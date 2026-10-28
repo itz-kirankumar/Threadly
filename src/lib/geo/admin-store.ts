@@ -15,6 +15,19 @@ async function getAdminApp(): Promise<App | null> {
     const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
     const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
     const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    // TEST-ONLY local emulator path. Active solely when
+    // FIREBASE_DATABASE_EMULATOR_HOST is explicitly set, which no Vercel
+    // production/preview env ever sets; the real-credentials branch above is
+    // unchanged and still preferred whenever the emulator var is absent.
+    // The Admin SDK then uses its built-in emulator token provider (no real
+    // Google credential, no network token exchange).
+    const emulatorHost = process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+    if (emulatorHost) {
+      const { getApps, initializeApp } = await import("firebase-admin/app");
+      if (getApps().length) return getApps()[0];
+      const emuProject = projectId || "demo-threadly";
+      return initializeApp({ projectId: emuProject, databaseURL: `http://${emulatorHost}?ns=${emuProject}` });
+    }
     if (!clientEmail || !privateKey || !databaseURL || !projectId) return null;
     const { cert, getApps, initializeApp } = await import("firebase-admin/app");
     if (getApps().length) return getApps()[0];
