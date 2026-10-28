@@ -23,7 +23,7 @@ type Meeting = { meetingId: string; startsAt: string; timezone: string; booked: 
 type Experiment = { experimentId: string; campaignId: string; status: string; holdoutPercent: number; variants: { key: string; templates: { step: number; subject: string; body: string }[] }[]; variantsApprovedBy: string | null };
 type ImportPreview = { validCount: number; invalidCount: number; invalid: { row: number; reason: string }[]; sample: { email: string }[] };
 type ImportCommit = { importId: string; created: number; reconciled: number; invalid: { row: number; reason: string }[] };
-type ConsentStart = { senderId: string; consentUrl?: string; expiresAt?: string; notice?: string; error?: string; requiredEnvs?: string[] };
+type ConsentStart = { senderId: string; consentUrl?: string; expiresAt?: string; notice?: string; error?: string; requiredEnvs?: string[]; consentFirst?: boolean };
 type BookingLinkResult = { bookingLinkId: string; expiresAt: string; bookingUrl: string };
 type IcpVersion = { icpVersionId: string; version: number; status: string; roles: string[]; regions: string[]; employeeBands: string[]; sectors: string[]; exclusions: string[]; approvedClaims: string[]; confirmedBy: string | null; source: { kind: string } };
 type LicensedSource = { sourceId: string; sourceName: string; licensePermitsUse: boolean; termsUrl: string | null; revokedAt: string | null };
@@ -224,7 +224,15 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
 
       <div className={card}>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Senders</h3>
-        <p className="mb-2 text-xs text-zinc-500">Registered mailboxes stay pending_consent until a real OAuth consent flow activates them. Nothing can dispatch without an active sender.</p>
+        <p className="mb-2 text-xs text-zinc-500">Connect a Google account directly, or register a mailbox and start consent from its row. Mailboxes stay pending_consent until a real OAuth consent flow activates them. Nothing can dispatch without an active sender.</p>
+        <button className="mb-2 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50" disabled={busy} onClick={() => act(async () => {
+          try {
+            const res = (await authedFetch("/api/outbound/senders/consent", { method: "POST", body: JSON.stringify({}) })) as ConsentStart;
+            setConsent({ ...res, senderId: "(auto-detect)", consentFirst: true });
+          } catch (e) {
+            setConsent({ senderId: "(auto-detect)", consentFirst: true, error: e instanceof Error ? e.message : "Consent flow unavailable." });
+          }
+        })}>Connect Google</button>
         {!senders.length && <p className="text-sm text-zinc-500">None registered.</p>}
         <ul className="mb-2 grid gap-1 text-sm text-zinc-300">
           {senders.map((sd) => (
@@ -247,7 +255,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           <div className="mb-2 rounded-lg border border-white/10 p-3 text-xs text-zinc-400">
             {consent.consentUrl ? (
               <>
-                <p className="text-zinc-300">Consent link for sender {consent.senderId.slice(0, 12)}... (expires {consent.expiresAt?.slice(0, 10)}):</p>
+                <p className="text-zinc-300">{consent.consentFirst ? "Connect link — the approved Google account becomes the sender (expires " : `Consent link for sender ${consent.senderId.slice(0, 12)}... (expires `}{consent.expiresAt?.slice(0, 10)}):</p>
                 <a className="mt-1 block break-all text-teal-700 underline dark:text-teal-300" href={consent.consentUrl} target="_blank" rel="noreferrer">{consent.consentUrl}</a>
                 <p className="mt-1">{consent.notice}</p>
               </>

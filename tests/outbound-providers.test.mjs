@@ -6,7 +6,7 @@ const { createOAuthState, verifyOAuthState } = await import("../src/lib/outbound
 const { GmailAdapter } = await import("../src/lib/outbound/providers/gmail.ts");
 const { MicrosoftAdapter } = await import("../src/lib/outbound/providers/microsoft.ts");
 const { liveProvidersEnabled } = await import("../src/lib/outbound/providers/registry.ts");
-const { beginConsent, completeConsent, revokeConsent } = await import("../src/lib/outbound/consent-flow.ts");
+const { beginConsent, beginConsentFirst, completeConsent, revokeConsent } = await import("../src/lib/outbound/consent-flow.ts");
 
 const KEY = "a".repeat(64);
 process.env.OUTBOUND_TOKEN_KEY = KEY;
@@ -26,6 +26,8 @@ function memorySenders(initial) {
   return {
     map,
     async getSender(tenantId, senderId) { const s = map.get(senderId); return s && s.tenantId === tenantId ? s : null; },
+    async listSenders(tenantId) { return [...map.values()].filter((s) => s.tenantId === tenantId); },
+    async saveSender(s) { map.set(s.senderId, { ...s }); },
     async activateSenderFromConsent(tenantId, senderId, consentTraceId, scopes) {
       const s = map.get(senderId);
       assert.equal(s.status === "pending_consent" || s.status === "revoked", true);
@@ -45,8 +47,15 @@ function memorySenders(initial) {
 function memoryRecords() {
   const traces = new Map();
   const tokens = new Map();
+  const consumed = new Set();
   return {
-    traces, tokens,
+    traces, tokens, consumed,
+    async consumeOAuthState(tenantId, stateId) {
+      const key = `${tenantId}:${stateId}`;
+      if (consumed.has(key)) return false;
+      consumed.add(key);
+      return true;
+    },
     async saveConsentTrace(t) { traces.set(t.consentTraceId, t); },
     async getConsentTrace(tenantId, id) { return traces.get(id) ?? null; },
     async saveSenderTokens(tenantId, senderId, ciphertext) { tokens.set(senderId, ciphertext); },
@@ -67,7 +76,13 @@ test("token crypto round-trips and rejects tampering and wrong keys", () => {
 
 test("oauth state signs, verifies, and rejects tampering and expiry", () => {
   const { state } = createOAuthState({ tenantId: "t1", senderId: "snd_1" });
-  assert.deepEqual(verifyOAuthState(state), { tenantId: "t1", senderId: "snd_1", purpose: "send" });
+  const verified = verifyOAuthState(state);
+  assert.equal(verified.tenantId, "t1");
+  assert.equal(verified.senderId, "snd_1");
+  assert.equal(verified.purpose, "send");
+  assert.equal(verified.provider, null);
+  assert.equal(typeof verified.nonce, "string");
+  assert.ok(verified.nonce.length > 0);
   assert.throws(() => verifyOAuthState(state.slice(0, -2) + "zz"));
   const { state: expired } = createOAuthState({ tenantId: "t1", senderId: "snd_1", ttlMs: -1000 });
   assert.throws(() => verifyOAuthState(expired), /expired/);
@@ -209,7 +224,7 @@ test("replayed consent state cannot activate twice", async () => {
   assert.equal(first.ok, true);
   const replay = await completeConsent(senders, memoryRecords(), { expectedTenantId: "t1", state, code: "code1", fetchImpl: goodFetch });
   assert.equal(replay.ok, false);
-  assert.equal(replay.status, 409); // sender already active: replay rejected
+  assert.equal(replay.status, 409); // single-use state: replay rejected
   delete process.env.OUTBOUND_GMAIL_CLIENT_ID;
   delete process.env.OUTBOUND_GMAIL_CLIENT_SECRET;
   delete process.env.OUTBOUND_GMAIL_REDIRECT_URI;
@@ -265,4 +280,159 @@ test("revokeConsent audits provider revocation truthfully and stays fail-closed 
   assert.match(audits2.at(-1).detail, /provider_revoked:false/);
   assert.equal(records2.tokens.has("snd_1"), false);
   assert.equal((await senders2.getSender("t1", "snd_1")).status, "revoked");
+});
+
+const GMAIL_ENV = () => {
+  process.env.OUTBOUND_GMAIL_CLIENT_ID = "cid";
+  process.env.OUTBOUND_GMAIL_CLIENT_SECRET = "sec";
+  process.env.OUTBOUND_GMAIL_REDIRECT_URI = "https://app/cb";
+};
+const GMAIL_ENV_CLEAR = () => {
+  delete process.env.OUTBOUND_GMAIL_CLIENT_ID;
+  delete process.env.OUTBOUND_GMAIL_CLIENT_SECRET;
+  delete process.env.OUTBOUND_GMAIL_REDIRECT_URI;
+};
+const goodFetchFor = (email) => async (url) => {
+  if (url.includes("oauth2.googleapis.com/token")) {
+    return new Response(JSON.stringify({ access_token: "at", refresh_token: "rt", expires_in: 3600, scope: "https://www.googleapis.com/auth/gmail.send" }), { status: 200 });
+  }
+  return new Response(JSON.stringify({ email }), { status: 200 });
+};
+
+test("consent state is single-use: revoke-then-replay cannot reactivate", async () => {
+  GMAIL_ENV();
+  const { state } = createOAuthState({ tenantId: "t1", senderId: "snd_1" });
+  const senders = memorySenders([sender()]);
+  const records = memoryRecords();
+  const first = await completeConsent(senders, records, { expectedTenantId: "t1", state, code: "c", fetchImpl: goodFetchFor("rep@example.com") });
+  assert.equal(first.ok, true);
+  await revokeConsent(senders, records, { tenantId: "t1", senderId: "snd_1" });
+  assert.equal((await senders.getSender("t1", "snd_1")).status, "revoked");
+  // Status alone would now allow consent again; the consumed state must not.
+  const replay = await completeConsent(senders, records, { expectedTenantId: "t1", state, code: "c", fetchImpl: goodFetchFor("rep@example.com") });
+  assert.equal(replay.ok, false);
+  assert.equal(replay.status, 409);
+  assert.match(replay.error, /already used/);
+  assert.equal((await senders.getSender("t1", "snd_1")).status, "revoked");
+  GMAIL_ENV_CLEAR();
+});
+
+test("concurrent callbacks with the same state resolve to exactly one activation", async () => {
+  GMAIL_ENV();
+  const { state } = createOAuthState({ tenantId: "t1", senderId: "snd_1" });
+  const senders = memorySenders([sender()]);
+  const records = memoryRecords();
+  const [a, b] = await Promise.all([
+    completeConsent(senders, records, { expectedTenantId: "t1", state, code: "c", fetchImpl: goodFetchFor("rep@example.com") }),
+    completeConsent(senders, records, { expectedTenantId: "t1", state, code: "c", fetchImpl: goodFetchFor("rep@example.com") }),
+  ]);
+  const outcomes = [a.ok, b.ok].sort();
+  assert.deepEqual(outcomes, [false, true]);
+  const loser = a.ok ? b : a;
+  assert.equal(loser.status, 409);
+  assert.equal(records.traces.size, 1);
+  GMAIL_ENV_CLEAR();
+});
+
+test("consent-first: beginConsentFirst builds a sender-less URL and completeConsent auto-registers by verified identity", async () => {
+  GMAIL_ENV();
+  const start = await beginConsentFirst({ tenantId: "t1", provider: "gmail" });
+  assert.equal(start.ok, true);
+  const params = new URL(start.consentUrl).searchParams;
+  assert.equal(params.get("login_hint"), null);
+  const state = params.get("state");
+  const verified = verifyOAuthState(state);
+  assert.equal(verified.senderId, "");
+  assert.equal(verified.provider, "gmail");
+  assert.equal(verified.tenantId, "t1");
+
+  const senders = memorySenders([]);
+  const records = memoryRecords();
+  const done = await completeConsent(senders, records, { expectedTenantId: "t1", state, code: "c", fetchImpl: goodFetchFor("NewUser@Example.com") });
+  assert.equal(done.ok, true);
+  const all = await senders.listSenders("t1");
+  assert.equal(all.length, 1);
+  assert.equal(all[0].email, "newuser@example.com"); // normalized verified identity, not caller input
+  assert.equal(all[0].status, "active");
+  assert.equal(all[0].dailyCap, 0); // dispatch gate: explicit cap still required
+  assert.equal(all[0].createdBy, "oauth-callback");
+  assert.equal(done.consentorIdentity, "newuser@example.com");
+
+  // Replay of the same state: consumed, no duplicate sender.
+  const replay = await completeConsent(senders, records, { expectedTenantId: "t1", state, code: "c", fetchImpl: goodFetchFor("newuser@example.com") });
+  assert.equal(replay.ok, false);
+  assert.equal(replay.status, 409);
+  assert.equal((await senders.listSenders("t1")).length, 1);
+  GMAIL_ENV_CLEAR();
+});
+
+test("consent-first binding: existing sender reconnects, active refuses, provider mismatch refuses", async () => {
+  GMAIL_ENV();
+  // Existing pending sender with the consented mailbox: reconnect, no duplicate.
+  const senders = memorySenders([sender()]);
+  const records = memoryRecords();
+  const { state: s1 } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail" });
+  const done = await completeConsent(senders, records, { expectedTenantId: "t1", state: s1, code: "c", fetchImpl: goodFetchFor("rep@example.com") });
+  assert.equal(done.ok, true);
+  assert.equal(done.senderId, "snd_1");
+  assert.equal((await senders.listSenders("t1")).length, 1);
+
+  // Already-active sender: fresh consent-first state refuses.
+  const { state: s2 } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail" });
+  const again = await completeConsent(senders, records, { expectedTenantId: "t1", state: s2, code: "c", fetchImpl: goodFetchFor("rep@example.com") });
+  assert.equal(again.ok, false);
+  assert.equal(again.status, 409);
+  assert.match(again.error, /already connected/);
+
+  // Provider mismatch: mailbox registered for microsoft refuses gmail connect.
+  const senders2 = memorySenders([sender({ provider: "microsoft" })]);
+  const { state: s3 } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail" });
+  const mismatch = await completeConsent(senders2, memoryRecords(), { expectedTenantId: "t1", state: s3, code: "c", fetchImpl: goodFetchFor("rep@example.com") });
+  assert.equal(mismatch.ok, false);
+  assert.equal(mismatch.status, 409);
+  assert.match(mismatch.error, /microsoft/);
+  GMAIL_ENV_CLEAR();
+});
+
+test("consent-first: unverifiable identity or failed exchange creates nothing", async () => {
+  GMAIL_ENV();
+  // Identity endpoint fails: 502, no sender, no tokens, no trace.
+  const senders = memorySenders([]);
+  const records = memoryRecords();
+  const badIdentity = async (url) => {
+    if (url.includes("oauth2.googleapis.com/token")) {
+      return new Response(JSON.stringify({ access_token: "at", expires_in: 3600 }), { status: 200 });
+    }
+    return new Response("denied", { status: 403 });
+  };
+  const { state: s1 } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail" });
+  const r1 = await completeConsent(senders, records, { expectedTenantId: "t1", state: s1, code: "c", fetchImpl: badIdentity });
+  assert.equal(r1.ok, false);
+  assert.equal(r1.status, 502);
+  assert.equal((await senders.listSenders("t1")).length, 0);
+  assert.equal(records.traces.size, 0);
+
+  // Token exchange rejected: 502, nothing persisted.
+  const badExchange = async () => new Response("invalid_grant", { status: 400 });
+  const { state: s2 } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail" });
+  const r2 = await completeConsent(senders, records, { expectedTenantId: "t1", state: s2, code: "c", fetchImpl: badExchange });
+  assert.equal(r2.ok, false);
+  assert.equal(r2.status, 502);
+  assert.equal(records.traces.size, 0);
+  GMAIL_ENV_CLEAR();
+});
+
+test("partial token-save failure never activates the sender", async () => {
+  GMAIL_ENV();
+  const senders = memorySenders([sender()]);
+  const records = memoryRecords();
+  records.saveSenderTokens = async () => { throw new Error("rtdb write failed"); };
+  const { state } = createOAuthState({ tenantId: "t1", senderId: "snd_1" });
+  await assert.rejects(
+    completeConsent(senders, records, { expectedTenantId: "t1", state, code: "c", fetchImpl: goodFetchFor("rep@example.com") }),
+    /rtdb write failed/,
+  );
+  assert.equal((await senders.getSender("t1", "snd_1")).status, "pending_consent");
+  assert.equal(records.traces.size, 0);
+  GMAIL_ENV_CLEAR();
 });

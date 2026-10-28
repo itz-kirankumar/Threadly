@@ -1,7 +1,7 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
-import { beginConsent } from "@/lib/outbound/consent-flow";
+import { beginConsent, beginConsentFirst } from "@/lib/outbound/consent-flow";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 
 export const runtime = "nodejs";
@@ -14,7 +14,9 @@ function enabled(): boolean {
   return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
 }
 
-// Begins the OAuth consent flow for a registered sender. Returns the
+// Begins the OAuth consent flow. Two modes: with senderId, for a registered
+// sender; without senderId, consent-first ("Connect Google") — the callback
+// auto-registers the sender from the consented account's verified identity. Returns the
 // provider consent URL when the deployment has provider OAuth client envs;
 // otherwise 503 with the required env names. The flow is implemented but
 // inactive without deployment config, and completing a real consent is an
@@ -31,20 +33,41 @@ export async function POST(request: Request) {
     }
     const body = (await readJsonBody(request, 4 * 1024)) as Record<string, unknown>;
     const senderId = typeof body.senderId === "string" ? body.senderId : "";
-    if (!senderId) return Response.json({ error: "senderId is required." }, { status: 400 });
-    const result = await beginConsent(new RtdbSenderStore(), { tenantId: access.workspaceUid, senderId });
-    if (!result.ok) {
+    const provider = body.provider === "microsoft" ? "microsoft" : "gmail";
+    if (senderId) {
+      const result = await beginConsent(new RtdbSenderStore(), { tenantId: access.workspaceUid, senderId });
+      if (!result.ok) {
+        return Response.json(
+          { error: result.error, ...(result.requiredEnvs ? { requiredEnvs: result.requiredEnvs } : {}) },
+          { status: result.status, headers: NO_STORE }
+        );
+      }
       return Response.json(
-        { error: result.error, ...(result.requiredEnvs ? { requiredEnvs: result.requiredEnvs } : {}) },
-        { status: result.status, headers: NO_STORE }
+        {
+          consentUrl: result.consentUrl,
+          expiresAt: result.expiresAt,
+          provider: result.provider,
+          notice: "Completing this consent grants Threadly permission to send from the mailbox. The sender activates only after the provider verifies the mailbox identity matches the registered sender.",
+        },
+        { status: 200, headers: NO_STORE }
+      );
+    }
+    // Consent-first ("Connect Google"): no sender yet; the sender is created
+    // from the consented account's verified identity at the callback.
+    const first = await beginConsentFirst({ tenantId: access.workspaceUid, provider });
+    if (!first.ok) {
+      return Response.json(
+        { error: first.error, ...(first.requiredEnvs ? { requiredEnvs: first.requiredEnvs } : {}) },
+        { status: first.status, headers: NO_STORE }
       );
     }
     return Response.json(
       {
-        consentUrl: result.consentUrl,
-        expiresAt: result.expiresAt,
-        provider: result.provider,
-        notice: "Completing this consent grants Threadly permission to send from the mailbox. The sender activates only after the provider verifies the mailbox identity matches the registered sender.",
+        consentUrl: first.consentUrl,
+        expiresAt: first.expiresAt,
+        provider,
+        consentFirst: true,
+        notice: "You will be asked to sign in to the Google account you want to connect and approve Threadly's access. Threadly connects the exact account you approve, verified by Google.",
       },
       { status: 200, headers: NO_STORE }
     );

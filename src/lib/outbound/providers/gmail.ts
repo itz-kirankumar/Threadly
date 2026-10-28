@@ -78,8 +78,8 @@ export class GmailAdapter implements MailProviderAdapter {
       access_type: "offline",
       prompt: "consent",
       state: input.state,
-      login_hint: input.loginHint,
     });
+    if (input.loginHint) params.set("login_hint", input.loginHint);
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 

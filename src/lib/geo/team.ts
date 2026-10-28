@@ -1,7 +1,7 @@
-import { RequestError } from "@/lib/api-request";
-import { PLAN_LIMITS } from "./plan";
-import { getFirebaseIdentity, withWorkspace, type FirebaseIdentity } from "@/lib/portal-db";
-import { adminConfigured, getAdminDatabase } from "@/lib/geo/admin-store";
+import { RequestError } from "../api-request.ts";
+import { PLAN_LIMITS } from "./plan.ts";
+import { getFirebaseIdentity, withWorkspace, type FirebaseIdentity } from "../portal-db.ts";
+import { adminConfigured, getAdminDatabase } from "./admin-store.ts";
 
 // Teams: a workspace (one user's geo tree) can be shared with other signed-in
 // users. Membership and invite indexes live at the RTDB top level, so every
@@ -118,7 +118,7 @@ async function writeInvite(ownerUid: string, invite: TeamInvite | null): Promise
 
 // ---- access resolution for every API route ----
 
-import { NEW_SIGNUP_BLOCK_MESSAGE, decideSignupAccess } from "@/lib/geo/signup-gate";
+import { NEW_SIGNUP_BLOCK_MESSAGE, decideSignupAccess } from "./signup-gate.ts";
 
 // Throws 403 when the caller is a brand-new signup (no team membership and no
 // existing workspace data). Exported so billing guest routes apply the same

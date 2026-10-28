@@ -53,4 +53,18 @@ export class RtdbConsentStore {
     const database = await db();
     await database.ref(`${tenantRoot(tenantId)}/senderTokens/${safeKey(senderId)}`).remove();
   }
+
+  // Single-use OAuth state consumption. The RTDB transaction installs the
+  // record only when none exists, so concurrent callbacks or replays of the
+  // same state resolve to exactly one true. Returns false when the state was
+  // already consumed. Scoped to the tenant from the verified state payload.
+  async consumeOAuthState(tenantId: string, stateId: string, expiresAt: string): Promise<boolean> {
+    const database = await db();
+    const ref = database.ref(`${tenantRoot(tenantId)}/consumedOAuthStates/${safeKey(stateId)}`);
+    const result = await ref.transaction((current) => {
+      if (current !== null) return; // abort: already consumed
+      return { usedAt: new Date().toISOString(), expiresAt };
+    });
+    return result.committed === true && result.snapshot.exists();
+  }
 }
