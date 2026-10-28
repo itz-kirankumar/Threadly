@@ -93,6 +93,7 @@ test("gmail consent url requests send + documented identity scope with offline a
   const params = new URL(url).searchParams;
   assert.equal(params.get("scope"), "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email");
   assert.equal(params.get("access_type"), "offline");
+  assert.equal(params.get("include_granted_scopes"), "true");
   assert.equal(params.get("login_hint"), "rep@example.com");
   assert.equal(params.get("state"), "st");
 });

@@ -80,6 +80,11 @@ export class GmailAdapter implements MailProviderAdapter {
       scope: (input.scopes ?? this.consentScopes).join(" "),
       access_type: "offline",
       prompt: "consent",
+      // Incremental-consent token responses only echo NEWLY granted scopes;
+      // include_granted_scopes makes the token response carry the union of
+      // everything Google already granted, so re-consent (e.g. adding
+      // calendar scopes to an active sender) records the full scope set.
+      include_granted_scopes: "true",
       state: input.state,
     });
     if (input.loginHint) params.set("login_hint", input.loginHint);
