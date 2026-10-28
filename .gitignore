@@ -49,3 +49,4 @@ next-env.d.ts
 /infra/laya/*.log
 /infra/laya/server.pid
 
+database-debug.log

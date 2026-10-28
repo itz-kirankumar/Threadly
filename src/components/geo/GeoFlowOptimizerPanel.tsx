@@ -393,7 +393,7 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch }: P
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
             <h3 className="text-sm font-semibold text-white">Crawler and robots.txt audit</h3>
             <p className="text-xs text-zinc-400">
-              Verify if GPTBot (ChatGPT), ClaudeBot (Anthropic), and PerplexityBot are permitted to crawl and cite your domain.
+              Verify whether AI crawlers (GPTBot, ClaudeBot, PerplexityBot and others) are permitted to crawl your domain. Crawl permission does not guarantee citation.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-2">
@@ -430,7 +430,7 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch }: P
                   <p className="mt-1 text-2xl font-bold text-white">{auditResult.hasRobotsTxt ? "Yes" : "No"}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
-                  <p className="text-xs font-medium text-purple-400 uppercase">llms.txt Standard</p>
+                  <p className="text-xs font-medium text-purple-400 uppercase">llms.txt (proposed)</p>
                   <p className="mt-1 text-2xl font-bold text-white">{auditResult.hasLlmsTxt ? "Active" : "Missing"}</p>
                 </div>
               </div>
