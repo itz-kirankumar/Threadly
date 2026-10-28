@@ -236,6 +236,7 @@ test("gmail adapter scopes: documented identity + freebusy minimums", () => {
   assert.ok(a.consentScopes.includes("https://www.googleapis.com/auth/userinfo.email"));
   assert.ok(a.calendarScopes.includes("https://www.googleapis.com/auth/calendar.events"));
   assert.ok(a.calendarScopes.includes("https://www.googleapis.com/auth/calendar.events.freebusy"));
+  assert.ok(a.calendarScopes.includes("https://www.googleapis.com/auth/userinfo.email"), "calendar consent must include the identity scope: the callback's userinfo check 401s without it (live-verified)");
 });
 
 test("gmail fetchProfile uses the documented oauth2 userinfo endpoint", async () => {
@@ -444,7 +445,7 @@ test("consent-first calendar purpose extends an active sender's scopes (union, n
   const records = memoryRecords();
   const calendarFetch = async (url) => {
     if (url.includes("oauth2.googleapis.com/token")) {
-      return new Response(JSON.stringify({ access_token: "at2", refresh_token: "rt2", expires_in: 3600, scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.freebusy" }), { status: 200 });
+      return new Response(JSON.stringify({ access_token: "at2", refresh_token: "rt2", expires_in: 3600, scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.freebusy https://www.googleapis.com/auth/userinfo.email" }), { status: 200 });
     }
     return new Response(JSON.stringify({ email: "rep@example.com" }), { status: 200 });
   };
@@ -480,7 +481,7 @@ test("consent-first send purpose on an active sender still refuses; calendar mis
   const { state: s2 } = createOAuthState({ tenantId: "t1", senderId: "", provider: "gmail", purpose: "calendar" });
   const calendarFetchOther = async (url) => {
     if (url.includes("oauth2.googleapis.com/token")) {
-      return new Response(JSON.stringify({ access_token: "a", refresh_token: "r", expires_in: 3600, scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.freebusy" }), { status: 200 });
+      return new Response(JSON.stringify({ access_token: "a", refresh_token: "r", expires_in: 3600, scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.freebusy https://www.googleapis.com/auth/userinfo.email" }), { status: 200 });
     }
     return new Response(JSON.stringify({ email: "someoneelse@example.com" }), { status: 200 });
   };
@@ -490,7 +491,7 @@ test("consent-first send purpose on an active sender still refuses; calendar mis
   const after = await senders.getSender("t1", "snd_1");
   assert.deepEqual(after.scopes, ["https://www.googleapis.com/auth/gmail.send"], "existing sender scopes untouched");
   const added = await senders.getSender("t1", other.senderId);
-  assert.ok(added.scopes.every((sc) => sc.includes("calendar")), "new sender carries calendar scopes only");
+  assert.ok(added.scopes.every((sc) => sc.includes("calendar") || sc.includes("userinfo")), "new sender carries calendar + identity scopes only");
   assert.equal(added.dailyCap, 0, "dispatch stays gated");
   GMAIL_ENV_CLEAR();
 });

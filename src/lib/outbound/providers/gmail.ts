@@ -61,7 +61,10 @@ export class GmailAdapter implements MailProviderAdapter {
   readonly consentScopes = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/userinfo.email"];
   // calendar.events alone does NOT authorize freeBusy.query per Google's
   // live freeBusy reference; calendar.events.freebusy is the minimum.
-  readonly calendarScopes = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.events.freebusy"];
+  // userinfo.email is REQUIRED here too: the consent callback verifies the
+  // consented mailbox identity via oauth2/v2/userinfo, which a
+  // calendar-only grant does not authorize (live-verified HTTP 401).
+  readonly calendarScopes = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.events.freebusy", "https://www.googleapis.com/auth/userinfo.email"];
 
   private readonly fetchImpl: FetchImpl;
 
