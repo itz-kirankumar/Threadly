@@ -41,9 +41,10 @@ const result = spawnSync(
     "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
     "--disable-warning=ExperimentalWarning",
     "--test",
-    // Suites share process-wide env flags (demo mode, outbound flags), so
-    // each file runs in its own process; within a file tests run in order.
-    "--test-concurrency=4",
+    // Each file runs in its own process. Unit files run in parallel; emulator
+    // files share one database and some reset it in setup, so they run one
+    // at a time.
+    `--test-concurrency=${mode === "unit" ? 4 : 1}`,
     ...files,
   ],
   { cwd: root, stdio: "inherit" }
