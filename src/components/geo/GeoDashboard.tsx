@@ -62,6 +62,14 @@ function initialsOf(user: User): string {
   return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : name.slice(0, 2)).toUpperCase();
 }
 
+type NavGroup = "overview" | "revenue" | "intelligence" | "workspace";
+const NAV_GROUPS: Array<{ id: NavGroup; label: string | null }> = [
+  { id: "overview", label: null },
+  { id: "revenue", label: "Revenue" },
+  { id: "intelligence", label: "Intelligence" },
+  { id: "workspace", label: "Workspace" },
+];
+
 function MetricCard({ label, value, suffix, change }: { label: string; value: string; suffix?: string; change: number | null }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -94,6 +102,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The scan error message, so Retry shows only while that error is displayed.
+  const [scanError, setScanError] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggestBusy, setSuggestBusy] = useState(false);
   const [showTour, setShowTour] = useState(false);
@@ -152,7 +162,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         setRunDetails((prev) => ({ ...prev, [runId]: "error" }));
       }
     },
-    [authedFetch, expandedRunId, runDetails],
+    [authedFetch, expandedRunId, runDetails, readOnly, demoRunDetails],
   );
 
   const refresh = useCallback(async () => {
@@ -244,7 +254,9 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         { id: "tab-citations", label: "Go to Citations", hint: "Section", run: () => setTab("citations") },
         { id: "tab-optimizer", label: "Go to Optimization", hint: "Section", run: () => setTab("optimizer") },
         { id: "tab-runs", label: "Go to Scans", hint: "Section", run: () => setTab("runs") },
-        { id: "tab-outreach", label: "Go to Leads & Outreach", hint: "Section", run: () => setTab("outreach") },
+        { id: "tab-outreach", label: "Go to Leads", hint: "Section", run: () => setTab("outreach") },
+        { id: "tab-crm", label: "Go to CRM", hint: "Section", run: () => setTab("crm") },
+        { id: "tab-enterprise", label: "Go to Outbound", hint: "Section", run: () => setTab("enterprise") },
         { id: "tab-social", label: "Go to Social search", hint: "Section", run: () => setTab("social") },
         { id: "tab-settings", label: "Go to Workspace settings", hint: "Section", run: () => setTab("settings") },
         { id: "account", label: "Open Account settings", hint: "Page", run: () => { window.location.href = "/portal/account"; } },
@@ -393,11 +405,14 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   async function runScan() {
     setScanning(true);
     setError("");
+    setScanError("");
     try {
       await authedFetch("/api/geo/scan", { method: "POST", body: JSON.stringify({}) });
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Scan failed.");
+      const message = caught instanceof Error ? caught.message : "The scan could not run. Try again, or contact hello@gothreadly.live.";
+      setError(message);
+      setScanError(message);
     } finally {
       setScanning(false);
     }
@@ -495,13 +510,27 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     );
   }
 
-  const tabs: Array<{ id: Tab; label: string }> = [
-    { id: "overview", label: "Overview" },
-    { id: "queries", label: `Questions (${state.queries.length})` },
-    { id: "citations", label: "Citations" },
-    { id: "optimizer", label: "Optimization" },
-    { id: "runs", label: `Scans (${state.runs.length})` },
-    ...(!readOnly ? [{ id: "outreach" as Tab, label: "Leads & Outreach" }, { id: "crm" as Tab, label: "CRM" }, { id: "enterprise" as Tab, label: "Enterprise" }, { id: "social" as Tab, label: "Social search" }, { id: "settings" as Tab, label: "Settings" }] : []),
+  // Canonical information architecture (docs/enterprise-information-architecture.md):
+  // Overview, Revenue, Intelligence, Workspace.
+  const tabs: Array<{ id: Tab; label: string; group: NavGroup }> = [
+    { id: "overview", label: "Overview", group: "overview" },
+    ...(!readOnly
+      ? [
+          { id: "outreach" as Tab, label: "Leads", group: "revenue" as NavGroup },
+          { id: "crm" as Tab, label: "CRM", group: "revenue" as NavGroup },
+          { id: "enterprise" as Tab, label: "Outbound", group: "revenue" as NavGroup },
+        ]
+      : []),
+    { id: "queries", label: `Questions (${state.queries.length})`, group: "intelligence" },
+    { id: "citations", label: "Citations", group: "intelligence" },
+    { id: "optimizer", label: "Optimization", group: "intelligence" },
+    { id: "runs", label: `Scans (${state.runs.length})`, group: "intelligence" },
+    ...(!readOnly
+      ? [
+          { id: "social" as Tab, label: "Social search", group: "intelligence" as NavGroup },
+          { id: "settings" as Tab, label: "Settings", group: "workspace" as NavGroup },
+        ]
+      : []),
   ];
 
   const body = (
@@ -546,7 +575,16 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         )}
       </div>
 
-      {error && <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</p>}
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+          <p>{error}</p>
+          {scanError && error === scanError && (
+            <button type="button" onClick={() => void runScan()} disabled={scanning} className="rounded-lg border border-rose-400/40 px-3 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-500/10 disabled:opacity-40">
+              {scanning ? "Retrying..." : "Retry scan"}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex items-start gap-6">
         {readOnly && (
@@ -785,16 +823,23 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
                     {formatDateTime(run.startedAt)}
                   </p>
                   <p className="text-xs text-zinc-500">
-                    {run.queryCount} questions × {Object.values(run.providerStatus).filter((status) => status === "scanned").length || providerOrder.length} providers
-                    {Object.values(run.providerStatus).filter((status) => status === "failed").length > 0 && (
-                      <span className="text-amber-400"> · {Object.values(run.providerStatus).filter((status) => status === "failed").length} failed</span>
-                    )}
+                    {(() => {
+                      const statuses = Object.values(run.providerStatus);
+                      const scanned = statuses.filter((status) => status === "scanned").length;
+                      const attempted = statuses.filter((status) => status === "scanned" || status === "failed").length;
+                      return (
+                        <>
+                          {run.queryCount} questions · {scanned} of {attempted} providers returned results
+                          {scanned === 0 && attempted > 0 && <span className="text-amber-400"> · scan failed</span>}
+                        </>
+                      );
+                    })()}
                   </p>
                 </div>
                 <div className="flex gap-1.5">
                   {Object.keys(run.providerStatus).filter((id) => run.providerStatus[id] === "scanned").map((id) => (
                     <span key={id} className={`rounded-full border px-2 py-0.5 text-xs ${colorForProvider(id)}`}>
-                      {labelForProvider(id, providerLabels)} ✓
+                      {labelForProvider(id, providerLabels)}
                     </span>
                   ))}
                   {Object.keys(run.providerStatus).filter((id) => run.providerStatus[id] === "failed").map((id) => (
@@ -803,7 +848,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
                       title={providerErrorTitle(run, id)}
                       className="rounded-full border border-amber-400/40 px-2 py-0.5 text-xs text-amber-300"
                     >
-                      {labelForProvider(id, providerLabels)} ✗
+                      {labelForProvider(id, providerLabels)}: failed
                     </span>
                   ))}
                 </div>
@@ -853,6 +898,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           brand={state?.brand ?? null}
           queries={state?.queries ?? []}
           authedFetch={authedFetch}
+          readOnly={readOnly}
         />
       )}
       {tab === "outreach" && !readOnly && (
@@ -964,8 +1010,6 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     );
   }
 
-  const monitorTabs = tabs.filter((item) => item.id !== "settings");
-  const workspaceTabs = tabs.filter((item) => item.id === "settings");
   const railLabel = sidebarCollapsed ? "hidden" : "hidden md:block";
   const railName = sidebarCollapsed ? "hidden" : "hidden md:inline";
 
@@ -1039,14 +1083,18 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-          <p className={`px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 ${railLabel}`}>Monitor</p>
-          <div className="space-y-0.5">{monitorTabs.map(navButton)}</div>
-          {workspaceTabs.length > 0 && (
-            <>
-              <p className={`px-2.5 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 ${railLabel}`}>Workspace</p>
-              <div className="space-y-0.5">{workspaceTabs.map(navButton)}</div>
-            </>
-          )}
+          {NAV_GROUPS.map((group) => {
+            const items = tabs.filter((item) => item.group === group.id);
+            if (!items.length) return null;
+            return (
+              <div key={group.id} className={group.label ? "pt-4 first:pt-0" : ""}>
+                {group.label && (
+                  <p className={`px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 ${railLabel}`}>{group.label}</p>
+                )}
+                <div className="space-y-0.5">{items.map(navButton)}</div>
+              </div>
+            );
+          })}
         </nav>
 
         <div className="shrink-0 border-t border-white/[0.06] p-2">

@@ -1,149 +1,139 @@
 import { loadWorkspace } from "@/lib/geo/store";
+import type { ProviderResult, QueryResult } from "@/lib/geo/types";
 import { saveLead, appendLeadActivity, loadLeads } from "./store";
 import type { CrmLead } from "./types";
 import { randomUUID } from "node:crypto";
 
+const MAX_NEW_LEADS = 8;
+// Platforms that are publishers or communities, not prospect companies.
+const NON_PROSPECT_DOMAINS = ["wikipedia.org", "reddit.com", "youtube.com", "github.com", "medium.com", "linkedin.com", "x.com", "twitter.com", "quora.com"];
+
+function normalizeDomain(domain: string): string {
+  return domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+}
+
+function isNonProspect(domain: string): boolean {
+  return NON_PROSPECT_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
+function scannedAnswers(results: QueryResult[]): Array<{ queryId: string; answer: ProviderResult }> {
+  return results.flatMap((r) => r.results.filter((p) => p.status === "scanned").map((answer) => ({ queryId: r.queryId, answer })));
+}
+
+function newLead(fields: Pick<CrmLead, "name" | "company" | "domain" | "notes" | "tags" | "geoGap">): CrmLead {
+  const now = new Date().toISOString();
+  return {
+    id: `lead-${randomUUID().slice(0, 8)}`,
+    // Contact identity is intentionally blank: discovery knows a domain from
+    // scan data, not a person. A verified contact must be added by a person.
+    email: "",
+    title: "",
+    stage: "new",
+    source: "geo_gap_discovery",
+    score: 0,
+    dealValue: undefined,
+    sequenceStep: 0,
+    maxSequenceSteps: 3,
+    nextFollowUpAt: null,
+    lastContactedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    ...fields,
+  };
+}
+
+// Creates leads only from domains observed in stored scan results. Every
+// note states the observation and its denominator; nothing is inferred.
 export async function discoverLeadsFromGeo(): Promise<{
   discovered: number;
   newLeads: CrmLead[];
 }> {
   const workspace = await loadWorkspace();
   const existingLeads = await loadLeads();
-  const existingDomains = new Set(existingLeads.map((l) => l.domain.toLowerCase()));
+  const known = new Set(existingLeads.map((l) => normalizeDomain(l.domain)));
+  const ownDomain = workspace.brand?.domain ? normalizeDomain(workspace.brand.domain) : "";
+  if (ownDomain) known.add(ownDomain);
 
-  const newLeads: CrmLead[] = [];
-  const competitors = workspace.brand?.competitors || [];
   const results = workspace.results || [];
   const queries = workspace.queries || [];
+  const answers = scannedAnswers(results);
+  const questionText = (queryId: string) => queries.find((q) => q.id === queryId)?.text;
+  const newLeads: CrmLead[] = [];
 
-  // 1. Analyze competitor citations across queries to find out where gaps exist
-  for (const comp of competitors) {
-    const compDomain = comp.domain.toLowerCase();
-    if (existingDomains.has(compDomain)) continue;
-
-    // Find queries where this competitor appeared
-    const relevantQueryResults = results.filter((r) =>
-      r.results.some(
-        (pr) =>
-          pr.competitorsMentioned?.includes(comp.name) ||
-          pr.competitorsCited?.includes(comp.name) ||
-          pr.citations?.some((c) => c.domain.toLowerCase().includes(compDomain))
-      )
+  // 1. Competitors observed in scanned AI answers.
+  for (const comp of workspace.brand?.competitors || []) {
+    if (newLeads.length >= MAX_NEW_LEADS) break;
+    const domain = normalizeDomain(comp.domain || "");
+    if (!domain || known.has(domain)) continue;
+    const mentioned = answers.filter(({ answer }) =>
+      answer.competitorsMentioned?.includes(comp.name) ||
+      answer.competitorsCited?.includes(comp.name) ||
+      answer.citations?.some((c) => normalizeDomain(c.domain) === domain)
     );
+    if (mentioned.length === 0) continue;
+    const cited = mentioned.filter(({ answer }) =>
+      answer.competitorsCited?.includes(comp.name) || answer.citations?.some((c) => normalizeDomain(c.domain) === domain)
+    );
+    const questionIds = new Set(mentioned.map((m) => m.queryId));
+    const firstQuestion = questionText(mentioned[0].queryId);
+    const observation = `Mentioned in ${mentioned.length} of ${answers.length} scanned AI answers across ${questionIds.size} tracked question${questionIds.size === 1 ? "" : "s"}; cited in ${cited.length}.`;
 
-    const firstResult = relevantQueryResults[0];
-    const queryObj = firstResult ? queries.find((q) => q.id === firstResult.queryId) : null;
-    const queryText = queryObj?.text || "best generative AI software solutions";
-
-    const lead: CrmLead = {
-      id: `lead-${randomUUID().slice(0, 8)}`,
-      // Contact identity is intentionally blank: discovery knows the domain from
-      // real scan data, not a person. No email/name/title is ever guessed; a human
-      // must supply a verified contact before outreach can target this lead.
+    const lead = newLead({
       name: comp.name,
-      email: "",
       company: comp.name,
-      domain: comp.domain,
-      title: "",
-      stage: "new",
-      source: "geo_gap_discovery",
-      score: 0,
-      dealValue: undefined,
-      notes: `Identified via GEO scan. Competitor actively referenced in ${relevantQueryResults.length} queries. Potential target for comparative benchmarking.`,
-      tags: ["competitor", "geo-scanned", "high-intent"],
-      sequenceStep: 0,
-      maxSequenceSteps: 4,
-      nextFollowUpAt: null,
-      lastContactedAt: null,
+      domain,
+      notes: `Tracked competitor. ${observation}`,
+      tags: ["competitor"],
       geoGap: {
-        queryText,
-        competitorsCited: [workspace.brand?.name || "Market Leaders"],
+        queryText: firstQuestion,
+        competitorsCited: [],
         missingFromAi: false,
-        citationShare: 0,
-        readinessScore: 0,
-        identifiedGap: `Referenced in ${relevantQueryResults.length} tracked queries based on actual scan results.`,
+        citationShare: answers.length ? Math.round((cited.length / answers.length) * 100) : undefined,
+        identifiedGap: observation,
       },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    await saveLead(lead);
-    await appendLeadActivity({
-      leadId: lead.id,
-      type: "audit_attached",
-      title: "Lead Discovered from GEO Scan",
-      detail: `Extracted from query "${queryText}". High citation frequency across AI engines.`,
-      actor: "GEO Discovery Engine",
     });
-
+    await saveLead(lead);
+    await appendLeadActivity({ leadId: lead.id, type: "audit_attached", title: "Added from scan results", detail: observation, actor: "Discovery" });
     newLeads.push(lead);
-    existingDomains.add(compDomain);
+    known.add(domain);
   }
 
-  // 2. Discover target domains from organic web citations in recent scans
+  // 2. Domains that ranked in organic web results for a tracked question.
   for (const queryRes of results) {
+    if (newLeads.length >= MAX_NEW_LEADS) break;
     if (!queryRes.webResults?.length) continue;
+    const aiCitedDomains = new Set(
+      queryRes.results.filter((p) => p.status === "scanned").flatMap((p) => (p.citations || []).map((c) => normalizeDomain(c.domain)))
+    );
+    const scannedForQuestion = queryRes.results.filter((p) => p.status === "scanned").length;
     for (const web of queryRes.webResults.slice(0, 3)) {
-      const dom = web.domain.toLowerCase().replace(/^www\./, "");
-      // Skip common major search / wiki / forum platforms
-      if (
-        dom.includes("wikipedia.org") ||
-        dom.includes("reddit.com") ||
-        dom.includes("youtube.com") ||
-        dom.includes("github.com") ||
-        dom.includes("medium.com") ||
-        dom.includes("linkedin.com") ||
-        existingDomains.has(dom)
-      ) {
-        continue;
-      }
+      if (newLeads.length >= MAX_NEW_LEADS) break;
+      const domain = normalizeDomain(web.domain);
+      if (!domain || known.has(domain) || isNonProspect(domain)) continue;
+      const question = questionText(queryRes.queryId);
+      const citedByAi = aiCitedDomains.has(domain);
+      const observation = scannedForQuestion
+        ? `Ranked in web results for "${question ?? "a tracked question"}"; ${citedByAi ? "also" : "not"} cited in the ${scannedForQuestion} scanned AI answer${scannedForQuestion === 1 ? "" : "s"} for that question.`
+        : `Ranked in web results for "${question ?? "a tracked question"}". No AI answers were scanned for that question.`;
 
-      const companyName = dom.split(".")[0].toUpperCase();
-      const queryObj = queries.find((q) => q.id === queryRes.queryId);
-
-      const lead: CrmLead = {
-        id: `lead-${randomUUID().slice(0, 8)}`,
-        name: companyName,
-        email: "",
-        company: companyName,
-        domain: dom,
-        title: "",
-        stage: "new",
-        source: "geo_gap_discovery",
-        score: 0,
-        dealValue: undefined,
-        notes: `Discovered from web citation for query "${queryObj?.text || "AI solutions"}". High organic presence, potential to convert to full GEO monitoring.`,
-        tags: ["web-citation", "prospect"],
-        sequenceStep: 0,
-        maxSequenceSteps: 4,
-        nextFollowUpAt: null,
-        lastContactedAt: null,
+      const lead = newLead({
+        name: domain,
+        company: domain,
+        domain,
+        notes: observation,
+        tags: ["web-result"],
         geoGap: {
-          queryText: queryObj?.text || "Industry software solutions",
-          competitorsCited: [workspace.brand?.name || "Industry Brand"],
-          missingFromAi: true,
-          citationShare: 0,
-          readinessScore: 0,
-          identifiedGap: `Appeared in web citations for a tracked query; not present in tracked AI citations.`,
+          queryText: question,
+          competitorsCited: [],
+          missingFromAi: scannedForQuestion ? !citedByAi : undefined,
+          identifiedGap: observation,
         },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      await saveLead(lead);
-      await appendLeadActivity({
-        leadId: lead.id,
-        type: "audit_attached",
-        title: "Organic Citation Converted to Prospect",
-        detail: `Found on "${web.title}". Organic rank exists, but AI model citation gap is 100%.`,
-        actor: "GEO Discovery Engine",
       });
-
+      await saveLead(lead);
+      await appendLeadActivity({ leadId: lead.id, type: "audit_attached", title: "Added from scan results", detail: `${observation} Source page: ${web.title || web.url}`, actor: "Discovery" });
       newLeads.push(lead);
-      existingDomains.add(dom);
-      if (newLeads.length >= 8) break; // Limit batch discovery
+      known.add(domain);
     }
-    if (newLeads.length >= 8) break;
   }
 
   return { discovered: newLeads.length, newLeads };

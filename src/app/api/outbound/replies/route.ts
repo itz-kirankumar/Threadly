@@ -3,33 +3,18 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { recordHumanReply } from "@/lib/outbound/campaign";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  // Refuse to enable against the implicit default root: enabling requires an
-  // explicit data-root decision so a stray flag can never silently target
-  // production tenant data.
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Records a human reply on an enrollment: marks it replied and cancels all
 // cancellable intents BEFORE any classification (PRD F15). Provider-accepted
 // messages cannot be recalled; only pre-dispatch intents are cancelled.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -52,7 +37,7 @@ export async function POST(request: Request) {
       actor: access.identity.uid,
       now: new Date(),
     });
-    await audit(access.workspaceUid, access.identity.uid, "reply.recorded", `enrollment:${enrollmentId}`, "success", `cancelledIntents=${result.cancelledIntents}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "reply.recorded", `enrollment:${enrollmentId}`, "success", `cancelledIntents=${result.cancelledIntents}`);
     return Response.json({ enrollmentId, status: "replied", cancelledIntents: result.cancelledIntents }, { headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound replies");

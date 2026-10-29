@@ -7,30 +7,15 @@ import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbAccountStore } from "@/lib/outbound/rtdb-import-store";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  // Refuse to enable against the implicit default root: enabling requires an
-  // explicit data-root decision so a stray flag can never silently target
-  // production tenant data.
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
-
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -61,7 +46,7 @@ export async function POST(request: Request) {
       const account = await new RtdbAccountStore().getAccount(access.workspaceUid, contact.accountId);
       const check = isExcludedByIcp(icp.exclusions, { email: contact.email, accountDomain: account?.domain ?? null });
       if (check.excluded) {
-        await audit(access.workspaceUid, access.identity.uid, "enrollment.excluded", `contact:${contactId}`, "denied", `matched ICP exclusion "${check.matched}" (icp ${icp.icpVersionId} v${icp.version})`);
+        await recordAudit(access.workspaceUid, access.identity.uid, "enrollment.excluded", `contact:${contactId}`, "denied", `matched ICP exclusion "${check.matched}" (icp ${icp.icpVersionId} v${icp.version})`);
         return Response.json({ error: `Contact is excluded by the active ICP (matched "${check.matched}").` }, { status: 409, headers: NO_STORE });
       }
     }
@@ -76,7 +61,7 @@ export async function POST(request: Request) {
       actor: access.identity.uid,
       now: new Date(),
     });
-    await audit(access.workspaceUid, access.identity.uid, "enrollment.created", `enrollment:${enrollment.enrollmentId}`, "success", `campaign=${campaignId} contact=${body.contactId}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "enrollment.created", `enrollment:${enrollment.enrollmentId}`, "success", `campaign=${campaignId} contact=${body.contactId}`);
     return Response.json({ enrollment }, { status: 201, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound enrollments");
@@ -85,7 +70,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");

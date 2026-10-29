@@ -6,16 +6,10 @@ import { verifyOAuthState } from "@/lib/outbound/oauth-state";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
+import { NO_STORE, outboundEnabled } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // OAuth consent callback. Verifies the signed state, exchanges the code,
 // verifies the consented mailbox matches the registered sender, stores
@@ -23,7 +17,7 @@ function enabled(): boolean {
 // is the only sender-activation path.
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const url = new URL(request.url);

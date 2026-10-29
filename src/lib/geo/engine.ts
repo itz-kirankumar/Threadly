@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { PROVIDER_SCANNERS, scanCustomProvider } from "./providers";
 import { searchWeb, tavilyConfigured } from "./tavily";
-import { classifyProviderError } from "./provider-error";
+import { classifyProviderError, PROVIDER_ERROR_LABELS } from "./provider-error";
+import { RequestError } from "../api-request.ts";
 import { decryptSecret } from "./crypto";
 import type { KeySettings } from "./store";
 import { analyzeAnswer } from "./extract";
@@ -162,8 +163,13 @@ export async function runScan(
 
   const reachable = active.filter((provider) => (successCount.get(provider.id) ?? 0) > 0);
   if (!reachable.length) {
-    const detail = firstError.values().next().value ?? "unknown error";
-    throw new Error(`No AI providers were reachable this run (${detail}). Try again shortly.`);
+    // Raw provider messages can echo key fragments or account details, so only
+    // the sanitized failure class is shown. Nothing is saved for this run.
+    const reasons = [...new Set(active.map((p) => PROVIDER_ERROR_LABELS[classifyProviderError(firstError.get(p.id) ?? "")]))];
+    throw new RequestError(
+      `No AI provider returned results for this scan (${reasons.join(", ")}). Nothing was saved or counted against your plan. Try again in a few minutes, or contact hello@gothreadly.live if this continues.`,
+      502,
+    );
   }
   for (const provider of reachable) run.providerStatus[provider.id] = "scanned";
   // Partial failures stay visible: a provider that was configured but produced

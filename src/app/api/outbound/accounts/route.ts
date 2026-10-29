@@ -4,22 +4,10 @@ import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-g
 import { reassignContactToAccount } from "@/lib/outbound/corrections";
 import { RtdbAccountStore, RtdbEvidenceStore } from "@/lib/outbound/rtdb-import-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
 
 // F03 corrections. assign-domain: explicit domain -> account mapping that
 // import consults before the domain index or auto-create (subsidiary and
@@ -29,7 +17,7 @@ async function audit(tenantId: string, actor: string, action: string, target: st
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -47,7 +35,7 @@ export async function POST(request: Request) {
       const account = await accounts.getAccount(access.workspaceUid, accountId);
       if (!account) return Response.json({ error: "Target account not found." }, { status: 404, headers: NO_STORE });
       await accounts.saveAssignment(access.workspaceUid, domain, accountId);
-      await audit(access.workspaceUid, access.identity.uid, "account.domain_assigned", `account:${accountId}`, "success", `domain=${domain}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "account.domain_assigned", `account:${accountId}`, "success", `domain=${domain}`);
       return Response.json({ domain, accountId }, { headers: NO_STORE });
     }
 
@@ -60,7 +48,7 @@ export async function POST(request: Request) {
         { contacts: new RtdbContactStore(), accounts, evidence: new RtdbEvidenceStore() },
         { tenantId: access.workspaceUid, contactId, targetAccountId, reason, actor: access.identity.uid, now: new Date() },
       );
-      await audit(access.workspaceUid, access.identity.uid, "account.contact_reassigned", `contact:${contactId}`, "success", `to=${targetAccountId} evidence=${result.evidenceId}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "account.contact_reassigned", `contact:${contactId}`, "success", `to=${targetAccountId} evidence=${result.evidenceId}`);
       return Response.json({ contact: result.contact, evidenceId: result.evidenceId }, { headers: NO_STORE });
     }
 

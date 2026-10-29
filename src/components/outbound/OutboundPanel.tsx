@@ -58,6 +58,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   const [importResult, setImportResult] = useState<ImportCommit | null>(null);
   const [policyForm, setPolicyForm] = useState({ durationMinutes: "30", startHour: "9", endHour: "17", timezone: "Asia/Kolkata" });
   const [hostSenderId, setHostSenderId] = useState<string>("");
+  const [auditNotice, setAuditNotice] = useState("");
   const [policyId, setPolicyId] = useState<string>("");
   const [bookingLink, setBookingLink] = useState<BookingLinkResult | null>(null);
   const [bookingContactId, setBookingContactId] = useState("");
@@ -131,7 +132,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   return (
     <div className="grid gap-4">
       <div className={card}>
-        <h2 className="text-sm font-semibold text-zinc-200">Enterprise outbound (preview)</h2>
+        <h2 className="text-sm font-semibold text-zinc-200">Outbound (preview)</h2>
         <p className="mt-1 text-xs text-zinc-500">
           Approval-gated campaign workflow. Nothing is sent from this surface: planning creates drafted intents only.
         </p>
@@ -783,6 +784,26 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
           </div>
         </>
       )}
+      <div className={card}>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Audit log</h3>
+        <p className="mb-2 text-xs text-zinc-500">
+          Append-only record of outbound actions: actor, action, target, outcome and time. Owners and admins can export it. Each export is itself recorded.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className={btn} disabled={busy} onClick={() => act(async () => {
+            const res = (await authedFetch("/api/outbound/audit?format=json")) as { count: number; truncated: boolean; generatedAt: string };
+            const blob = new Blob([JSON.stringify(res, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `threadly-audit-${res.generatedAt.slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            setAuditNotice(`Exported ${res.count} event${res.count === 1 ? "" : "s"}${res.truncated ? " (limit reached; narrow the date range through the API for the rest)" : ""}.`);
+          })}>Export audit log</button>
+          {auditNotice && <span className="text-xs text-zinc-400">{auditNotice}</span>}
+        </div>
+      </div>
     </div>
   );
 }

@@ -13,18 +13,10 @@ import { RtdbKillSwitchStore } from "@/lib/outbound/rtdb-kill-switch-store";
 import { RtdbPreflightStore } from "@/lib/outbound/rtdb-preflight-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import { RtdbUsageStore } from "@/lib/outbound/rtdb-usage-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Runs the dispatch runner through the routing provider: the live adapter is
 // reachable only for an active sender (real OAuth consent completed) with
@@ -32,13 +24,9 @@ function enabled(): boolean {
 // it, so every send falls back to the mock and stays synthetic. Every gate in
 // checkDispatch still applies, including sender_not_active.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -66,7 +54,7 @@ export async function POST(request: Request) {
       new RoutingDispatchProvider(new RtdbConsentStore()),
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
-    await audit(access.workspaceUid, access.identity.uid, "dispatch.run", `campaign:${campaignId}`, "success", `dispatched=${result.dispatched.length} deferred=${result.deferred.length} skipped=${result.skipped.length}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "dispatch.run", `campaign:${campaignId}`, "success", `dispatched=${result.dispatched.length} deferred=${result.deferred.length} skipped=${result.skipped.length}`);
     return Response.json(
       { campaignId, provider: "routing(mock-unless-live)", dispatchedCount: result.dispatched.length, dispatched: result.dispatched, deferred: result.deferred, skipped: result.skipped },
       { status: 200, headers: NO_STORE }

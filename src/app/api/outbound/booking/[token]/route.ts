@@ -8,16 +8,10 @@ import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
+import { NO_STORE, outboundEnabled } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 function stores() {
   return {
@@ -41,7 +35,7 @@ async function calendarForToken(token: string) {
 // free/busy immediately before creating the calendar event.
 export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Not found." }, { status: 404, headers: NO_STORE });
     }
     const { token } = await params;
@@ -55,7 +49,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Not found." }, { status: 404, headers: NO_STORE });
     }
     const { token } = await params;

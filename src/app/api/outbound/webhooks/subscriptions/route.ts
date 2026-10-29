@@ -4,18 +4,10 @@ import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import { RtdbSubscriptionStore } from "@/lib/outbound/rtdb-subscription-store";
 import { SubscriptionConflictError, renewalState } from "@/lib/outbound/subscriptions";
 import type { MailboxSubscription } from "@/lib/outbound/subscriptions";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Subscription registry admin surface. POST records a provider subscription
 // that was created out-of-band (today: manually; eventually by the consent
@@ -25,13 +17,9 @@ function enabled(): boolean {
 // in the future. Create-or-identical: a conflicting binding for the same
 // subscription id is a 409, never a silent rebind.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
@@ -58,7 +46,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -97,11 +85,11 @@ export async function POST(request: Request) {
     };
     try {
       const result = await new RtdbSubscriptionStore().register(record);
-      await audit(access.workspaceUid, access.identity.uid, "subscription.registered", `subscription:${provider}:${subscriptionId}`, "success", `sender=${senderId} created=${result.created}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "subscription.registered", `subscription:${provider}:${subscriptionId}`, "success", `sender=${senderId} created=${result.created}`);
       return Response.json({ ...result, renewalState: renewalState(record, new Date()) }, { status: result.created ? 201 : 200, headers: NO_STORE });
     } catch (error) {
       if (error instanceof SubscriptionConflictError) {
-        await audit(access.workspaceUid, access.identity.uid, "subscription.registered", `subscription:${provider}:${subscriptionId}`, "denied", "conflicting binding");
+        await recordAudit(access.workspaceUid, access.identity.uid, "subscription.registered", `subscription:${provider}:${subscriptionId}`, "denied", "conflicting binding");
         return Response.json({ error: "That subscription id is already bound to a different tenant or sender." }, { status: 409, headers: NO_STORE });
       }
       throw error;

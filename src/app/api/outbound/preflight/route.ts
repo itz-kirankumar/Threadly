@@ -3,18 +3,10 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { NodeDnsResolver, checkDomain, evaluatePreflight } from "@/lib/outbound/preflight";
 import { RtdbPreflightStore } from "@/lib/outbound/rtdb-preflight-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Domain/reputation preflight (PRD F13). POST runs LIVE DNS checks (SPF,
 // DMARC, common-selector DKIM) for a domain and stores the evidence with a
@@ -23,13 +15,9 @@ function enabled(): boolean {
 // anywhere. DKIM "missing" means no COMMON selector resolved, not proof of
 // absence.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
@@ -47,7 +35,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -63,7 +51,7 @@ export async function POST(request: Request) {
     const record = await checkDomain(access.workspaceUid, domain, new NodeDnsResolver(), { now: new Date(), actor: access.identity.uid });
     await new RtdbPreflightStore().save(record);
     const state = evaluatePreflight(record, new Date());
-    await audit(access.workspaceUid, access.identity.uid, "domain.preflight_checked", `domain:${domain}`, "success", `state=${state.state} spf=${record.spf} dkim=${record.dkim} dmarc=${record.dmarc}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "domain.preflight_checked", `domain:${domain}`, "success", `state=${state.state} spf=${record.spf} dkim=${record.dkim} dmarc=${record.dmarc}`);
     return Response.json({ ...record, state: state.state, failedChecks: state.failedChecks }, { headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound preflight");

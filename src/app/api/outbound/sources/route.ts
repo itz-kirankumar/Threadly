@@ -3,22 +3,10 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { registerLicensedSource } from "@/lib/outbound/discovery";
 import { RtdbLicensedSourceStore } from "@/lib/outbound/rtdb-source-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
 
 // Licensed discovery source registry (PRD F02). Registering a source here
 // records that its license permits (or does not permit) the intended B2B
@@ -28,7 +16,7 @@ async function audit(tenantId: string, actor: string, action: string, target: st
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
@@ -42,7 +30,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -59,7 +47,7 @@ export async function POST(request: Request) {
       if (!found) return Response.json({ error: "Source not found." }, { status: 404, headers: NO_STORE });
       const revoked = { ...found, revokedAt: new Date().toISOString() };
       await store.save(revoked);
-      await audit(access.workspaceUid, access.identity.uid, "source.revoked", `source:${found.sourceId}`, "success", `name=${found.sourceName}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "source.revoked", `source:${found.sourceId}`, "success", `name=${found.sourceName}`);
       return Response.json(revoked, { headers: NO_STORE });
     }
 
@@ -76,7 +64,7 @@ export async function POST(request: Request) {
       now: new Date(),
     });
     await store.save(record);
-    await audit(access.workspaceUid, access.identity.uid, "source.registered", `source:${record.sourceId}`, "success", `name=${record.sourceName} permits=${record.licensePermitsUse}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "source.registered", `source:${record.sourceId}`, "success", `name=${record.sourceName} permits=${record.licensePermitsUse}`);
     return Response.json(record, { headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound sources");

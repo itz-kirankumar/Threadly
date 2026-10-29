@@ -11,29 +11,17 @@ import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import { RtdbUsageStore } from "@/lib/outbound/rtdb-usage-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
 // Runs the template draft worker for one campaign. Renders stored drafts for
 // drafted intents; nothing is sent by this or any other route.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -52,7 +40,7 @@ export async function POST(request: Request) {
           { ledger: new RtdbLedgerStore(), campaigns: new RtdbCampaignStore(), drafts: new RtdbDraftStore() },
           { tenantId: access.workspaceUid, draftId, actor: access.identity.uid, now: new Date() }
         );
-        await audit(access.workspaceUid, access.identity.uid, "draft.approved", `draft:${draftId}`, "success", `intentId=${result.intentId}`);
+        await recordAudit(access.workspaceUid, access.identity.uid, "draft.approved", `draft:${draftId}`, "success", `intentId=${result.intentId}`);
         return Response.json({ approved: true, intentId: result.intentId }, { status: 200, headers: NO_STORE });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "approve failed";
@@ -88,7 +76,7 @@ export async function POST(request: Request) {
       },
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
-    await audit(access.workspaceUid, access.identity.uid, "drafts.generated", `campaign:${campaignId}`, "success", `rendered=${result.rendered.length} skipped=${result.skipped.length}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "drafts.generated", `campaign:${campaignId}`, "success", `rendered=${result.rendered.length} skipped=${result.skipped.length}`);
     return Response.json(
       { campaignId, renderedCount: result.rendered.length, rendered: result.rendered, skipped: result.skipped, usageRecorded: result.usageRecorded },
       { status: 200, headers: NO_STORE }
@@ -101,7 +89,7 @@ export async function POST(request: Request) {
 // Lists stored drafts, optionally filtered by campaign.
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");

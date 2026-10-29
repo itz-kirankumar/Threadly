@@ -4,31 +4,19 @@ import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-g
 import { validateActivation, validateExperiment } from "@/lib/outbound/experiments";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
 import type { Experiment, ExperimentVariant } from "@/lib/outbound/types";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Experiments (PRD F10). Creating an ACTIVE experiment requires
 // variantsApproved: true, which records the caller as the approver of every
 // variant's templates. Assignment is deterministic per contact; holdouts
 // are never planned.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -61,7 +49,7 @@ export async function POST(request: Request) {
       if (result !== "activated") {
         return Response.json({ error: "Activation conflict: the experiment changed concurrently; reload and retry." }, { status: 409, headers: NO_STORE });
       }
-      await audit(access.workspaceUid, access.identity.uid, "experiment.activated", `experiment:${experimentId}`, "success", `campaign=${experiment.campaignId} v${experiment.campaignVersion}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "experiment.activated", `experiment:${experimentId}`, "success", `campaign=${experiment.campaignId} v${experiment.campaignVersion}`);
       const fresh = await store.getExperiment(access.workspaceUid, experimentId);
       return Response.json({ experiment: fresh }, { status: 200, headers: NO_STORE });
     }
@@ -78,7 +66,7 @@ export async function POST(request: Request) {
       if (!ended) {
         return Response.json({ error: "Only an active experiment can be ended." }, { status: 400, headers: NO_STORE });
       }
-      await audit(access.workspaceUid, access.identity.uid, "experiment.ended", `experiment:${experimentId}`, "success", `campaign=${experiment.campaignId} v${experiment.campaignVersion}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "experiment.ended", `experiment:${experimentId}`, "success", `campaign=${experiment.campaignId} v${experiment.campaignVersion}`);
       const fresh = await store.getExperiment(access.workspaceUid, experimentId);
       return Response.json({ experiment: fresh }, { status: 200, headers: NO_STORE });
     }
@@ -116,7 +104,7 @@ export async function POST(request: Request) {
       return Response.json({ error: `Invalid experiment: ${errors.join(", ")}` }, { status: 400, headers: NO_STORE });
     }
     await new RtdbExperimentStore().saveExperiment(experiment);
-    await audit(access.workspaceUid, access.identity.uid, "experiment.created", `experiment:${experiment.experimentId}`, "success", `campaign=${campaignId} holdout=${experiment.holdoutPercent ?? "n/a"}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "experiment.created", `experiment:${experiment.experimentId}`, "success", `campaign=${campaignId} holdout=${experiment.holdoutPercent ?? "n/a"}`);
     return Response.json({ experiment }, { status: 201, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound experiments");
@@ -125,7 +113,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");

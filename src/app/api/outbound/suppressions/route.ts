@@ -4,31 +4,17 @@ import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-g
 import { addSuppression } from "@/lib/outbound/campaign";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import type { SuppressionReason } from "@/lib/outbound/types";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" } as const;
 const REASONS: SuppressionReason[] = ["opt_out", "hard_bounce", "complaint", "manual", "legal"];
 
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  // Refuse to enable against the implicit default root: enabling requires an
-  // explicit data-root decision so a stray flag can never silently target
-  // production tenant data.
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
-
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -51,7 +37,7 @@ export async function POST(request: Request) {
       actor: access.identity.uid,
       now: new Date(),
     });
-    await audit(access.workspaceUid, access.identity.uid, "suppression.added", `suppression:${result.suppression.suppressionId}`, "success", `reason=${result.suppression.reason} created=${result.created}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "suppression.added", `suppression:${result.suppression.suppressionId}`, "success", `reason=${result.suppression.reason} created=${result.created}`);
     return Response.json(result, { status: result.created ? 201 : 200, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound suppressions");
@@ -60,7 +46,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");

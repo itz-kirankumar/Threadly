@@ -2,34 +2,17 @@ import { errorResponse } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { csvCell, NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
-function csvCell(value: string | undefined | null): string {
-  const v = value ?? "";
-  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-}
-
 // CSV export (PRD F19): tenant contacts with verification state and rights
 // provenance, for CRM handoff without a live CRM connection.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
@@ -53,7 +36,7 @@ export async function GET(request: Request) {
         ].join(",")
       );
     }
-    await audit(access.workspaceUid, access.identity.uid, "contacts.exported", `tenant:${access.workspaceUid}`, "success", `count=${contacts.length}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "contacts.exported", `tenant:${access.workspaceUid}`, "success", `count=${contacts.length}`);
     return new Response(lines.join("\n") + "\n", {
       headers: { ...NO_STORE, "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="threadly-contacts.csv"' },
     });

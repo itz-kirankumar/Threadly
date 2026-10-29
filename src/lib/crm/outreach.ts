@@ -2,233 +2,107 @@ import { loadBrand } from "@/lib/geo/store";
 import { appendLeadActivity, loadLead, loadOutreachTemplates, saveLead } from "./store";
 import type { CrmLead, OutreachTemplate, LeadStage } from "./types";
 
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
+// Leads are the discovery entry point. Drafts composed here are for review and
+// copying only: every real send runs through the outbound engine
+// (src/lib/outbound), which is the single policy gate for suppression,
+// unsubscribe, verification, sender consent, caps and the send ledger. This
+// module never calls an email provider.
+export const LEAD_SENDING_DISABLED_MESSAGE =
+  "Leads do not send email. Approve a campaign in Outbound to contact this lead: sending there checks suppression, unsubscribe, verification and caps, and records every send.";
 
-function sender(): string {
-  return process.env.EMAIL_FROM || "Threadly GEO <outreach@gothreadly.live>";
+export const REPLY_SENTIMENTS = ["interested", "question", "not_interested", "booked"] as const;
+export type ReplySentiment = (typeof REPLY_SENTIMENTS)[number];
+
+export function isReplySentiment(value: unknown): value is ReplySentiment {
+  return typeof value === "string" && (REPLY_SENTIMENTS as readonly string[]).includes(value);
 }
 
-function firstName(fullName: string): string {
+function firstName(fullName: string): string | undefined {
   const n = (fullName || "").trim().split(/\s+/)[0];
-  return n || "there";
+  return n || undefined;
 }
 
+// Replaces {{key}} for every key with a known value. A variable without a
+// value is left in place so the draft visibly shows what is missing; nothing
+// is filled with a guessed or default fact.
 export function renderTemplate(
   templateStr: string,
   variables: Record<string, string | number | undefined>
 ): string {
-  let result = templateStr;
-  for (const [key, val] of Object.entries(variables)) {
-    const regex = new RegExp(`{{\\s*${key}\\s*}}`, "g");
-    result = result.replace(regex, String(val ?? ""));
-  }
-  return result;
+  return templateStr.replace(/{{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*}}/g, (match, key: string) => {
+    const val = variables[key];
+    return val === undefined || val === "" ? match : String(val);
+  });
+}
+
+export function unresolvedVariables(text: string): string[] {
+  const names = new Set<string>();
+  for (const m of text.matchAll(/{{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*}}/g)) names.add(m[1]);
+  return [...names];
 }
 
 export async function prepareOutreachEmail(
   lead: CrmLead,
   stepNumber: number,
   customTemplate?: Partial<OutreachTemplate>
-): Promise<{ subject: string; body: string; step: OutreachTemplate }> {
+): Promise<{ subject: string; body: string; step: OutreachTemplate; missingVariables: string[] }> {
   const templates = await loadOutreachTemplates();
-  const template =
-    templates.find((t) => t.step === stepNumber) ||
-    templates[0] || {
-      step: stepNumber,
-      name: `Step ${stepNumber}`,
-      subject: "AI visibility gap for {{company}}",
-      body: "Hi {{firstName}},\n\nWanted to share an AI citation report for {{company}}.",
-      delayDays: 3,
-    };
+  const template = templates.find((t) => t.step === stepNumber) || templates[0];
 
   const brand = await loadBrand();
-  const competitor =
-    lead.geoGap?.competitorsCited?.[0] ||
-    brand?.competitors?.[0]?.name ||
-    "Competitors";
-
+  // Only values recorded on the lead or the workspace brand are used.
   const vars: Record<string, string | number | undefined> = {
     firstName: firstName(lead.name),
-    fullName: lead.name,
-    company: lead.company,
-    domain: lead.domain,
-    title: lead.title || "Leader",
-    competitorName: competitor,
-    queryText: lead.geoGap?.queryText || "top enterprise solutions",
-    category: brand?.category || "software & services",
-    geoScore: lead.score || 45,
-    citationShare: lead.geoGap?.citationShare ? `${lead.geoGap.citationShare}%` : "0%",
+    fullName: lead.name || undefined,
+    company: lead.company || undefined,
+    domain: lead.domain || undefined,
+    title: lead.title || undefined,
+    competitorName: lead.geoGap?.competitorsCited?.[0],
+    queryText: lead.geoGap?.queryText,
+    category: brand?.category || undefined,
+    senderCompany: brand?.name || undefined,
   };
 
   const subject = renderTemplate(customTemplate?.subject || template.subject, vars);
   const body = renderTemplate(customTemplate?.body || template.body, vars);
 
-  return { subject, body, step: template };
+  return { subject, body, step: template, missingVariables: unresolvedVariables(`${subject}\n${body}`) };
 }
 
-export async function dispatchOutreachStep(
-  leadId: string,
-  targetStep?: number,
-  customEmail?: { subject?: string; body?: string }
-): Promise<{ success: boolean; lead: CrmLead; message: string }> {
-  const lead = await loadLead(leadId);
-  if (!lead) throw new Error("Lead not found.");
-
-  // Production sending guard, owner-approved 27 Oct 2026 (WhatsApp, quoted "ok").
-  // Live dispatch stays disabled until outreach is rebuilt with suppression,
-  // unsubscribe, evidence-backed content and a send ledger. No state changes,
-  // no activity log, no provider call, no simulated send.
-  if (process.env.OUTREACH_SEND_ENABLED !== "true") {
-    return {
-      success: false,
-      lead,
-      message:
-        "Outreach sending is disabled. This production guard was owner-approved on 27 Oct 2026 and stays until the outreach flow is rebuilt with suppression, unsubscribe, evidence-backed content and a send ledger.",
-    };
-  }
-
-  const stepNumber = targetStep ?? (lead.sequenceStep + 1);
-  const { subject, body, step } = await prepareOutreachEmail(lead, stepNumber, customEmail);
-
-  let emailSent = false;
-  let deliveryDetail = "Logged in CRM sequence";
-
-  const apiKey = process.env.RESEND_API_KEY;
-  if (apiKey && lead.email && lead.email.includes("@") && !lead.email.includes("example.com")) {
-    try {
-      const res = await fetch(RESEND_ENDPOINT, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from: sender(),
-          to: [lead.email],
-          subject,
-          text: body,
-        }),
-      });
-      if (res.ok) {
-        emailSent = true;
-        deliveryDetail = "Delivered via Resend";
-      } else {
-        const errText = await res.text();
-        deliveryDetail = `Resend response ${res.status}: ${errText.slice(0, 100)}`;
-      }
-    } catch (e) {
-      deliveryDetail = `Send error: ${e instanceof Error ? e.message : "Network error"}`;
-    }
-  } else {
-    // In dev, test, or demo mode without live API key, simulate sending
-    emailSent = true;
-    deliveryDetail = "Simulated delivery (demo/test mode)";
-  }
-
-  const now = new Date();
-  const nextDelayDays = step.delayDays > 0 ? step.delayDays : 3;
-  const nextDate = new Date(now.getTime() + nextDelayDays * 24 * 60 * 60 * 1000);
-
-  const isFinalStep = stepNumber >= 4;
-  const nextStage: LeadStage = isFinalStep ? "contacted" : "in_sequence";
-
-  lead.sequenceStep = stepNumber;
-  lead.stage = nextStage;
-  lead.lastContactedAt = now.toISOString();
-  lead.nextFollowUpAt = isFinalStep ? null : nextDate.toISOString();
-  lead.updatedAt = now.toISOString();
-
-  await saveLead(lead);
-
-  await appendLeadActivity({
-    leadId: lead.id,
-    type: "email_sent",
-    title: `Sent Step ${stepNumber}: ${step.name}`,
-    detail: `Subject: "${subject}" — ${deliveryDetail}`,
-    actor: "Auto-Outreach Engine",
-    metadata: { step: stepNumber, subject, body, deliveryDetail },
-  });
-
-  return {
-    success: true,
-    lead,
-    message: `Step ${stepNumber} dispatched to ${lead.name} (${lead.email}). Next touchpoint scheduled for ${nextDate.toLocaleDateString()}.`,
-  };
-}
-
-export async function runBatchAutoFollowUps(): Promise<{
-  processed: number;
-  results: Array<{ leadId: string; name: string; step: number; status: string }>;
-}> {
-  const { loadLeads } = await import("./store");
-  const leads = await loadLeads();
-  const now = new Date().toISOString();
-
-  const dueLeads = leads.filter(
-    (l) =>
-      (l.stage === "in_sequence" || l.stage === "follow_up_due") &&
-      l.nextFollowUpAt &&
-      l.nextFollowUpAt <= now &&
-      l.sequenceStep < 4
-  );
-
-  const results: Array<{ leadId: string; name: string; step: number; status: string }> = [];
-
-  for (const lead of dueLeads) {
-    try {
-      const nextStep = lead.sequenceStep + 1;
-      const res = await dispatchOutreachStep(lead.id, nextStep);
-      results.push({
-        leadId: lead.id,
-        name: lead.name,
-        step: nextStep,
-        status: res.message,
-      });
-    } catch (err) {
-      results.push({
-        leadId: lead.id,
-        name: lead.name,
-        step: lead.sequenceStep + 1,
-        status: `Error: ${err instanceof Error ? err.message : "Failed"}`,
-      });
-    }
-  }
-
-  return { processed: results.length, results };
-}
-
+// Records a reply the user received outside Threadly. The reply text is the
+// user's own record; nothing is generated or sent in response.
 export async function recordLeadReply(
   leadId: string,
   replyText: string,
-  sentiment: "interested" | "question" | "not_interested" | "booked" = "interested"
-): Promise<{ lead: CrmLead; suggestedReply: string }> {
+  sentiment: ReplySentiment,
+  actor: string
+): Promise<{ lead: CrmLead }> {
   const lead = await loadLead(leadId);
   if (!lead) throw new Error("Lead not found.");
 
-  let newStage: LeadStage = "replied";
-  let suggestedReply = "";
+  const nextStage: LeadStage =
+    sentiment === "not_interested" ? "lost" : sentiment === "question" ? "replied" : "qualified";
 
-  if (sentiment === "interested" || sentiment === "booked") {
-    newStage = "qualified";
-    suggestedReply = `Hi ${firstName(lead.name)},\n\nGlad this resonated! I've attached your full GEO citation audit comparing ${lead.company} against top AI queries. Happy to send over a link to pick a short slot that works for you.\n\nLooking forward to speaking!`;
-  } else if (sentiment === "question") {
-    newStage = "replied";
-    suggestedReply = `Hi ${firstName(lead.name)},\n\nGreat question. Generative Engine Optimization specifically tunes how LLMs (like ChatGPT, Perplexity, and Claude) summarize sources when answering buying queries. Unlike traditional SEO, it focuses on factual citation density and brand anchor presence in LLM training and retrieval pipelines.\n\nHappy to walk through a live example for ${lead.company}.`;
-  } else {
-    newStage = "lost";
-    suggestedReply = `Hi ${firstName(lead.name)},\n\nUnderstood completely! Thanks for letting me know. I'll make sure not to reach out again. Best of luck with ${lead.company}!`;
-  }
-
-  lead.stage = newStage;
-  lead.nextFollowUpAt = null; // stop automated cadence
+  lead.stage = nextStage;
+  lead.nextFollowUpAt = null; // a reply always stops the cadence
   lead.updatedAt = new Date().toISOString();
   await saveLead(lead);
 
   await appendLeadActivity({
     leadId: lead.id,
     type: "reply_received",
-    title: `Prospect Replied (${sentiment.toUpperCase()})`,
+    title: `Reply recorded: ${SENTIMENT_LABELS[sentiment]}`,
     detail: replyText.slice(0, 300),
-    actor: lead.name,
-    metadata: { sentiment, replyText, suggestedReply },
+    actor,
+    metadata: { sentiment, replyText: replyText.slice(0, 5000) },
   });
 
-  return { lead, suggestedReply };
+  return { lead };
 }
+
+export const SENTIMENT_LABELS: Record<ReplySentiment, string> = {
+  interested: "Interested",
+  question: "Question",
+  not_interested: "Not interested",
+  booked: "Meeting booked",
+};

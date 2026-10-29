@@ -1,12 +1,9 @@
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
-import { loadBrand } from "@/lib/geo/store";
-import {
-  generateBrandKnowledgeFacts,
-  diagnosePrompt,
-  getRecommendedLinkPool,
-} from "@/lib/geo/geoflow-engine";
-import { runOpenSeoAudit } from "@/lib/geo/openseo-engine";
+import { loadBrand, loadWorkspace } from "@/lib/geo/store";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { diagnosePrompt, generateBrandKnowledgeFacts, summarizeCitationSources } from "@/lib/geo/geoflow-engine";
+import { parseAuditDomain, runOpenSeoAudit } from "@/lib/geo/openseo-engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,39 +11,50 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "view");
-    const body = (await readJsonBody(request, 64 * 1024)) as Record<string, unknown>;
-    const action = String(body.action || "facts");
-
-    const brand = await inWorkspace(access, async () => loadBrand());
+    const body = (await readJsonBody(request, 16 * 1024)) as Record<string, unknown>;
+    const action = typeof body.action === "string" ? body.action : "";
 
     if (action === "facts") {
+      const brand = await inWorkspace(access, () => loadBrand());
       if (!brand) throw new RequestError("Set up your brand profile first.", 400);
-      const facts = generateBrandKnowledgeFacts(brand);
-      return Response.json({ facts });
+      return Response.json({ facts: generateBrandKnowledgeFacts(brand) });
     }
 
     if (action === "diagnose") {
-      const prompt = String(body.prompt || "");
-      if (!prompt.trim()) throw new RequestError("Enter a query prompt to diagnose.", 400);
-      const diagnostic = diagnosePrompt(prompt, brand);
-      return Response.json({ diagnostic });
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+      if (!prompt) throw new RequestError("Enter a buyer question to check.", 400);
+      if (prompt.length > 500) throw new RequestError("Keep the question to 500 characters or fewer.", 400);
+      const workspace = await inWorkspace(access, () => loadWorkspace());
+      return Response.json({ diagnostic: diagnosePrompt(prompt, workspace.brand, workspace.queries, workspace.results) });
     }
 
-    if (action === "anchors") {
-      const category = brand?.category || "software";
-      const anchors = getRecommendedLinkPool(category);
-      return Response.json({ anchors });
+    if (action === "sources") {
+      const workspace = await inWorkspace(access, () => loadWorkspace());
+      return Response.json({
+        ...summarizeCitationSources(workspace.brand, workspace.results),
+        scanFinishedAt: workspace.latestRun?.finishedAt ?? null,
+      });
     }
 
     if (action === "audit") {
-      const targetDomain = typeof body.domain === "string" && body.domain.trim()
-        ? body.domain.trim()
-        : brand?.domain || "example.com";
-      const audit = await runOpenSeoAudit(targetDomain);
-      return Response.json({ audit });
+      const brand = await inWorkspace(access, () => loadBrand());
+      const requested = typeof body.domain === "string" && body.domain.trim() ? body.domain : brand?.domain ?? "";
+      const domain = parseAuditDomain(requested);
+      if (!domain) throw new RequestError("Enter a public website domain, like example.com.", 400);
+      const user = access.identity;
+      if (user.idToken !== "demo-token") {
+        const limit = await checkRateLimit(`geo-audit:${user.uid}`, 10, 3600, user);
+        if (limit && !limit.allowed) {
+          return Response.json(
+            { error: "Too many audits. Try again shortly." },
+            { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+          );
+        }
+      }
+      return Response.json({ audit: await runOpenSeoAudit(domain) });
     }
 
-    throw new RequestError(`Unknown action "${action}"`, 400);
+    throw new RequestError("Unknown action.", 400);
   } catch (error) {
     return errorResponse(error, "POST /api/geo/optimize");
   }

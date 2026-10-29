@@ -4,27 +4,14 @@ import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-g
 import { intentUniqueKey } from "@/lib/outbound/ledger";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
 import type { MessageIntent } from "@/lib/outbound/types";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // The enterprise outbound surface ships dark: OUTBOUND_ENABLED must be set to
 // "true" explicitly, and no sender/provider call exists in this route.
-function outboundEnabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  // Refuse to enable against the implicit default root: enabling requires an
-  // explicit data-root decision so a stray flag can never silently target
-  // production tenant data.
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
 // POST /api/outbound/intents - create (idempotently) one send intent.
-
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
 
 export async function POST(request: Request) {
   try {
@@ -74,7 +61,7 @@ export async function POST(request: Request) {
       const existing = await store.findIntentByUniqueKey(intent.uniqueKey);
       return Response.json({ intent: existing, duplicate: true }, { status: 200, headers: { "Cache-Control": "no-store" } });
     }
-    await audit(access.workspaceUid, access.identity.uid, "intent.created", `intent:${intent.intentId}`, "success", `campaign=${intent.campaignId} step=${intent.step}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "intent.created", `intent:${intent.intentId}`, "success", `campaign=${intent.campaignId} step=${intent.step}`);
     return Response.json({ intent, duplicate: false }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return errorResponse(error, "outbound intents");

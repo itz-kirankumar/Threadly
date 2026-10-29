@@ -6,31 +6,20 @@ import { requireLicensedSource } from "@/lib/outbound/discovery";
 import { RtdbLicensedSourceStore } from "@/lib/outbound/rtdb-source-store";
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbAccountStore, RtdbEvidenceStore } from "@/lib/outbound/rtdb-import-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" } as const;
 const MAX_CSV_BYTES = 512 * 1024;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // CSV import (PRD F02): action "preview" parses + validates without writing;
 // action "commit" writes contacts with source evidence and rights records.
 // Commit without rightsConfirmed=true is blocked as an unlicensed source.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -94,7 +83,7 @@ export async function POST(request: Request) {
           ...(licensedSource ? { licensedSource: { sourceName: licensedSource.sourceName, sourceId: licensedSource.sourceId } } : {}),
         }
       );
-      await audit(access.workspaceUid, access.identity.uid, "import.committed", `import:${result.importId ?? sourceName}`, "success", `created=${result.created} reconciled=${result.reconciled} invalid=${result.invalid.length}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "import.committed", `import:${result.importId ?? sourceName}`, "success", `created=${result.created} reconciled=${result.reconciled} invalid=${result.invalid.length}`);
       return Response.json(result, { status: 201, headers: NO_STORE });
     }
     return Response.json({ error: "Unknown action." }, { status: 400 });

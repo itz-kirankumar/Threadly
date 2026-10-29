@@ -1,8 +1,9 @@
-import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
+import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadLeads, saveLead, loadCrmStats, appendLeadActivity } from "@/lib/crm/store";
 import { syncLeadToAccounts } from "@/lib/crm/accounts-store";
-import type { CrmLead, LeadStage, LeadSource } from "@/lib/crm/types";
+import { optionalText, parseDealValue, parseDomain, parseEmail, parseStage, parseTags, parseUserSource, requiredText } from "@/lib/crm/lead-input";
+import type { CrmLead } from "@/lib/crm/types";
 import { randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
@@ -23,50 +24,44 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "runScans");
-    const body = (await readJsonBody(request, 128 * 1024)) as Record<string, unknown>;
+    const body = (await readJsonBody(request, 64 * 1024)) as Record<string, unknown>;
 
-    const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : "Prospect Lead";
-    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-    const company = typeof body.company === "string" && body.company.trim() ? body.company.trim() : "Target Company";
-    const domain = typeof body.domain === "string" ? body.domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "") : "example.com";
-    const stage = (typeof body.stage === "string" ? body.stage : "new") as LeadStage;
-    const source = (typeof body.source === "string" ? body.source : "manual") as LeadSource;
-    const dealValue = typeof body.dealValue === "number" ? body.dealValue : undefined;
-    const notes = typeof body.notes === "string" ? body.notes : undefined;
-    const tags = Array.isArray(body.tags) ? (body.tags as string[]) : [];
-
+    const stage = body.stage === undefined ? "new" : parseStage(body.stage);
+    const now = new Date().toISOString();
     const lead: CrmLead = {
       id: `lead-${randomUUID().slice(0, 8)}`,
-      name,
-      email,
-      company,
-      domain,
-      title: typeof body.title === "string" ? body.title : undefined,
-      phone: typeof body.phone === "string" ? body.phone : undefined,
+      name: requiredText(body.name, "the contact name", 120),
+      email: parseEmail(body.email),
+      company: requiredText(body.company, "the company name", 160),
+      domain: parseDomain(body.domain),
+      title: optionalText(body.title, "the job title", 120),
+      phone: optionalText(body.phone, "the phone number", 40),
       stage,
-      source,
-      score: typeof body.score === "number" ? body.score : 60,
-      dealValue,
-      notes,
-      tags,
+      source: parseUserSource(body.source),
+      // Fit scoring belongs to the outbound engine; a manually added lead has
+      // no score until one is computed from evidence.
+      score: 0,
+      dealValue: parseDealValue(body.dealValue),
+      notes: optionalText(body.notes, "the notes", 5000),
+      tags: parseTags(body.tags),
       sequenceStep: 0,
-      maxSequenceSteps: 4,
+      maxSequenceSteps: 3,
       nextFollowUpAt: null,
       lastContactedAt: null,
-      geoGap: typeof body.geoGap === "object" && body.geoGap ? (body.geoGap as any) : undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
+    const actor = access.identity.email || access.identity.name || access.identity.uid;
     await inWorkspace(access, async () => {
       await saveLead(lead);
-      await syncLeadToAccounts(lead, access.identity.email || access.identity.name || "User");
+      await syncLeadToAccounts(lead, actor);
       await appendLeadActivity({
         leadId: lead.id,
         type: "stage_change",
-        title: "Lead Created",
-        detail: `Added to CRM pipeline at stage "${stage}".`,
-        actor: access.identity.name || "User",
+        title: "Lead created",
+        detail: `Added at stage "${stage}".`,
+        actor,
       });
     });
 

@@ -51,69 +51,45 @@ export async function loadLeadActivities(leadId: string): Promise<CrmActivity[]>
   return list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 
+// Starter sequence for a new workspace. It deliberately contains no claims,
+// statistics or case studies: bracketed text must be replaced with the
+// workspace's own approved wording before a draft is usable.
 export const DEFAULT_TEMPLATES: OutreachTemplate[] = [
   {
     step: 1,
-    name: "Initial GEO Gap Notice",
-    subject: "Quick question on {{company}}'s AI search visibility",
+    name: "Introduction",
+    subject: "{{company}} and {{senderCompany}}",
     body: `Hi {{firstName}},
 
-Noticed {{company}} isn't being cited when buyers query generative AI engines (ChatGPT, Claude, Perplexity) for {{category}}.
+[One sentence on why you are writing to {{company}}, based on a fact you can cite.]
 
-Instead, {{competitorName}} is capturing the majority of AI citation share for queries like "{{queryText}}".
+[One sentence on what {{senderCompany}} offers, using approved product claims only.]
 
-We put together an AI citation audit with 3 quick fixes to get {{company}} recommended by AI engines.
+[A single, specific question or request.]
 
-Open to a 5-minute preview?
-
-Best,
-The Threadly GEO Team`,
+[Your name]`,
     delayDays: 0,
   },
   {
     step: 2,
-    name: "Value-Add Crawler & llms.txt Audit",
-    subject: "Re: Quick question on {{company}}'s AI search visibility",
+    name: "Follow-up",
+    subject: "Following up: {{company}}",
     body: `Hi {{firstName}},
 
-Following up with a specific finding from our scan of {{domain}}:
+[A short follow-up that adds one new, cited piece of information.]
 
-AI bots like GPTBot and PerplexityBot are currently missing structured knowledge about {{company}}'s core features and pricing. Adding a standard llms.txt and structured fact anchors would immediately help models cite you accurately.
-
-Would you like me to send over the ready-to-deploy knowledge block?
-
-Best,
-Threadly Team`,
+[Your name]`,
     delayDays: 3,
   },
   {
     step: 3,
-    name: "Social Proof & Case Study",
-    subject: "+240% citation share case study for {{company}}",
+    name: "Final follow-up",
+    subject: "Closing the loop: {{company}}",
     body: `Hi {{firstName}},
 
-Thought this might be timely: a B2B SaaS in {{category}} recently grew their AI model citation share by 240% in under 30 days after optimizing their citation anchor pool.
+[A brief close. State that you will not follow up again unless they reply.]
 
-Given {{company}}'s brand authority, you are positioned to outrank {{competitorName}} on generative answers quickly.
-
-Do you have 10 minutes this Thursday or Friday to review your custom gap map?
-
-Best,
-Threadly Team`,
-    delayDays: 4,
-  },
-  {
-    step: 4,
-    name: "Gentle Breakup / Door Open",
-    subject: "Closing the loop on {{company}} AI citations",
-    body: `Hi {{firstName}},
-
-I haven't heard back, so I assume optimizing {{company}}'s generative AI presence isn't a top priority right now.
-
-I'll close your audit file for now. If you ever want to check your brand visibility score across ChatGPT, Claude, and Perplexity, feel free to run a scan at gothreadly.live.
-
-Wishing you and {{company}} the best,
-Threadly Team`,
+[Your name]`,
     delayDays: 4,
   },
 ];

@@ -8,7 +8,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --ext .js,.mjs,.ts,.tsx src next.config.mjs postcss.config.mjs tailwind.config.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs unit",
+    "test:emulator": "npx --yes firebase-tools@15.34.2 emulators:exec --config tests/emulator/firebase.json --only database --project demo-threadly \"node scripts/run-tests.mjs emulator\"",
+    "test:all": "node scripts/run-tests.mjs all",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -43,5 +47,5 @@
     "postcss": "^8.5.30",
     "postcss-selector-parser": "^7.1.6"
   },
-  "description": "Threadly - Enterprise GEO Intelligence: brand mention and citation-share monitoring across ChatGPT, Claude, Gemini and Perplexity."
+  "description": "Threadly: enterprise prospecting and outreach with GEO intelligence (brand mention and citation-share monitoring across ChatGPT, Claude and Gemini)."
 }

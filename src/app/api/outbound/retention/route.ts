@@ -7,18 +7,11 @@ import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
 import { RtdbEvidenceStore } from "@/lib/outbound/rtdb-import-store";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { RtdbRetentionOverrideStore } from "@/lib/outbound/rtdb-retention-override-store";
-import { auditEvent } from "@/lib/outbound/audit";
 import { planRetentionSweep, executeRetentionSweep } from "@/lib/outbound/retention";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Retention sweep (PRD retention proposal). DRY-RUN BY DEFAULT: the plan is
 // returned without any mutation unless the body explicitly sets
@@ -27,13 +20,9 @@ function enabled(): boolean {
 // overrides are not yet modeled - do not sweep a tenant under a contractual
 // retention requirement. Suppressions are never deleted.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -53,15 +42,15 @@ export async function POST(request: Request) {
     };
     const plan = await planRetentionSweep(stores, { tenantId: access.workspaceUid, now: new Date() });
     if (plan.blocked) {
-      await audit(access.workspaceUid, access.identity.uid, "retention.sweep_blocked", `tenant:${access.workspaceUid}`, "denied", plan.blocked);
+      await recordAudit(access.workspaceUid, access.identity.uid, "retention.sweep_blocked", `tenant:${access.workspaceUid}`, "denied", plan.blocked);
       return Response.json({ mode: "blocked", blocked: plan.blocked, plan }, { status: execute ? 409 : 200, headers: NO_STORE });
     }
     if (!execute) {
-      await audit(access.workspaceUid, access.identity.uid, "retention.sweep_planned", `tenant:${access.workspaceUid}`, "success", `deleteContacts=${plan.deleteContacts.length} deleteEvidence=${plan.deleteEvidence.length} purgeAudit=${plan.purgeAuditEvents}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "retention.sweep_planned", `tenant:${access.workspaceUid}`, "success", `deleteContacts=${plan.deleteContacts.length} deleteEvidence=${plan.deleteEvidence.length} purgeAudit=${plan.purgeAuditEvents}`);
       return Response.json({ mode: "dry_run", plan }, { headers: NO_STORE });
     }
     const result = await executeRetentionSweep(stores, plan, plan.auditCutoff);
-    await audit(access.workspaceUid, access.identity.uid, "retention.swept", `tenant:${access.workspaceUid}`, "success", `deletedContacts=${result.deletedContacts} deletedEvidence=${result.deletedEvidence} purgedAudit=${result.purgedAuditEvents}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "retention.swept", `tenant:${access.workspaceUid}`, "success", `deletedContacts=${result.deletedContacts} deletedEvidence=${result.deletedEvidence} purgedAudit=${result.purgedAuditEvents}`);
     return Response.json({ mode: "executed", plan, deletedContacts: result.deletedContacts, deletedEvidence: result.deletedEvidence, purgedAuditEvents: result.purgedAuditEvents }, { headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound retention");

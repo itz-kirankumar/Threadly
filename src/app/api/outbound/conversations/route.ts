@@ -4,30 +4,18 @@ import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-g
 import { assignConversationOwner, classifyReplyText, INTENTS, reclassifyConversation, routeUncertain } from "@/lib/outbound/conversations";
 import { RtdbConversationStore } from "@/lib/outbound/rtdb-conversation-store";
 import type { Conversation, ConversationIntent } from "@/lib/outbound/types";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Records a conversation/reply. humanReplySeenAt is written at intake time,
 // before any classification. Classification is assistive only ("auto" with
 // "uncertain" as the default); automated actions never key off it.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -45,13 +33,13 @@ export async function POST(request: Request) {
         const intent = INTENTS.find((i) => i === body.classification) as ConversationIntent | undefined;
         if (!intent) return Response.json({ error: "a valid classification is required." }, { status: 400 });
         const updated = await reclassifyConversation(store, { tenantId: access.workspaceUid, conversationId, intent, actor: access.identity.uid });
-        await audit(access.workspaceUid, access.identity.uid, "conversation.reclassified", `conversation:${conversationId}`, "success", `intent=${intent} by=human`);
+        await recordAudit(access.workspaceUid, access.identity.uid, "conversation.reclassified", `conversation:${conversationId}`, "success", `intent=${intent} by=human`);
         return Response.json({ conversation: updated }, { headers: NO_STORE });
       }
       const ownerUserId = typeof body.ownerUserId === "string" ? body.ownerUserId.trim() : "";
       if (!ownerUserId) return Response.json({ error: "ownerUserId is required." }, { status: 400 });
       const updated = await assignConversationOwner(store, { tenantId: access.workspaceUid, conversationId, ownerUserId, actor: access.identity.uid });
-      await audit(access.workspaceUid, access.identity.uid, "conversation.owner_assigned", `conversation:${conversationId}`, "success", `owner=${ownerUserId}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "conversation.owner_assigned", `conversation:${conversationId}`, "success", `owner=${ownerUserId}`);
       return Response.json({ conversation: updated }, { headers: NO_STORE });
     }
 
@@ -76,12 +64,12 @@ export async function POST(request: Request) {
     };
     const store = new RtdbConversationStore();
     await store.saveConversation(conversation);
-    await audit(access.workspaceUid, access.identity.uid, "conversation.created", `conversation:${conversation.conversationId}`, "success", `contact=${conversation.contactId}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "conversation.created", `conversation:${conversation.conversationId}`, "success", `contact=${conversation.contactId}`);
     // F16: an uncertain auto-classification reaches a person - assign the
     // requesting member as owner when nobody owns it yet.
     const routed = await routeUncertain(store, { tenantId: access.workspaceUid, conversationId: conversation.conversationId, fallbackOwnerUserId: access.identity.uid });
     if (routed.assigned) {
-      await audit(access.workspaceUid, access.identity.uid, "conversation.uncertain_routed", `conversation:${conversation.conversationId}`, "success", `owner=${access.identity.uid}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "conversation.uncertain_routed", `conversation:${conversation.conversationId}`, "success", `owner=${access.identity.uid}`);
     }
     return Response.json({ conversation: routed.conversation }, { status: 201, headers: NO_STORE });
   } catch (error) {
@@ -91,7 +79,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");

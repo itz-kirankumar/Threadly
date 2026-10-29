@@ -34,7 +34,7 @@ touches provider accounts, or spends money:
   crm-mappings, drafts). Every route returns 404 unless BOTH
   `OUTBOUND_ENABLED=true` AND `OUTBOUND_DATA_ROOT` is explicitly set. There is
   no implicit default data root.
-- `src/components/outbound/OutboundPanel.tsx` — review UI (Enterprise tab):
+- `src/components/outbound/OutboundPanel.tsx` — review UI (Outbound tab):
   senders, campaign create/approve, contact+enroll, planner run with skip
   reasons, draft generation, drafts, enrollments (mark replied), intents,
   conversations, meetings.
@@ -116,7 +116,22 @@ Built on enterprise-outbound after main's correction that activation gates are n
 
 ### Still open
 - Reply-ingestion webhook scaffolding (F15 restricted scopes = separate consent decision).
-- Audit wiring for the remaining routes (import, experiments, dispatch, plan).
+- Audit events on sender registration and verification routes (import, experiments, dispatch and plan are wired). Export exists at GET /api/outbound/audit (owner/admin, JSON or CSV); the event schema does not yet carry policy version or provider correlation id (PRD R28).
 - UI surfaces for senders-consent, booking, import, experiments + a validation run with pixel passes.
 - D06 architecture decision record (Firebase-first vs managed PostgreSQL) - writable without the owner; the choice itself is D06.
 - Owner decisions: D01-D10 as reported to main; sender OAuth consent on real accounts; any spend; G3/G4 release.
+
+## Consolidation, 29 October 2026
+
+- The legacy Leads module no longer has a send path. `dispatchOutreachStep`
+  (direct Resend send behind `OUTREACH_SEND_ENABLED`, with a "simulated
+  delivery" fallback that logged unsent email as sent) and the CRM follow-up
+  cron were removed. Every send goes through the outbound engine.
+- Lead discovery records only domains observed in stored scans, with the
+  observation and its denominator. Starter outreach templates carry no
+  claims; missing personalisation fields stay visible instead of defaulting.
+- The Optimization tab reports only profile data, stored scan counts and
+  pass/fail crawler checks; the previous generated "facts", confidence,
+  authority and citation-probability scores were removed.
+- Outbound routes share `src/lib/outbound/route-support.ts` (enable gate,
+  audit writer, formula-safe CSV encoding) instead of 30 copies.

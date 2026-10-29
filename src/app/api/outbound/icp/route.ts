@@ -3,22 +3,10 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { confirmIcp, createIcpDraft, nextVersionNumber, resolveCurrentIcp } from "@/lib/outbound/icp";
 import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
 
 // Versioned ICP (PRD F01). POST action=create stores a DRAFT version -
 // manual or url_derived, never active. POST action=confirm is the explicit
@@ -27,7 +15,7 @@ async function audit(tenantId: string, actor: string, action: string, target: st
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
@@ -45,7 +33,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -78,7 +66,7 @@ export async function POST(request: Request) {
         nextVersionNumber(versions),
       );
       await store.save(draft);
-      await audit(access.workspaceUid, access.identity.uid, "icp.draft_created", `icp:${draft.icpVersionId}`, "success", `version=${draft.version} source=${draft.source.kind}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "icp.draft_created", `icp:${draft.icpVersionId}`, "success", `version=${draft.version} source=${draft.source.kind}`);
       return Response.json(draft, { headers: NO_STORE });
     }
 
@@ -96,11 +84,11 @@ export async function POST(request: Request) {
           pointer_race: "Another ICP version was confirmed concurrently; reload and retry.",
         } as const;
         if (outcome.reason === "pointer_race") {
-          await audit(access.workspaceUid, access.identity.uid, "icp.confirm_conflict", `icp:${icpVersionId}`, "denied", "lost tenant current-pointer race; record superseded");
+          await recordAudit(access.workspaceUid, access.identity.uid, "icp.confirm_conflict", `icp:${icpVersionId}`, "denied", "lost tenant current-pointer race; record superseded");
         }
         return Response.json({ error: messages[outcome.reason] }, { status: outcome.reason === "not_found" ? 404 : 409, headers: NO_STORE });
       }
-      await audit(access.workspaceUid, access.identity.uid, "icp.confirmed", `icp:${icpVersionId}`, "success", `version=${outcome.confirmed.version} superseded=${outcome.superseded.length} source=${outcome.confirmed.source.kind}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "icp.confirmed", `icp:${icpVersionId}`, "success", `version=${outcome.confirmed.version} superseded=${outcome.superseded.length} source=${outcome.confirmed.source.kind}`);
       return Response.json(outcome.confirmed, { headers: NO_STORE });
     }
 

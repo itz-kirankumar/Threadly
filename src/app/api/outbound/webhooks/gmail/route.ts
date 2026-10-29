@@ -2,11 +2,10 @@ import { readJsonBody } from "@/lib/api-request";
 import { RtdbIngestionStore } from "@/lib/outbound/rtdb-ingestion-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import { parseGmailPush, secretMatches } from "@/lib/outbound/webhooks";
+import { NO_STORE } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 function active(): boolean {
   if (process.env.OUTBOUND_ENABLED !== "true") return false;

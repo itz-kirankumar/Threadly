@@ -4,34 +4,20 @@ import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-g
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbAccountStore } from "@/lib/outbound/rtdb-import-store";
 import type { Account, Contact, ContactVerificationState, RightsRecord } from "@/lib/outbound/types";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" } as const;
 const VSTATES: ContactVerificationState[] = ["valid", "invalid", "unknown", "stale", "catch_all"];
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  // Refuse to enable against the implicit default root: enabling requires an
-  // explicit data-root decision so a stray flag can never silently target
-  // production tenant data.
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Creates a contact and (optionally) its rights record. The planner still
 // evaluates eligibility fresh on every run; writing a record here grants
 // nothing by itself.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -107,7 +93,7 @@ export async function POST(request: Request) {
       };
       await store.saveRights(rights);
     }
-    await audit(access.workspaceUid, access.identity.uid, "contact.created", `contact:${contact.contactId}`, "success", rights ? "with_rights_record" : null);
+    await recordAudit(access.workspaceUid, access.identity.uid, "contact.created", `contact:${contact.contactId}`, "success", rights ? "with_rights_record" : null);
     return Response.json({ contact, rights }, { status: 201, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound contacts");
@@ -116,7 +102,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");

@@ -6,22 +6,10 @@ import type { ResponseRule } from "@/lib/outbound/auto-responses";
 import { RtdbResponsePolicyStore } from "@/lib/outbound/rtdb-response-policy-store";
 import { INTENTS } from "@/lib/outbound/conversations";
 import type { ConversationIntent } from "@/lib/outbound/types";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
 
 // Policy-scoped automated responses (PRD F17). Policies freeze approved
 // factual/scheduling template text at creation (audited human approval);
@@ -47,7 +35,7 @@ function parseRules(v: unknown): ResponseRule[] | null {
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
@@ -61,7 +49,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -86,7 +74,7 @@ export async function POST(request: Request) {
       if (!found) return Response.json({ error: "Policy not found." }, { status: 404, headers: NO_STORE });
       const retired = { ...found, status: "retired" as const };
       await store.save(retired);
-      await audit(access.workspaceUid, access.identity.uid, "response_policy.retired", `policy:${policyId}`, "success", null);
+      await recordAudit(access.workspaceUid, access.identity.uid, "response_policy.retired", `policy:${policyId}`, "success", null);
       return Response.json(retired, { headers: NO_STORE });
     }
 
@@ -98,7 +86,7 @@ export async function POST(request: Request) {
     const version = existing.reduce((max, p) => Math.max(max, p.version), 0) + 1;
     const policy = createResponsePolicy({ tenantId: access.workspaceUid, version, rules, actor: access.identity.uid, now: new Date() });
     await store.save(policy);
-    await audit(access.workspaceUid, access.identity.uid, "response_policy.created", `policy:${policy.policyId}`, "success", `version=${version} rules=${rules.length}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "response_policy.created", `policy:${policy.policyId}`, "success", `version=${version} rules=${rules.length}`);
     return Response.json(policy, { status: 201, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound response-policies");

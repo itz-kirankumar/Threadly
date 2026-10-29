@@ -3,16 +3,10 @@ import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { outboundAudienceDeny, outboundUidAllowed } from "@/lib/outbound/route-guard";
 import { beginConsent, beginConsentFirst } from "@/lib/outbound/consent-flow";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
+import { NO_STORE, outboundEnabled } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Begins the OAuth consent flow. Two modes: with senderId, for a registered
 // sender; without senderId, consent-first ("Connect Google") — the callback
@@ -23,7 +17,7 @@ function enabled(): boolean {
 // owner-authorized action.
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");

@@ -3,11 +3,10 @@ import { addSuppression } from "@/lib/outbound/campaign";
 import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 // Opt-outs must stay functional even when outbound SENDING is disabled:
 // recipients of messages already delivered keep a working opt-out path.

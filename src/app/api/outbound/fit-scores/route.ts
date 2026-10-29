@@ -10,16 +10,10 @@ import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { icpUsableAsTarget, resolveCurrentIcp, targetFromIcp } from "@/lib/outbound/icp";
 import { RtdbIcpStore } from "@/lib/outbound/rtdb-icp-store";
+import { NO_STORE, outboundEnabled } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Evidence-based fit scores (PRD F04). POST recomputes a contact's score
 // from its dated SourceEvidence under a caller-supplied target profile and
@@ -54,7 +48,7 @@ function parseConfig(body: Record<string, unknown>): FitScoreConfig {
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
@@ -70,7 +64,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");

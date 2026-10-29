@@ -8,32 +8,17 @@ import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { RtdbExperimentStore } from "@/lib/outbound/rtdb-experiment-store";
 import { RtdbKillSwitchStore } from "@/lib/outbound/rtdb-kill-switch-store";
 import { RtdbLedgerStore } from "@/lib/outbound/rtdb-store";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  // Refuse to enable against the implicit default root: enabling requires an
-  // explicit data-root decision so a stray flag can never silently target
-  // production tenant data.
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
-
 // Runs the planner for one campaign. Creates drafted intents only; nothing
 // is sent by this or any other route.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -52,7 +37,7 @@ export async function POST(request: Request) {
       { campaigns: new RtdbCampaignStore(), ledger: new RtdbLedgerStore(), contacts: new RtdbContactStore(), experiments: new RtdbExperimentStore(), killSwitches: new RtdbKillSwitchStore() },
       { tenantId: access.workspaceUid, campaignId, actor: access.identity.uid, now: new Date() }
     );
-    await audit(access.workspaceUid, access.identity.uid, "plan.run", `campaign:${campaignId}`, "success", `planned=${result.planned.length} skipped=${result.skipped.length} blocked=${result.blocked.length}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "plan.run", `campaign:${campaignId}`, "success", `planned=${result.planned.length} skipped=${result.skipped.length} blocked=${result.blocked.length}`);
     return Response.json(
       {
         campaignId: result.campaignId,

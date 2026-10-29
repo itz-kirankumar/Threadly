@@ -6,32 +6,21 @@ import { RtdbCampaignStore } from "@/lib/outbound/rtdb-campaign-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import { engageKillSwitch } from "@/lib/outbound/kill-switches";
 import type { KillSwitchScope } from "@/lib/outbound/kill-switches";
-import { auditEvent } from "@/lib/outbound/audit";
-import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled, recordAudit } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" } as const;
 const SCOPES: KillSwitchScope[] = ["tenant", "campaign", "domain", "sender"];
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Control-center kill switches (PRD F09): pause tenant/campaign/domain/
 // sender without a redeploy, with visible reasons. Engage is idempotent per
 // scope+target (one active switch each); lifting keeps the record as audit
 // trail. Enforcement lives in the planner and dispatch gates.
 
-async function audit(tenantId: string, actor: string, action: string, target: string, outcome: "success" | "denied" | "error", detail: string | null = null): Promise<void> {
-  await new RtdbAuditStore().append(auditEvent({ tenantId, actor, action, target, outcome, detail }));
-}
-
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");
@@ -45,7 +34,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -65,7 +54,7 @@ export async function POST(request: Request) {
       }
       const liftedAt = new Date().toISOString();
       await store.lift(access.workspaceUid, switchId, liftedAt);
-      await audit(access.workspaceUid, access.identity.uid, "killswitch.lifted", `killswitch:${switchId}`, "success", `scope=${existing.scope} target=${existing.target}`);
+      await recordAudit(access.workspaceUid, access.identity.uid, "killswitch.lifted", `killswitch:${switchId}`, "success", `scope=${existing.scope} target=${existing.target}`);
       return Response.json({ switchId, active: false, liftedAt }, { headers: NO_STORE });
     }
 
@@ -100,7 +89,7 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
       createdBy: access.identity.uid,
     });
-    await audit(access.workspaceUid, access.identity.uid, "killswitch.engaged", `killswitch:${result.switch.switchId}`, "success", `scope=${scope} target=${target} created=${result.created} reason=${reason}`);
+    await recordAudit(access.workspaceUid, access.identity.uid, "killswitch.engaged", `killswitch:${result.switch.switchId}`, "success", `scope=${scope} target=${target} created=${result.created} reason=${reason}`);
     return Response.json({ switchId: result.switch.switchId, scope, target, active: true, created: result.created }, { status: result.created ? 201 : 200, headers: NO_STORE });
   } catch (error) {
     return errorResponse(error, "outbound killswitches");

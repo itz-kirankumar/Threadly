@@ -6,19 +6,10 @@ import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
 import { RtdbConsentStore } from "@/lib/outbound/rtdb-consent-store";
 import { RtdbSenderStore } from "@/lib/outbound/rtdb-sender-store";
 import type { Sender } from "@/lib/outbound/types";
+import { NO_STORE, outboundEnabled } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  // Refuse to enable against the implicit default root: enabling requires an
-  // explicit data-root decision so a stray flag can never silently target
-  // production tenant data.
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Registers a sender mailbox in pending_consent status. Activation happens
 // only through the OAuth consent flow (begin-consent -> provider consent ->
@@ -26,7 +17,7 @@ function enabled(): boolean {
 // without provider client envs; checkDispatch denies non-active senders.
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
@@ -89,7 +80,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "view");

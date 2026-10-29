@@ -5,16 +5,10 @@ import { MxVerifier, NodeMxResolver, applyVerificationOutcome } from "@/lib/outb
 import { RtdbContactStore } from "@/lib/outbound/rtdb-contact-store";
 import { auditEvent } from "@/lib/outbound/audit";
 import { RtdbAuditStore } from "@/lib/outbound/rtdb-audit-store";
+import { NO_STORE, outboundEnabled } from "@/lib/outbound/route-support";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-function enabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
-}
 
 // Contact verification (PRD F05). Runs the FREE domain-level MX check only:
 // it can downgrade to "invalid" (domain cannot receive mail) or record an
@@ -24,7 +18,7 @@ function enabled(): boolean {
 
 export async function POST(request: Request) {
   try {
-    if (!enabled()) {
+    if (!outboundEnabled()) {
       return Response.json({ error: "Outbound is not enabled on this deployment." }, { status: 404, headers: NO_STORE });
     }
     const access = await resolveWorkspaceAccess(request, "manageTeam");
