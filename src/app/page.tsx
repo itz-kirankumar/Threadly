@@ -1,6 +1,5 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import PromoBanner from "@/components/PromoBanner";
 import Footer from "@/components/Footer";
 import Reveal from "@/components/landing/Reveal";
 import LiveDemo from "@/components/landing/LiveDemo";
@@ -19,6 +18,12 @@ const STEPS = [
   { title: "Reddit, X and LinkedIn leads", body: "Public posts from people asking for what you sell, ranked by buying intent, with a reply drafted for each." },
   { title: "Decision makers", body: "People in the roles you target, from a licensed contact data provider, with their source recorded." },
   { title: "Write the first email", body: "One draft per company that quotes the company's own words and lists every source." },
+];
+
+const MEMBERSHIP = [
+  { title: "See it work", body: "Run the live demo on your own website. Real public data, with nothing stored and nothing sent." },
+  { title: "Pass the checks", body: "We read your website, audit its readiness and score your business against a set of lead-generation checks." },
+  { title: "Take your seat", body: "Teams that pass are onboarded at once with free credits. Sign in with the email you applied with." },
 ];
 
 const PRINCIPLES = [
@@ -45,56 +50,66 @@ export default function LandingPage() {
     })),
   };
   return (
-    <div className="flex min-h-screen flex-col bg-[#f7f6f3] text-zinc-900">
-      <div className="bg-zinc-950">
-        <PromoBanner />
-      </div>
-      <Navbar tone="light" />
+    <div className="premium flex min-h-screen flex-col">
+      <Navbar />
       <main className="flex-grow">
         {/* Hero with the live demo */}
         <section className="relative overflow-hidden">
-          <div className="landing-network pointer-events-none absolute inset-0" aria-hidden />
-          <div className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[860px] -translate-x-1/2 rounded-full bg-gradient-to-r from-violet-400/35 via-fuchsia-300/25 to-indigo-300/30 blur-[120px]" aria-hidden />
-          <div className="relative mx-auto max-w-6xl px-6 pb-20 pt-14 text-center sm:pt-20">
-            <p className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/90 px-3.5 py-1.5 text-xs font-medium text-violet-900 shadow-sm">
-              <span className="relative flex h-2 w-2" aria-hidden><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-violet-600" /></span>
-              Live demo on real web data. Nothing is stored.
-            </p>
-            <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
-              Find the companies worth contacting,{" "}
-              <span className="bg-gradient-to-r from-violet-600 via-fuchsia-600 to-violet-500 bg-clip-text text-transparent">starting from your website.</span>
+          <div className="premium-aura pointer-events-none absolute inset-x-0 top-0 h-[760px]" aria-hidden />
+          <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-20 text-center sm:pt-28">
+            <p className="premium-eyebrow">By invitation only</p>
+            <h1 className="mx-auto mt-6 max-w-4xl font-display text-6xl leading-[1.02] tracking-tight sm:text-8xl">
+              Pipeline, <em className="premium-gold-text">by invitation.</em>
             </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-zinc-600">
-              Paste your website and watch Threadly research your market, map competitors, find matching companies and draft first emails from facts it can cite.
+            <p className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-zinc-400">
+              A private prospecting desk for B2B teams. Threadly reads your market, finds the companies and conversations worth your time, and drafts outreach from facts it can cite.
             </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-600">
-              <span className="rounded-full border border-violet-100 bg-white px-3 py-1">Public pages only</span>
-              <span className="rounded-full border border-violet-100 bg-white px-3 py-1">Respects robots.txt</span>
-              <span className="rounded-full border border-violet-100 bg-white px-3 py-1">No card needed</span>
-            </div>
-            <div className="mt-8">
+            <div className="mt-12">
               <LiveDemo bonus={{ percent: FIRST_PACK_BONUS_PERCENT, cap: FIRST_PACK_BONUS_CAP }} />
             </div>
           </div>
         </section>
 
-        {/* How it works */}
-        <section id="how-it-works" className="scroll-mt-20 border-t border-zinc-200/80">
-          <div className="mx-auto max-w-6xl px-6 py-20">
+        {/* Membership */}
+        <section className="border-t border-white/[0.07]">
+          <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
-              <p className="text-center text-xs font-semibold uppercase tracking-widest text-violet-600">How it works</p>
-              <h2 className="mt-3 text-center text-4xl font-semibold tracking-tight sm:text-5xl">Eight steps, one run</h2>
-              <p className="mx-auto mt-4 max-w-2xl text-center text-zinc-600">
-                The live demo above runs these steps on your site. In your workspace you edit each one, save companies to your CRM and approve what gets sent.
-              </p>
+              <p className="premium-eyebrow">Membership</p>
+              <h2 className="mt-4 max-w-2xl font-display text-5xl leading-tight tracking-tight">Three steps to a seat at the desk</h2>
             </Reveal>
-            <ol className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <ol className="mt-14 grid gap-px overflow-hidden rounded-3xl border border-white/10 bg-white/10 md:grid-cols-3">
+              {MEMBERSHIP.map((m, i) => (
+                <Reveal key={m.title} delay={i * 90}>
+                  <li className="h-full bg-[#0d0b13] p-8">
+                    <p className="font-display text-4xl text-[#d4b26a]">{["I", "II", "III"][i]}</p>
+                    <h3 className="mt-5 text-lg font-semibold">{m.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-zinc-400">{m.body}</p>
+                  </li>
+                </Reveal>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* How it works */}
+        <section id="how-it-works" className="scroll-mt-20 border-t border-white/[0.07]">
+          <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <Reveal>
+              <div className="lg:sticky lg:top-28">
+                <p className="premium-eyebrow">The method</p>
+                <h2 className="mt-4 font-display text-5xl leading-tight tracking-tight">Eight steps, one run</h2>
+                <p className="mt-5 text-zinc-400">The live demo runs these on your site. In your workspace you edit each one, save companies to your CRM and approve what gets sent.</p>
+              </div>
+            </Reveal>
+            <ol className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
               {STEPS.map((step, index) => (
-                <Reveal key={step.title} delay={index * 60}>
-                  <li className="h-full rounded-2xl border border-zinc-200 bg-white/80 p-5 shadow-sm backdrop-blur">
-                    <p className="font-mono text-xs font-semibold text-violet-600">{String(index + 1).padStart(2, "0")}</p>
-                    <h3 className="mt-2 font-semibold">{step.title}</h3>
-                    <p className="mt-1.5 text-sm leading-relaxed text-zinc-600">{step.body}</p>
+                <Reveal key={step.title} delay={index * 40}>
+                  <li className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-4 py-6">
+                    <span className="font-display text-2xl text-[#d4b26a]">{String(index + 1).padStart(2, "0")}</span>
+                    <div>
+                      <h3 className="font-semibold">{step.title}</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-400">{step.body}</p>
+                    </div>
                   </li>
                 </Reveal>
               ))}
@@ -103,20 +118,18 @@ export default function LandingPage() {
         </section>
 
         {/* Principles */}
-        <section className="border-t border-zinc-200/80 bg-white/60">
-          <div className="mx-auto max-w-6xl px-6 py-20">
+        <section className="border-t border-white/[0.07] bg-white/[0.015]">
+          <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
-              <h2 className="text-center text-4xl font-semibold tracking-tight sm:text-5xl">Built for teams that answer for their outreach</h2>
-              <p className="mx-auto mt-4 max-w-2xl text-center text-zinc-600">
-                Revenue, security and legal teams can see where every lead came from and what was sent.
-              </p>
+              <p className="premium-eyebrow">Standards</p>
+              <h2 className="mt-4 max-w-2xl font-display text-5xl leading-tight tracking-tight">Built for teams that answer for their outreach</h2>
             </Reveal>
-            <div className="mt-12 grid gap-3 sm:grid-cols-2">
+            <div className="mt-14 grid gap-x-12 gap-y-10 sm:grid-cols-2">
               {PRINCIPLES.map((item, index) => (
                 <Reveal key={item.title} delay={index * 70}>
-                  <div className="h-full rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-                    <h3 className="font-semibold">{item.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-600">{item.body}</p>
+                  <div className="border-t border-[#d4b26a]/30 pt-5">
+                    <h3 className="text-lg font-semibold">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-zinc-400">{item.body}</p>
                   </div>
                 </Reveal>
               ))}
@@ -125,22 +138,21 @@ export default function LandingPage() {
         </section>
 
         {/* Intelligence */}
-        <section className="border-t border-zinc-200/80">
-          <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-20 lg:grid-cols-2">
+        <section className="border-t border-white/[0.07]">
+          <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 py-24 lg:grid-cols-2">
             <Reveal>
-              <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">Also included</p>
-              <h2 className="mt-3 text-4xl font-semibold tracking-tight">See how AI assistants describe you</h2>
-              <p className="mt-4 text-zinc-600">
+              <p className="premium-eyebrow">Also included</p>
+              <h2 className="mt-4 font-display text-5xl leading-tight tracking-tight">See how AI assistants describe you</h2>
+              <p className="mt-5 text-zinc-400">
                 Buyers ask ChatGPT, Claude and Gemini before they open a browser. Threadly asks them the questions your buyers ask and tracks whether the answers name and cite you.
               </p>
-              <Link href="/portal" className="mt-6 inline-block text-sm font-semibold text-violet-700 hover:text-violet-600">Track your AI visibility</Link>
             </Reveal>
             <div className="grid gap-3">
               {INTELLIGENCE.map((m, index) => (
                 <Reveal key={m.name} delay={index * 80}>
-                  <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                  <div className="premium-card rounded-2xl p-5">
                     <h3 className="font-semibold">{m.name}</h3>
-                    <p className="mt-1 text-sm text-zinc-600">{m.body}</p>
+                    <p className="mt-1 text-sm text-zinc-400">{m.body}</p>
                   </div>
                 </Reveal>
               ))}
@@ -149,8 +161,8 @@ export default function LandingPage() {
         </section>
 
         {/* Developers */}
-        <section id="developers" className="scroll-mt-20 border-t border-zinc-200/80">
-          <div className="mx-auto max-w-6xl px-6 py-20">
+        <section id="developers" className="scroll-mt-20 border-t border-white/[0.07]">
+          <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
               <Developers />
             </Reveal>
@@ -160,14 +172,14 @@ export default function LandingPage() {
         <EarlyAccess />
 
         {/* Pricing */}
-        <section className="bg-zinc-950 text-zinc-100">
+        <section className="border-t border-white/[0.07]">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
               <div className="text-center">
-                <p className="text-xs font-semibold uppercase tracking-widest text-violet-300">Pricing</p>
-                <h2 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">Pay only for results</h2>
+                <p className="premium-eyebrow">Members&apos; pricing</p>
+                <h2 className="mt-4 font-display text-5xl tracking-tight">Pay only for results</h2>
                 <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-                  Threadly is invite-only. Invited teams buy credits and spend them on companies, leads, emails and scans. No seats and no subscription.
+                  Members buy credits and spend them on companies, leads, emails and scans. No seats and no subscription.
                 </p>
               </div>
             </Reveal>
@@ -178,22 +190,15 @@ export default function LandingPage() {
         </section>
 
         {/* FAQ: its own section, apart from pricing */}
-        <section id="faq" className="scroll-mt-20 bg-gradient-to-b from-violet-50/70 to-[#f7f6f3]">
+        <section id="faq" className="scroll-mt-20 border-t border-white/[0.07] bg-white/[0.015]">
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
-          <div className="mx-auto grid max-w-6xl gap-10 px-6 py-24 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+          <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
             <Reveal>
               <div className="lg:sticky lg:top-28">
-                <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">FAQ</p>
-                <h2 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Questions, answered</h2>
-                <p className="mt-4 text-zinc-600">How the data is collected, how credits work and how teams get onboarded.</p>
-                <div className="mt-8 rounded-2xl border border-violet-200 bg-white p-5">
-                  <p className="font-semibold">Still deciding?</p>
-                  <p className="mt-1 text-sm text-zinc-600">Read the docs, or write to us and a person will answer.</p>
-                  <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                    <Link href="/docs" className="rounded-lg border border-zinc-300 px-3 py-1.5 font-semibold hover:border-violet-400">Docs</Link>
-                    <Link href="/contact" className="rounded-lg bg-violet-600 px-3 py-1.5 font-semibold text-white hover:bg-violet-500">Contact us</Link>
-                  </div>
-                </div>
+                <p className="premium-eyebrow">Questions</p>
+                <h2 className="mt-4 font-display text-5xl leading-tight tracking-tight">Before you apply</h2>
+                <p className="mt-5 text-zinc-400">How the data is collected, how credits work and how teams are onboarded.</p>
+                <Link href="/contact" className="mt-6 inline-block text-sm font-semibold text-[#d4b26a] hover:text-[#f0dca6]">Write to us →</Link>
               </div>
             </Reveal>
             <Faq tone="light" />
@@ -201,24 +206,23 @@ export default function LandingPage() {
         </section>
 
         {/* Final CTA */}
-        <section className="px-6 pb-24">
+        <section className="px-6 py-24">
           <Reveal>
-            <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2rem] bg-gradient-to-br from-violet-700 via-violet-600 to-fuchsia-600 px-8 py-16 text-center text-white shadow-[0_40px_100px_-40px_rgba(91,33,182,0.9)]">
-              <div className="landing-network pointer-events-none absolute inset-0 opacity-30" aria-hidden />
-              <h2 className="relative text-4xl font-semibold tracking-tight sm:text-5xl">Find the companies worth contacting</h2>
-              <p className="relative mx-auto mt-4 max-w-xl text-lg text-violet-100">
-                Run the live demo on your website, then check your eligibility. Qualified teams are onboarded on the spot.
+            <div className="premium-seal relative mx-auto max-w-5xl overflow-hidden rounded-[2rem] px-8 py-20 text-center">
+              <p className="premium-eyebrow">Membership is reviewed automatically</p>
+              <h2 className="mx-auto mt-5 max-w-2xl font-display text-5xl leading-tight tracking-tight sm:text-6xl">Your seat is decided by your business</h2>
+              <p className="mx-auto mt-5 max-w-xl text-lg text-zinc-400">
+                Run the demo on your website, then check your eligibility. Teams that pass are onboarded on the spot.
               </p>
-              <div className="relative mt-8 flex flex-wrap items-center justify-center gap-3">
-                <Link href="/#early-access" className="rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-violet-700 shadow-lg hover:bg-violet-50">Check eligibility</Link>
-                <Link href="/#live-demo" className="rounded-full border border-white/40 px-6 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Try the live demo</Link>
-                <Link href="/portal" className="rounded-full px-4 py-2.5 text-sm font-semibold text-violet-100 underline-offset-4 hover:underline">Sign in</Link>
+              <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+                <Link href="/#early-access" className="btn-gold rounded-full px-7 py-3 text-sm font-semibold">Request an invitation</Link>
+                <Link href="/portal" className="rounded-full border border-white/20 px-7 py-3 text-sm font-semibold transition hover:border-[#d4b26a]/60">Member sign in</Link>
               </div>
             </div>
           </Reveal>
         </section>
       </main>
-      <Footer tone="light" />
+      <Footer />
     </div>
   );
 }

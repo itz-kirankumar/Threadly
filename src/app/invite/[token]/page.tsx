@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import ThreadlyLogo from "@/components/ThreadlyLogo";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, type User } from "firebase/auth";
@@ -102,7 +102,7 @@ export default function InvitePage() {
       <header className="border-b border-white/10">
         <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/threadly-mark.svg" alt="Threadly" width={28} height={28} />
+            <ThreadlyLogo size={28} />
             <span className="text-lg font-semibold tracking-tight text-white">Threadly</span>
           </Link>
         </div>

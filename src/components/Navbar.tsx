@@ -1,51 +1,24 @@
 import Link from "next/link";
-import Image from "next/image";
 import DeveloperMenu from "@/components/DeveloperMenu";
+import ThreadlyLogo from "@/components/ThreadlyLogo";
 
-// tone="light" is the landing page; other public pages use the dark bar.
-export default function Navbar({ tone = "dark" }: { tone?: "dark" | "light" }) {
-  if (tone === "light") {
-    return (
-      <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-[#f7f6f3]/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/threadly-mark.svg" alt="Threadly" width={26} height={26} />
-            <span className="text-[17px] font-semibold tracking-tight text-zinc-900">Threadly</span>
-          </Link>
-          <nav className="flex items-center gap-6 text-sm">
-            <Link href="/#how-it-works" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">How it works</Link>
-            <Link href="/pricing" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">Pricing</Link>
-            <Link href="/blog" className="hidden text-zinc-600 transition hover:text-zinc-900 md:inline">Blog</Link>
-            <DeveloperMenu tone="light" />
-            <Link href="/portal" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">Sign in</Link>
-            <Link href="/#early-access" className="whitespace-nowrap rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-1.5 text-[13px] font-semibold text-white shadow-[0_6px_18px_-8px_rgba(124,58,237,0.8)] transition hover:brightness-110">
-              Check eligibility
-            </Link>
-          </nav>
-        </div>
-      </header>
-    );
-  }
+// The public bar. `tone` stays for callers; every public page is the same
+// black and gold now.
+export default function Navbar(_props: { tone?: "dark" | "light" }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-zinc-950/70 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/threadly-mark.svg" alt="Threadly" width={26} height={26} />
-          <span className="text-[17px] font-semibold tracking-tight text-white">Threadly</span>
+    <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-[#08070c]/80 backdrop-blur-xl">
+      <div className="mx-auto flex h-[4.5rem] max-w-6xl items-center justify-between px-6">
+        <Link href="/" aria-label="Threadly home">
+          <ThreadlyLogo size={32} wordmark />
         </Link>
         <nav className="flex items-center gap-6 text-sm">
-          <Link href="/#live-demo" className="hidden text-zinc-400 transition hover:text-white sm:inline">
-            Live demo
-          </Link>
-          <Link href="/pricing" className="hidden text-zinc-400 transition hover:text-white sm:inline">
-            Pricing
-          </Link>
+          <Link href="/#how-it-works" className="hidden text-zinc-400 transition hover:text-[#f4efe6] md:inline">The method</Link>
+          <Link href="/pricing" className="hidden text-zinc-400 transition hover:text-[#f4efe6] sm:inline">Pricing</Link>
+          <Link href="/blog" className="hidden text-zinc-400 transition hover:text-[#f4efe6] md:inline">Journal</Link>
           <DeveloperMenu />
-          <Link
-            href="/#early-access"
-            className="whitespace-nowrap rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-200"
-          >
-            Request access
+          <Link href="/portal" className="hidden text-zinc-400 transition hover:text-[#f4efe6] sm:inline">Member sign in</Link>
+          <Link href="/#early-access" className="btn-gold whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-semibold">
+            Request an invitation
           </Link>
         </nav>
       </div>

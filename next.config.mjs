@@ -27,6 +27,10 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    // Invite-only: packs are bought inside the workspace after onboarding.
+    return [{ source: "/checkout", destination: "/#early-access", permanent: false }];
+  },
   async rewrites() {
     // Custom Firebase authDomain: serve the auth handler same-origin so
     // popup and redirect sign-in survive third-party storage blocking.

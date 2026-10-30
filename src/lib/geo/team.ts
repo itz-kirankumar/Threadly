@@ -118,25 +118,29 @@ async function writeInvite(ownerUid: string, invite: TeamInvite | null): Promise
 
 // ---- access resolution for every API route ----
 
-import { NEW_SIGNUP_BLOCK_MESSAGE, decideSignupAccess } from "./signup-gate.ts";
+import { NEW_SIGNUP_BLOCK_MESSAGE, decideSignupAccess, isOwnerTeamEmail } from "./signup-gate.ts";
 import { isEmailApproved } from "../waitlist/store.ts";
 
-// Throws 403 when the caller is a brand-new signup (no team membership and no
-// existing workspace data). Exported so billing guest routes apply the same
-// gate to signed-in callers.
-export async function assertSignupAllowed(identity: FirebaseIdentity): Promise<void> {
-  if (identity.idToken === "demo-token" || !adminConfigured()) return;
-  const membership = await adminGetMembership(identity.uid);
-  if (membership) return;
-  const snapshot = await (await getAdminDatabase()).ref(`users/${identity.uid}/geo`).get();
-  const decision = decideSignupAccess({
-    isDemo: false,
-    adminConfigured: true,
-    hasMembership: false,
-    hasWorkspaceData: snapshot.exists(),
-    isApproved: snapshot.exists() ? false : await isEmailApproved(identity.email),
+// The invite-only decision for one identity (see signup-gate.ts). Membership
+// comes from the admin store; pass it when the caller has already read it.
+export async function accessDecision(identity: FirebaseIdentity, membership?: unknown): Promise<"allow" | "block"> {
+  const admin = adminConfigured();
+  const member = admin ? (membership !== undefined ? membership : await adminGetMembership(identity.uid)) : null;
+  return decideSignupAccess({
+    isDemo: identity.idToken === "demo-token",
+    adminConfigured: admin,
+    hasMembership: Boolean(member),
+    isOwnerTeam: isOwnerTeamEmail(identity.email),
+    emailVerified: identity.emailVerified === true,
+    isApproved: admin && !member ? await isEmailApproved(identity.email) : false,
+    isProduction: process.env.NODE_ENV === "production",
   });
-  if (decision === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
+}
+
+// Throws 403 unless the caller may use the platform. Exported so billing
+// routes apply the same gate to signed-in callers.
+export async function assertSignupAllowed(identity: FirebaseIdentity): Promise<void> {
+  if ((await accessDecision(identity)) === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
 }
 
 export async function resolveWorkspaceAccess(request: Request, permission: TeamPermission): Promise<WorkspaceAccess> {
@@ -144,21 +148,12 @@ export async function resolveWorkspaceAccess(request: Request, permission: TeamP
   if (!identity) throw new RequestError("Sign in with Google to continue.", 401);
 
   if (identity.idToken === "demo-token" || !adminConfigured()) {
+    if ((await accessDecision(identity)) === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
     return { identity, workspaceUid: identity.uid, role: "owner", shared: false, teamsEnabled: false };
   }
 
   const membership = await adminGetMembership(identity.uid);
-  if (!membership) {
-    const snapshot = await (await getAdminDatabase()).ref(`users/${identity.uid}/geo`).get();
-    const decision = decideSignupAccess({
-      isDemo: false,
-      adminConfigured: true,
-      hasMembership: false,
-      hasWorkspaceData: snapshot.exists(),
-    isApproved: snapshot.exists() ? false : await isEmailApproved(identity.email),
-    });
-    if (decision === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
-  }
+  if ((await accessDecision(identity, membership)) === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
   const workspaceUid = membership?.ownerUid ?? identity.uid;
   const role: TeamRole = membership?.role ?? "owner";
   if (!roleAllows(role, permission)) {

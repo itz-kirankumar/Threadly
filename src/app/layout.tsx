@@ -11,12 +11,12 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 const display = Instrument_Serif({ weight: "400", subsets: ["latin"], variable: "--font-display" });
 
 const description =
-  "Threadly is the enterprise GEO intelligence platform: monitor brand mentions and citation share across ChatGPT, Claude and Gemini.";
+  "Threadly is a private, invitation-only prospecting and AI visibility platform for eligible B2B teams.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.gothreadly.live"),
   title: {
-    default: "Threadly — Enterprise GEO Intelligence",
+    default: "Threadly — Pipeline, by invitation",
     template: "%s · Threadly",
   },
   description,
@@ -43,15 +43,15 @@ export const metadata: Metadata = {
     apple: [{ url: "/icon.jpg", type: "image/jpeg" }],
   },
   openGraph: {
-    title: "Threadly — Enterprise GEO Intelligence",
+    title: "Threadly — Pipeline, by invitation",
     description,
     siteName: "Threadly",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Threadly — when buyers ask AI, does it mention you?" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Threadly — Pipeline, by invitation" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Threadly — Enterprise GEO Intelligence",
+    title: "Threadly — Pipeline, by invitation",
     description,
     images: ["/og.png"],
   },

@@ -53,7 +53,7 @@ test("an invited application is approved; a waitlisted one is not (in-memory sto
 
 test("the signup gate admits approved emails only", () => {
   const base = { isDemo: false, adminConfigured: true, hasMembership: false, hasWorkspaceData: false };
-  assert.equal(decideSignupAccess({ ...base, isApproved: true }), "allow");
+  assert.equal(decideSignupAccess({ ...base, isApproved: true, emailVerified: true }), "allow");
   assert.equal(decideSignupAccess({ ...base, isApproved: false }), "block");
 });
 

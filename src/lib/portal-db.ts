@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-export type FirebaseIdentity = { uid: string; email: string; name: string; idToken: string };
+export type FirebaseIdentity = { uid: string; email: string; name: string; idToken: string; emailVerified?: boolean };
 type WorkspaceAuth = { uid: string; idToken: string; useAdmin?: boolean };
 const workspaceAuth = new AsyncLocalStorage<WorkspaceAuth>();
 
@@ -105,7 +105,7 @@ export async function getFirebaseIdentity(request: Request, optional = false): P
   const payload = await response.json();
   const user = payload.users?.[0];
   if (!user?.localId) throw new Error("Your Google sign-in could not be verified.");
-  return { uid: user.localId, email: user.email || "", name: user.displayName || "Founder", idToken };
+  return { uid: user.localId, email: user.email || "", name: user.displayName || "Founder", idToken, emailVerified: user.emailVerified === true };
 }
 
 export async function withWorkspace<T>(uid: string, idToken: string, operation: () => Promise<T>, options?: { useAdmin?: boolean }): Promise<T> {

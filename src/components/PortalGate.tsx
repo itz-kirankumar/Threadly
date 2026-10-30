@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, type User } from "firebase/auth";
+import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import GeoDashboard from "@/components/geo/GeoDashboard";
 import PhoneGate from "@/components/PhoneGate";
+import ThreadlyLogo from "@/components/ThreadlyLogo";
 import { getFirebaseAuth, initializeFirebaseAnalytics } from "@/lib/firebase-client";
 
 export default function PortalGate() {
@@ -12,6 +13,8 @@ export default function PortalGate() {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [authError, setAuthError] = useState("");
+  // Invite-only: null while the server decides whether this account may enter.
+  const [access, setAccess] = useState<{ allowed: boolean; email: string | null } | null>(null);
 
   useEffect(() => {
     let unsubscribe = () => {};
@@ -30,6 +33,26 @@ export default function PortalGate() {
     return () => unsubscribe();
   }, [router]);
 
+  useEffect(() => {
+    if (!user) {
+      setAccess(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/access", { headers: { Authorization: `Bearer ${await user.getIdToken()}` }, cache: "no-store" });
+        const body = (await res.json()) as { allowed?: boolean; email?: string | null };
+        if (!cancelled) setAccess({ allowed: res.ok && body.allowed === true, email: body.email ?? user.email });
+      } catch {
+        if (!cancelled) setAuthError("We could not confirm your access. Refresh to try again.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   if (authError) {
     return (
       <div className="mx-auto max-w-md px-6 py-24 text-center">
@@ -38,8 +61,12 @@ export default function PortalGate() {
     );
   }
 
-  if (!ready || !user) {
+  if (!ready || !user || !access) {
     return <div className="py-24 text-center text-sm text-zinc-500">Loading…</div>;
+  }
+
+  if (!access.allowed) {
+    return <NotOnboarded email={access.email} />;
   }
 
   // Phone verification is mandatory for every account, on every sign-in path.
@@ -50,4 +77,27 @@ export default function PortalGate() {
   }
 
   return <GeoDashboard user={user} />;
+}
+
+// Signed in, but not an onboarded account: nothing of the platform is shown.
+function NotOnboarded({ email }: { email: string | null }) {
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#08070c] px-6 text-[#f4efe6]">
+      <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[760px] -translate-x-1/2 rounded-full bg-violet-700/20 blur-[130px]" aria-hidden />
+      <div className="relative w-full max-w-md rounded-3xl border border-[#d4b26a]/25 bg-white/[0.03] p-8 text-center backdrop-blur">
+        <div className="flex justify-center"><ThreadlyLogo size={44} /></div>
+        <p className="mt-6 text-[11px] font-medium uppercase tracking-[0.3em] text-[#d4b26a]">By invitation</p>
+        <h1 className="mt-3 font-display text-4xl leading-tight">This account has not been onboarded</h1>
+        <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+          Threadly is open to eligible teams only.{email ? ` ${email} is not on the member list.` : " Sign in with the email you applied with."} If you were invited, use that exact email.
+        </p>
+        <div className="mt-7 grid gap-2">
+          <a href="/#early-access" className="rounded-xl bg-[#d4b26a] px-5 py-2.5 text-sm font-semibold text-[#14110a] transition hover:bg-[#e2c684]">Check your eligibility</a>
+          <button type="button" onClick={() => signOut(getFirebaseAuth()).then(() => { window.location.href = "/portal/login"; })} className="rounded-xl border border-white/15 px-5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-white/30">
+            Use a different account
+          </button>
+        </div>
+      </div>
+    </main>
+  );
 }

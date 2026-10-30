@@ -335,7 +335,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
             onChange={(e) => setInput(e.target.value)}
             className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-base text-zinc-900 placeholder-zinc-400 focus:outline-none"
           />
-          <button type="submit" disabled={phase === "running"} className="shrink-0 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(124,58,237,0.8)] transition hover:brightness-110 disabled:opacity-60">
+          <button type="submit" disabled={phase === "running"} className="shrink-0 rounded-xl btn-gold px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(124,58,237,0.8)] transition hover:brightness-110 disabled:opacity-60">
             {phase === "running" ? "Running..." : "Find my leads"}
           </button>
         </div>
@@ -552,7 +552,7 @@ function StoryBars({ viewing, status, ready, follow }: { viewing: DemoStep; stat
             <span className="block h-full w-full bg-violet-600" />
           ) : i === at ? (
             ready ? (
-              <span key={`${s}-${follow}`} className={`block h-full bg-gradient-to-r from-violet-600 to-fuchsia-500 ${follow ? "demo-story-fill" : "w-full opacity-40"}`} />
+              <span key={`${s}-${follow}`} className={`block h-full bg-gradient-to-r from-[#a67c32] to-[#f0dca6] ${follow ? "demo-story-fill" : "w-full opacity-40"}`} />
             ) : (
               <span className="demo-story-wait block h-full w-1/3 bg-violet-500/70" />
             )
@@ -700,7 +700,7 @@ function CrawlerStage({ audit }: { audit: DemoCrawler }) {
             <div className="flex items-center gap-3">
               <p className="w-36 shrink-0 text-xs font-semibold">{cat.name}</p>
               <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                <span className="demo-bar block h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500" style={{ ["--bar-to" as string]: `${(cat.score / cat.max) * 100}%`, animationDelay: `${200 + ci * 140}ms` }} />
+                <span className="demo-bar block h-full rounded-full bg-gradient-to-r from-[#a67c32] to-[#f0dca6]" style={{ ["--bar-to" as string]: `${(cat.score / cat.max) * 100}%`, animationDelay: `${200 + ci * 140}ms` }} />
               </span>
               <span className="w-12 text-right text-xs tabular-nums text-zinc-500">{cat.score}/{cat.max}</span>
             </div>

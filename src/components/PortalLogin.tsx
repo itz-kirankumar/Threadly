@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import ThreadlyLogo from "@/components/ThreadlyLogo";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -224,30 +224,29 @@ export default function PortalLogin() {
   const input =
     "w-full rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-violet-400/60";
   const primaryButton =
-    "w-full rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-60";
+    "btn-gold w-full rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-60";
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950">
-      <header className="border-b border-white/10">
-        <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/threadly-mark.svg" alt="Threadly" width={28} height={28} />
-            <span className="text-lg font-semibold tracking-tight text-white">Threadly</span>
-          </Link>
+    <div className="premium relative flex min-h-screen flex-col overflow-hidden">
+      <div className="premium-aura pointer-events-none absolute inset-x-0 top-0 h-[560px]" aria-hidden />
+      <header className="relative">
+        <div className="mx-auto flex h-[4.5rem] max-w-6xl items-center px-6">
+          <Link href="/" aria-label="Threadly home"><ThreadlyLogo size={32} wordmark /></Link>
         </div>
       </header>
-      <main className="flex flex-grow items-center justify-center px-6 py-16">
-        <div className="w-full max-w-md">
-          <h1 className="text-2xl font-bold text-white">Sign in to your workspace</h1>
+      <main className="relative flex flex-grow items-center justify-center px-6 py-16">
+        <div className="premium-card w-full max-w-md rounded-3xl p-8">
+          <p className="premium-eyebrow">Members only</p>
+          <h1 className="mt-3 font-display text-4xl leading-tight">Welcome back</h1>
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-            Your GEO workspace — brand profile, tracked questions and scan history — is private to your account.
+            Threadly is open to onboarded teams. Sign in with the email you were approved with. Not a member yet? <Link href="/#early-access" className="font-semibold text-[#d4b26a] hover:text-[#f0dca6]">Request an invitation</Link>.
           </p>
 
           <form onSubmit={loginGoogle} className="mt-8">
             <button
               type="submit"
               disabled={busy}
-              className="flex w-full items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/15 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-[#f4efe6] transition hover:border-[#d4b26a]/50 disabled:opacity-60"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.66-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.09 3.57-5.16 3.57-8.81z"/>
@@ -286,16 +285,16 @@ export default function PortalLogin() {
               <input className={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" required />
               <input className={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signup" ? "Choose a password (6+ characters)" : "Password"} autoComplete={mode === "signup" ? "new-password" : "current-password"} required minLength={6} />
               <button type="submit" disabled={busy} className={primaryButton}>
-                {busy ? "Working…" : mode === "signup" ? "Create account" : "Sign in with email"}
+                {busy ? "Working…" : mode === "signup" ? "Activate account" : "Sign in with email"}
               </button>
               <p className="text-center text-sm text-zinc-500">
-                {mode === "signup" ? "Already have an account?" : "New to Threadly?"}{" "}
+                {mode === "signup" ? "Already a member?" : "Been approved?"}{" "}
                 <button
                   type="button"
                   onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setError(""); setNotice(""); }}
-                  className="text-violet-300 hover:text-violet-200"
+                  className="text-[#d4b26a] hover:text-[#f0dca6]"
                 >
-                  {mode === "signup" ? "Sign in" : "Create one"}
+                  {mode === "signup" ? "Sign in" : "Activate your account"}
                 </button>
               </p>
             </form>
@@ -330,12 +329,12 @@ export default function PortalLogin() {
                   type="button"
                   onClick={() => void resendOtp()}
                   disabled={busy || resendCooldown > 0}
-                  className="text-violet-300 hover:text-violet-200 disabled:text-zinc-600 disabled:hover:text-zinc-600"
+                  className="text-[#d4b26a] hover:text-[#f0dca6] disabled:text-zinc-600 disabled:hover:text-zinc-600"
                 >
                   {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
                 </button>
                 {" · Wrong number? "}
-                <button type="button" onClick={() => { setConfirmation(null); setOtp(""); setNotice(""); }} className="text-violet-300 hover:text-violet-200">
+                <button type="button" onClick={() => { setConfirmation(null); setOtp(""); setNotice(""); }} className="text-[#d4b26a] hover:text-[#f0dca6]">
                   Go back
                 </button>
               </p>
@@ -367,7 +366,7 @@ export default function PortalLogin() {
           )}
           <p className="mt-6 text-center text-sm text-zinc-500">
             Just looking?{" "}
-            <Link href="/#live-demo" className="text-violet-300 hover:text-violet-200">
+            <Link href="/#live-demo" className="text-[#d4b26a] hover:text-[#f0dca6]">
               Open the live demo
             </Link>
           </p>

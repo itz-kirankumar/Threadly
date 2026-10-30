@@ -17,6 +17,10 @@ export const dynamic = "force-dynamic";
 // details, exactly like a paid purchase.
 export async function POST(request: Request) {
   try {
+    // Invite-only: there is no anonymous purchase path.
+    if (!(request.headers.get("authorization") || "").trim()) {
+      return Response.json({ error: NEW_SIGNUP_BLOCK_MESSAGE, code: "invite_only" }, { status: 403, headers: { "Cache-Control": "no-store" } });
+    }
     // New-signup gate: promo redemption is a new-signup acquisition path and
     // its claim step is gated, so unauth redemption is closed while the gate
     // is on. Signed-in existing users are unaffected.

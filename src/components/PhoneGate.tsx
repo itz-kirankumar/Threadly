@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import ThreadlyLogo from "@/components/ThreadlyLogo";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   linkWithPhoneNumber,
@@ -100,7 +100,7 @@ export default function PhoneGate({ user }: { user: User }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-6">
       <div className="w-full max-w-md">
-        <Image src="/threadly-mark.svg" alt="Threadly" width={32} height={32} className="mx-auto" />
+        <ThreadlyLogo size={32} className="mx-auto" />
         <h1 className="mt-6 text-center text-2xl font-bold text-white">Verify your phone</h1>
         <p className="mt-2 text-center text-sm leading-relaxed text-zinc-400">
           Threadly requires a verified phone number for every account. We text a one-time code to{" "}

@@ -387,3 +387,94 @@ body:has(.portal) .assistant-fab {
     animation: none !important;
   }
 }
+
+/* ---- Premium theme: black, gold and violet for every public page. ------
+   Components keep their utilities; this layer maps them onto the palette,
+   the same way .portal does for the workspace. Gold is for actions, violet
+   for what is live. */
+.premium {
+  --ink: #08070c;
+  --ivory: #f4efe6;
+  --gold: #d4b26a;
+  background: var(--ink);
+  color: var(--ivory);
+}
+.premium-eyebrow {
+  color: #d4b26a;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+.premium-gold-text {
+  background: linear-gradient(100deg, #f5e6bd 0%, #d4b26a 45%, #a67c32 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-style: italic;
+  padding-right: 0.08em;
+}
+.premium-aura {
+  background:
+    radial-gradient(52% 60% at 50% 0%, rgba(91, 33, 182, 0.34), transparent 72%),
+    radial-gradient(30% 34% at 50% 6%, rgba(212, 178, 106, 0.1), transparent 70%);
+}
+.premium-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+.premium-seal {
+  background: radial-gradient(70% 90% at 50% 0%, rgba(91, 33, 182, 0.3), transparent 70%), #0d0b13;
+  border: 1px solid rgba(212, 178, 106, 0.3);
+}
+.btn-gold,
+.premium .bg-violet-600 {
+  background: linear-gradient(120deg, #f0dca6, #d4b26a 55%, #b88f45);
+  color: #14110a;
+  transition: filter 240ms ease, transform 240ms ease;
+}
+.btn-gold:hover,
+.premium .hover\:bg-violet-500:hover { background: linear-gradient(120deg, #f5e6bd, #dcbd78 55%, #c49a4e); }
+.premium .bg-violet-600.text-white, .premium .btn-gold.text-white { color: #14110a; }
+
+.premium .bg-white, .premium .bg-white\/60, .premium .bg-white\/70, .premium .bg-white\/80,
+.premium .bg-white\/90, .premium .bg-white\/95 { background-color: #110f18; }
+.premium .bg-zinc-50, .premium .bg-zinc-100, .premium .hover\:bg-zinc-50:hover { background-color: rgba(255, 255, 255, 0.05); }
+.premium [class*="bg-[#f7f6f3]"] { background-color: #0b0a10; }
+.premium .bg-zinc-900 { background-color: rgba(255, 255, 255, 0.1); }
+.premium .hover\:bg-violet-700:hover, .premium .hover\:bg-zinc-800:hover { background-color: rgba(255, 255, 255, 0.16); }
+.premium .bg-violet-50, .premium .bg-violet-50\/60, .premium .hover\:bg-violet-50:hover { background-color: rgba(212, 178, 106, 0.09); }
+.premium .bg-violet-100 { background-color: rgba(139, 92, 246, 0.2); }
+.premium .bg-zinc-200, .premium .bg-zinc-300 { background-color: rgba(255, 255, 255, 0.12); }
+
+.premium .border-zinc-100, .premium .border-zinc-200, .premium .border-zinc-300,
+.premium .border-zinc-200\/80, .premium .divide-zinc-100 > * + * { border-color: rgba(255, 255, 255, 0.1); }
+.premium .border-zinc-900, .premium .border-violet-200, .premium .border-violet-300, .premium .border-violet-500,
+.premium .border-violet-600, .premium .border-violet-100, .premium .hover\:border-violet-300:hover, .premium .hover\:border-violet-400:hover,
+.premium .focus\:border-violet-500:focus, .premium .open\:border-violet-300[open] { border-color: rgba(212, 178, 106, 0.55); }
+.premium .ring-violet-100, .premium .focus\:ring-violet-100:focus { --tw-ring-color: rgba(212, 178, 106, 0.1); }
+.premium .focus-within\:ring-violet-200:focus-within { --tw-ring-color: rgba(212, 178, 106, 0.2); }
+
+.premium .text-zinc-900, .premium .text-violet-900, .premium .text-zinc-800 { color: #f4efe6; }
+.premium .text-zinc-700, .premium .text-zinc-600 { color: #b6b1a8; }
+.premium .text-zinc-500 { color: #8f8a83; }
+.premium .text-zinc-400 { color: #a8a39a; }
+.premium .text-violet-600, .premium .text-violet-700, .premium .text-violet-800,
+.premium .hover\:text-violet-600:hover, .premium .group:hover .group-hover\:text-violet-700 { color: #d4b26a; }
+.premium .placeholder-zinc-400::placeholder { color: #77726b; }
+.premium input, .premium select, .premium textarea { color-scheme: dark; }
+.premium .text-emerald-800 { color: #6ee7b7; }
+.premium .text-rose-800, .premium .text-rose-700 { color: #fda4af; }
+.premium .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.12); }
+.premium .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
+.premium .ring-emerald-200 { --tw-ring-color: rgba(16, 185, 129, 0.3); }
+.premium .ring-rose-200, .premium .border-rose-200 { --tw-ring-color: rgba(244, 63, 94, 0.3); border-color: rgba(244, 63, 94, 0.3); }
+.premium .bg-orange-50 { background-color: rgba(249, 115, 22, 0.14); }
+.premium .text-orange-800 { color: #fdba74; }
+.premium .bg-sky-50 { background-color: rgba(14, 165, 233, 0.14); }
+.premium .text-sky-800 { color: #7dd3fc; }
+.premium .text-emerald-600 { color: #34d399; }
+.premium .demo-shimmer {
+  background-image: linear-gradient(90deg, #8f8a83 0%, #8f8a83 35%, #f0dca6 50%, #8f8a83 65%, #8f8a83 100%);
+}
+.premium .landing-network { display: none; }

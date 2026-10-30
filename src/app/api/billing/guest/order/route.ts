@@ -23,6 +23,10 @@ export async function GET() {
 // is returned once and is the only proof of purchase authority.
 export async function POST(request: Request) {
   try {
+    // Invite-only: there is no anonymous purchase path.
+    if (!(request.headers.get("authorization") || "").trim()) {
+      return Response.json({ error: NEW_SIGNUP_BLOCK_MESSAGE, code: "invite_only" }, { status: 403, headers: { "Cache-Control": "no-store" } });
+    }
     if (!razorpayOperational()) {
       return Response.json({ error: "Checkout is not available yet." }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }

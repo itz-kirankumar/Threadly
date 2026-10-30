@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Dialog, DialogBackdrop, DialogPanel } from "@headlessui/react";
+import { useState } from "react";
 import QualifyForm from "./QualifyForm";
 
 export interface RunStats {
@@ -27,19 +28,14 @@ const PACKS = [
 // invite-only, so payment happens in the workspace after onboarding.
 export default function OnboardModal({ open, onClose, stats, bonus }: { open: boolean; onClose: () => void; stats: RunStats; bonus: { percent: number; cap: number } }) {
   const [pack, setPack] = useState("growth");
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-  if (!open) return null;
   const chosen = PACKS.find((p) => p.id === pack)!;
   const extra = (credits: number) => Math.min(bonus.cap, Math.round((credits * bonus.percent) / 100));
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-zinc-900/30 p-0 backdrop-blur-sm sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label="Start with Threadly" onClick={onClose}>
-      <div className="demo-modal-in relative grid text-left max-h-[92vh] w-full max-w-5xl gap-4 overflow-y-auto rounded-t-3xl bg-[#f7f6f3] p-4 sm:rounded-3xl sm:p-5 lg:grid-cols-2" onClick={(e) => e.stopPropagation()}>
+    <Dialog open={open} onClose={onClose} aria-label="Start with Threadly" className="premium relative z-[60] !bg-transparent">
+      <DialogBackdrop className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="fixed inset-0 flex items-end justify-center sm:items-center sm:p-6">
+      <DialogPanel className="demo-modal-in relative grid max-h-[92vh] w-full max-w-5xl gap-4 overflow-y-auto rounded-t-3xl border border-[#d4b26a]/25 bg-[#f7f6f3] p-4 text-left sm:rounded-3xl sm:p-5 lg:grid-cols-2">
         <button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white text-zinc-500 shadow-sm hover:text-zinc-900">✕</button>
 
         <div className="grid content-start gap-4">
@@ -92,7 +88,8 @@ export default function OnboardModal({ open, onClose, stats, bonus }: { open: bo
           </div>
           <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-zinc-400">Payments by Razorpay (India) and Dodo Payments</p>
         </div>
+      </DialogPanel>
       </div>
-    </div>
+    </Dialog>
   );
 }

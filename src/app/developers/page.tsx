@@ -21,14 +21,14 @@ const PACKAGE_API = [
 
 export default function DevelopersPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-[#f7f6f3] text-zinc-900">
+    <div className="premium flex min-h-screen flex-col">
       <Navbar tone="light" />
       <main className="flex-grow">
         <section className="relative overflow-hidden border-b border-zinc-200/80">
           <div className="pointer-events-none absolute -top-40 left-1/2 h-[420px] w-[760px] -translate-x-1/2 rounded-full bg-gradient-to-r from-violet-400/30 to-fuchsia-300/25 blur-[120px]" aria-hidden />
           <div className="relative mx-auto max-w-6xl px-6 py-20">
-            <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">Developers</p>
-            <h1 className="mt-3 max-w-3xl text-5xl font-semibold tracking-tight">Your AI visibility data, in your own tools</h1>
+            <p className="premium-eyebrow">Developers</p>
+            <h1 className="mt-4 max-w-3xl font-display text-6xl leading-tight tracking-tight">Your AI visibility data, in your own tools</h1>
             <div className="mt-10">
               <Developers heading={false} />
             </div>

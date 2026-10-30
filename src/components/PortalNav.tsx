@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import ThreadlyLogo from "@/components/ThreadlyLogo";
 import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
@@ -167,7 +167,7 @@ export default function PortalNav() {
     <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-zinc-950/70 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
         <Link href="/portal" className="flex items-center gap-2.5">
-          <Image src="/threadly-mark.svg" alt="Threadly" width={24} height={24} />
+          <ThreadlyLogo size={24} />
           <span className="text-[15px] font-semibold tracking-tight text-white">Threadly</span>
           <span className="rounded-full border border-violet-400/30 bg-violet-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-violet-300">
             Workspace

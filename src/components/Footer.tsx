@@ -1,11 +1,11 @@
 import Link from "next/link";
+import ThreadlyLogo from "@/components/ThreadlyLogo";
 
-export default function Footer({ tone = "dark" }: { tone?: "dark" | "light" }) {
-  const light = tone === "light";
+export default function Footer(_props: { tone?: "dark" | "light" }) {
   return (
-    <footer className={light ? "border-t border-zinc-200 bg-[#f7f6f3]" : "border-t border-white/10"}>
-      <div className={`mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm sm:flex-row ${light ? "text-zinc-600 [&_a:hover]:text-zinc-900" : "text-zinc-500"}`}>
-        <p>© {new Date().getFullYear()} Threadly. Prospecting and AI visibility for B2B teams.</p>
+    <footer className="border-t border-white/[0.07] bg-[#08070c]">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-10 text-sm text-zinc-500 sm:flex-row">
+        <p className="flex items-center gap-3"><ThreadlyLogo size={22} /> © {new Date().getFullYear()} Threadly. Private prospecting and AI visibility for B2B teams.</p>
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <Link href="/pricing" className="transition hover:text-zinc-300">Pricing</Link>
           <Link href="/docs" className="transition hover:text-zinc-300">Docs</Link>

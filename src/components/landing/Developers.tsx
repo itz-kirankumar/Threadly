@@ -64,8 +64,8 @@ export default function Developers({ heading = true }: { heading?: boolean }) {
       <div>
         {heading && (
           <>
-            <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">For developers</p>
-            <h2 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Build on Threadly</h2>
+            <p className="premium-eyebrow">For developers</p>
+            <h2 className="mt-4 font-display text-5xl leading-tight tracking-tight">Build on Threadly</h2>
           </>
         )}
         <p className="mt-4 text-zinc-600">

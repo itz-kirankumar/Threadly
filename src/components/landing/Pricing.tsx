@@ -74,7 +74,7 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
             <p className="mt-3 flex-1 text-sm leading-relaxed text-zinc-400">{pack.blurb}</p>
             <Link
               href={pack.name === "Enterprise" ? "/contact" : "/#early-access"}
-              className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition ${pack.highlight ? "bg-white text-zinc-950 hover:bg-zinc-200" : "border border-white/15 text-white hover:bg-white/[0.06]"}`}
+              className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition ${pack.highlight ? "btn-gold" : "border border-white/15 text-white hover:bg-white/[0.06]"}`}
             >
               {pack.name === "Enterprise" ? "Talk to us" : "Request an invite"}
             </Link>

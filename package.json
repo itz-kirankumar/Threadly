@@ -18,6 +18,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.10",
     "@vercel/analytics": "^2.0.1",
     "dodopayments": "^2.57.0",
     "firebase": "^12.19.0",

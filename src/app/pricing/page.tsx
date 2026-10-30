@@ -11,12 +11,12 @@ export const metadata: Metadata = {
 
 export default function PricingPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950">
+    <div className="premium flex min-h-screen flex-col">
       <Navbar />
       <main className="mx-auto w-full max-w-6xl flex-grow px-6 py-16">
         <div className="text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">Pricing</p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-white">Pay for leads, not seats</h1>
+          <p className="premium-eyebrow">Members&apos; pricing</p>
+          <h1 className="mt-4 font-display text-6xl tracking-tight">Pay for leads, not seats</h1>
           <p className="mx-auto mt-4 max-w-2xl text-zinc-400">
             Threadly is invite-only. Qualified teams get 200 free credits, then pay per company, social lead,
             email, contact and AI visibility scan.
