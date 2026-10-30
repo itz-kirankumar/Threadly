@@ -48,6 +48,3 @@ export function isCreditPack(value: unknown): value is CreditPackId {
   return typeof value === "string" && value in CREDIT_PACKS;
 }
 
-export function formatPackPrice(amount: number): string {
-  return `$${(amount / 100).toFixed(amount % 100 ? 2 : 0)}`;
-}

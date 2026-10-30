@@ -9,7 +9,6 @@ import { FAQ_ITEMS } from "@/components/landing/faq-items";
 import ProductShowcase from "@/components/landing/ProductShowcase";
 import HowItWorks from "@/components/landing/HowItWorks";
 import AIVisibility from "@/components/landing/AIVisibility";
-import CreditCalculator from "@/components/landing/CreditCalculator";
 import ThreadLines from "@/components/landing/ThreadLines";
 import EarlyAccess from "@/components/landing/EarlyAccess";
 import Developers from "@/components/landing/Developers";
@@ -117,8 +116,7 @@ export default function LandingPage() {
               <h2 className="text-center font-display text-5xl tracking-tight">Pay as you go with no subscription</h2>
               <p className="mx-auto mt-4 max-w-xl text-center text-[#6B6A72]">Members buy credits and spend them on companies, leads, emails and scans. No seats and no subscription.</p>
             </Reveal>
-            <div className="mt-12"><CreditCalculator /></div>
-            <div className="mt-6"><Pricing /></div>
+            <div className="mt-12"><Pricing /></div>
           </div>
         </section>
 

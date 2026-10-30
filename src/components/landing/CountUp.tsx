@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Counts up to `value` the first time it scrolls into view, and again when
-// the value changes. Shows the final value under reduced motion.
-export default function CountUp({ value, decimals = 0, suffix = "" }: { value: number; decimals?: number; suffix?: string }) {
+// Rolls to `value` from wherever it is showing: up from zero the first time
+// it scrolls into view, then to each new value. Reduced motion shows the
+// final value at once.
+export default function CountUp({ value, decimals = 0, prefix = "", suffix = "", duration = 700 }: { value: number; decimals?: number; prefix?: string; suffix?: string; duration?: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [shown, setShown] = useState(value);
   const [seen, setSeen] = useState(false);
+  const current = useRef(0);
 
   useEffect(() => {
     const el = ref.current;
@@ -25,19 +27,24 @@ export default function CountUp({ value, decimals = 0, suffix = "" }: { value: n
   useEffect(() => {
     if (!seen) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      current.current = value;
       setShown(value);
       return;
     }
+    const from = current.current;
     const start = performance.now();
     let frame = 0;
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / 800);
-      setShown(value * (1 - Math.pow(1 - t, 3)));
+      const t = Math.min(1, (now - start) / duration);
+      const next = from + (value - from) * (1 - Math.pow(1 - t, 3));
+      current.current = next;
+      setShown(next);
       if (t < 1) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [seen, value]);
+  }, [seen, value, duration]);
 
-  return <span ref={ref} className="tabular-nums">{shown.toFixed(decimals)}{suffix}</span>;
+  const text = shown.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return <span ref={ref} className="tabular-nums">{prefix}{text}{suffix}</span>;
 }

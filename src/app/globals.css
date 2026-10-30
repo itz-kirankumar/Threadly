@@ -429,10 +429,10 @@ body:has(.portal) .assistant-fab {
 .site input::placeholder, .site textarea::placeholder { color: #8F8E96; }
 .site .bg-violet-500\/20 { background-color: #fff; color: #111114; }
 
-.credit-range { appearance: none; height: 6px; border-radius: 999px; background: linear-gradient(to right, #5B3DF5 var(--fill), #ECEBE7 var(--fill)); cursor: grab; }
+.credit-range { appearance: none; height: 6px; border-radius: 999px; background: linear-gradient(to right, #7B62FF var(--fill), #34333B var(--fill)); cursor: grab; }
 .credit-range:active { cursor: grabbing; }
-.credit-range::-webkit-slider-thumb { appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 1px solid rgba(17, 17, 20, 0.2); box-shadow: 0 1px 4px rgba(17, 17, 20, 0.2); }
-.credit-range::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 1px solid rgba(17, 17, 20, 0.2); box-shadow: 0 1px 4px rgba(17, 17, 20, 0.2); }
+.credit-range::-webkit-slider-thumb { appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
+.credit-range::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
 
 .faq-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 280ms ease; }
 .faq-panel[data-open="true"] { grid-template-rows: 1fr; }
@@ -453,8 +453,8 @@ body:has(.site) .assistant-fab {
   color: #fff;
 }
 .credit-range:focus-visible { outline: none; }
-.credit-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(91, 61, 245, 0.2); }
-.credit-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(91, 61, 245, 0.2); }
+.credit-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 5px rgba(123, 98, 255, 0.35); }
+.credit-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 5px rgba(123, 98, 255, 0.35); }
 .site [aria-label="Steps"] { scrollbar-width: none; }
 .site .bg-violet-600 { background-color: #5B3DF5; }
 .site .hover\:bg-violet-500:hover { background-color: #4A2FD6; }
