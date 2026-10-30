@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import OnboardModal from "./OnboardModal";
-import ResearchPreview from "./ResearchPreview";
+import ResearchReport from "./ResearchReport";
 import {
   DEMO_STEPS,
   DEMO_STEP_LABELS,
@@ -93,6 +93,10 @@ function CountUp({ value, className }: { value: number; className?: string }) {
 // How long a visitor can look back at an earlier step before the story
 // returns to the live one.
 const RETURN_MS = 4000;
+// The run's eight steps, plus the report the visitor ends on.
+type View = DemoStep | "report";
+const VIEWS: View[] = [...DEMO_STEPS, "report"];
+const VIEW_LABELS: Record<View, string> = { ...DEMO_STEP_LABELS, report: "Research report" };
 const RECENT_KEY = "threadly-recent-searches";
 const EXAMPLE_DOMAINS = ["stripe.com", "notion.so", "linear.app"];
 
@@ -112,7 +116,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   const [results, setResults] = useState<DemoResults>({});
   const [streamed, setStreamed] = useState<Streamed>(EMPTY_STREAM);
   const [logs, setLogs] = useState<LogLine[]>([]);
-  const [viewing, setViewing] = useState<DemoStep>("research");
+  const [viewing, setViewing] = useState<View>("research");
   const [follow, setFollow] = useState(true);
   const [error, setError] = useState("");
   const [runDomain, setRunDomain] = useState("");
@@ -187,8 +191,10 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   // DWELL_MS, then on to the next step once it has started. No clicks needed.
   useEffect(() => {
     if (!follow || phase === "idle") return;
-    const next = DEMO_STEPS[DEMO_STEPS.indexOf(viewing) + 1];
-    if (!next || !results[viewing] || status[next] === "pending") return;
+    if (viewing === "report") return;
+    const next = VIEWS[VIEWS.indexOf(viewing) + 1];
+    if (!results[viewing]) return;
+    if (next === "report" ? phase !== "done" : status[next] === "pending") return;
     const shownSince = Math.max(resultAt.current[viewing] ?? 0, lastSwitch.current);
     const timer = setTimeout(() => {
       setViewing(next);
@@ -310,17 +316,19 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   }, [logs]);
   const brandName = results.research?.name ?? preview?.name ?? runDomain;
   const brandIcon = results.research?.iconDataUrl ?? preview?.iconDataUrl ?? null;
-  const goTo = (step: DemoStep) => {
-    if (status[step] === "pending") return;
+  const statusOf = (view: View): StepStatus => (view === "report" ? (phase === "done" ? "done" : "pending") : status[view]);
+  const goTo = (step: View) => {
+    if (statusOf(step) === "pending") return;
     setFollow(false);
     setViewing(step);
   };
   // The step the story should be on: the one running, else the last one
   // with results.
-  const liveStep = runningStep ?? [...DEMO_STEPS].reverse().find((s) => results[s]) ?? "research";
-  // Looking back pauses the story briefly, then it returns to the live step.
+  const liveStep: View = runningStep ?? (phase === "done" ? "report" : [...DEMO_STEPS].reverse().find((s) => results[s]) ?? "research");
+  // While the run is live, looking back pauses the story briefly, then it
+  // returns to the live step. Once finished, every step stays open to browse.
   useEffect(() => {
-    if (follow || phase === "idle") return;
+    if (follow || phase !== "running") return;
     const timer = setTimeout(() => {
       setFollow(true);
       setViewing(liveStep);
@@ -331,11 +339,11 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   // At the end of the run, after the emails have been on screen a while,
   // offer onboarding once.
   useEffect(() => {
-    if (phase !== "done" || viewing !== "pitch" || autoOpened.current) return;
+    if (phase !== "done" || viewing !== "report" || autoOpened.current) return;
     const timer = setTimeout(() => {
       autoOpened.current = true;
       setOnboardOpen(true);
-    }, 16000);
+    }, 25000);
     return () => clearTimeout(timer);
   }, [phase, viewing]);
   const competitorsShown = results.competitors ?? streamed.competitors;
@@ -433,13 +441,13 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
       </form>
 
       {phase !== "idle" && (
-        <div ref={panelRef} className="demo-workspace-in mx-auto mt-8 max-w-6xl scroll-mt-20 overflow-hidden rounded-3xl border border-zinc-200 bg-[#FFFFFF] text-left shadow-[0_40px_100px_-50px_rgba(0,0,0,0.9)]" aria-label={`Live demo for ${runDomain}`}>
+        <div ref={panelRef} className="demo-workspace-in mx-auto mt-8 flex h-[calc(100svh-6.5rem)] max-h-[860px] min-h-[540px] max-w-6xl scroll-mt-20 flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-[#FFFFFF] text-left shadow-[0_40px_100px_-50px_rgba(0,0,0,0.9)]" aria-label={`Live demo for ${runDomain}`}>
           {/* Stepper */}
           <div className="flex items-center gap-3 border-b border-zinc-200 bg-white/70 px-4 py-3 sm:px-6">
             <Logo name={brandName} icon={brandIcon} size="h-7 w-7" />
             <ol className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto" aria-label="Steps">
-              {DEMO_STEPS.map((s, i) => {
-                const st = status[s];
+              {VIEWS.map((s, i) => {
+                const st = statusOf(s);
                 const active = viewing === s;
                 return (
                   <li key={s} className={`flex items-center gap-2 ${active ? "shrink-0" : "flex-1"} last:flex-none`}>
@@ -448,24 +456,24 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                       disabled={st === "pending"}
                       onClick={() => goTo(s)}
                       aria-current={active ? "step" : undefined}
-                      aria-label={`Step ${i + 1}: ${DEMO_STEP_LABELS[s]}`}
+                      aria-label={`Step ${i + 1}: ${VIEW_LABELS[s]}`}
                       className={`flex shrink-0 items-center gap-2 rounded-full text-sm font-semibold transition ${active ? "border border-violet-300 bg-violet-50 px-3 py-1 text-violet-900" : ""}`}
                     >
                       {active && st === "running" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />}
                       <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs transition-colors duration-500 ${st === "done" || active ? "bg-violet-600 text-white" : "border border-zinc-300 text-zinc-500"}`}>{i + 1}</span>
-                      {active && <span className="whitespace-nowrap">{DEMO_STEP_LABELS[s]}</span>}
+                      {active && <span className="whitespace-nowrap">{VIEW_LABELS[s]}</span>}
                     </button>
-                    {i < DEMO_STEPS.length - 1 && <span aria-hidden className="h-px min-w-3 flex-1 bg-zinc-300"><span className="block h-px bg-violet-500 transition-all duration-700" style={{ width: st === "done" ? "100%" : "0%" }} /></span>}
+                    {i < VIEWS.length - 1 && <span aria-hidden className="h-px min-w-3 flex-1 bg-zinc-300"><span className="block h-px bg-violet-500 transition-all duration-700" style={{ width: st === "done" ? "100%" : "0%" }} /></span>}
                   </li>
                 );
               })}
             </ol>
           </div>
-          <StoryBars viewing={viewing} status={status} ready={Boolean(results[viewing])} follow={follow} />
+          <StoryBars viewing={viewing} ready={viewing !== "report" && Boolean(results[viewing])} follow={follow} finished={viewing === "report"} />
 
-          <div className="grid min-h-[560px] lg:grid-cols-[300px_minmax(0,1fr)]">
+          <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[300px_minmax(0,1fr)]">
             {/* Findings rail */}
-            <aside className="hidden flex-col border-r border-zinc-200 px-5 py-4 lg:flex" aria-label="Findings">
+            <aside className="demo-scroll hidden min-h-0 flex-col overflow-y-auto border-r border-zinc-200 px-5 py-4 lg:flex" aria-label="Findings">
               <RailStep n={1} step="research" status={status.research}>
                 {results.research && (
                   <div className="demo-pop-in">
@@ -508,10 +516,11 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
               </RailStep>
               <RailStep n={7} step="contacts" status={status.contacts} />
               <RailStep n={8} step="pitch" status={status.pitch} />
+              <RailStep n={9} step="report" status={statusOf("report")} />
               <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3">
                 <p className="flex items-center gap-2 text-xs font-semibold">
                   {phase === "running" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />}
-                  {phase === "running" && runningStep ? `Working on step ${DEMO_STEPS.indexOf(runningStep) + 1} of ${DEMO_STEPS.length}` : phase === "done" ? "Run complete" : "Stopped"}
+                  {phase === "running" && runningStep ? `Working on step ${DEMO_STEPS.indexOf(runningStep) + 1} of ${VIEWS.length}` : phase === "done" ? "Run complete" : "Stopped"}
                 </p>
                 <ol ref={logBox} className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-600" aria-live="polite">
                   {logs.slice(-14).map((l, i, arr) => {
@@ -528,9 +537,14 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
             </aside>
 
             {/* Stage */}
-            <div className="min-w-0 px-4 py-6 sm:px-8">
-              <div key={viewing} className="demo-story-in">
-                <Stage step={viewing} status={status[viewing]} results={results} streamed={streamed} logs={logs.filter((l) => l.step === viewing)} counters={counters} brandIcon={brandIcon} />
+            <div key={viewing} className="demo-scroll min-h-0 min-w-0 overflow-y-auto px-4 py-5 sm:px-7">
+              <div className="demo-story-in">
+                <StepHeader view={viewing} results={results} streamed={streamed} done={statusOf(viewing) === "done"} />
+                {viewing === "report" ? (
+                  <ResearchReport results={results} action={<ActionButton tone="green" label="Turn this into a pipeline" />} />
+                ) : (
+                  <Stage step={viewing} status={status[viewing]} results={results} streamed={streamed} logs={logs.filter((l) => l.step === viewing)} counters={counters} brandIcon={brandIcon} />
+                )}
               </div>
               {phase === "error" && (
                 <div className="mx-auto mt-6 max-w-2xl rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
@@ -543,17 +557,16 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 bg-white/80 px-4 py-3 sm:px-6">
             <p className="text-xs text-zinc-500">
-              {!follow ? (
+              {!follow && phase === "running" ? (
                 <button type="button" onClick={() => { setFollow(true); setViewing(liveStep); }} className="font-semibold text-zinc-900 underline underline-offset-4">Back to the live step</button>
               ) : (
-                "Real public web data. Nothing is stored and nothing is sent."
+                phase === "done" ? "Run complete. Use the steps above to look back through it." : "Real public web data. Nothing is stored and nothing is sent."
               )}
             </p>
             <ActionButton tone="green" label={phase === "done" ? "Get leads like these every week" : "Start with Threadly"} />
           </div>
         </div>
       )}
-      {phase === "done" && <div className="mx-auto max-w-6xl"><ResearchPreview results={results} category={preview?.category ?? null} /></div>}
       <OnboardModal
         open={onboardOpen}
         onClose={() => setOnboardOpen(false)}
@@ -615,13 +628,13 @@ function OutOfRuns({ kind, onEligibility }: { kind: "free" | "busy"; onEligibili
 
 // Story-style progress: one bar per step. The bar of the step on screen
 // fills while its results are shown, then the story moves on.
-function StoryBars({ viewing, status, ready, follow }: { viewing: DemoStep; status: Record<DemoStep, StepStatus>; ready: boolean; follow: boolean }) {
-  const at = DEMO_STEPS.indexOf(viewing);
+function StoryBars({ viewing, ready, follow, finished }: { viewing: View; ready: boolean; follow: boolean; finished: boolean }) {
+  const at = VIEWS.indexOf(viewing);
   return (
     <div className="flex gap-1 bg-white/70 px-4 pb-2 sm:px-6" aria-hidden>
-      {DEMO_STEPS.map((s, i) => (
+      {VIEWS.map((s, i) => (
         <span key={s} className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200">
-          {i < at || (i !== at && status[s] === "done" && i < at) ? (
+          {i < at || finished ? (
             <span className="block h-full w-full bg-violet-600" />
           ) : i === at ? (
             ready ? (
@@ -636,11 +649,34 @@ function StoryBars({ viewing, status, ready, follow }: { viewing: DemoStep; stat
   );
 }
 
-function RailStep({ n, step, status, children }: { n: number; step: DemoStep; status: StepStatus; children?: React.ReactNode }) {
+// Sits at the top of every step: where you are and what the step found.
+function StepHeader({ view, results, streamed, done }: { view: View; results: DemoResults; streamed: Streamed; done: boolean }) {
+  const social = results.social?.leads ?? streamed.social;
+  const summary: Record<View, string> = {
+    research: results.research ? `Read ${results.research.name} and pulled ${results.research.keywords.length} themes from its own words.` : "Reading the homepage.",
+    crawler: results.crawler ? `${results.crawler.passed} of ${results.crawler.total} checks passed.` : "Checking what AI assistants can read.",
+    competitors: `${(results.competitors ?? streamed.competitors).length} companies verified against their own homepages.`,
+    campaigns: results.campaigns ? `${results.campaigns.length} audience${results.campaigns.length === 1 ? "" : "s"} to prospect.` : "Choosing who to target.",
+    companies: `${(results.companies ?? streamed.companies).length} companies matched to the campaign.`,
+    social: `${social.length} public posts found so far across Reddit, X and LinkedIn.`,
+    contacts: "Who to reach, from a licensed provider in your workspace.",
+    pitch: results.pitch ? `${results.pitch.length} first emails written from each company's own words.` : "Writing first emails.",
+    report: "Everything this run found, in one place.",
+  };
+  return (
+    <header className="mb-4">
+      <p className="text-xs text-[#6B6A72]">Step {VIEWS.indexOf(view) + 1} of {VIEWS.length}{done ? "" : " · working"}</p>
+      <h3 className="mt-0.5 text-2xl font-medium tracking-tight text-[#111114]">{VIEW_LABELS[view]}</h3>
+      <p className="mt-0.5 text-sm text-[#6B6A72]">{summary[view]}</p>
+    </header>
+  );
+}
+
+function RailStep({ n, step, status, children }: { n: number; step: View; status: StepStatus; children?: React.ReactNode }) {
   return (
     <section className={`border-b border-zinc-200 py-2.5 transition-opacity duration-500 ${status === "pending" ? "opacity-40" : ""}`}>
       <p className="font-mono text-[11px] text-zinc-600">
-        <span aria-hidden className={status === "done" ? "text-emerald-600" : "text-zinc-400"}>{status === "done" ? "✓" : status === "running" ? "›" : "·"}</span> step {n} · {DEMO_STEP_LABELS[step]}
+        <span aria-hidden className={status === "done" ? "text-emerald-600" : "text-zinc-400"}>{status === "done" ? "✓" : status === "running" ? "›" : "·"}</span> step {n} · {VIEW_LABELS[step]}
       </p>
       {children && <div className="mt-2">{children}</div>}
     </section>
@@ -735,7 +771,6 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
       const c = data as DemoContacts;
       return (
         <div className="mx-auto mt-4 max-w-xl rounded-2xl border border-zinc-200 bg-white p-7 shadow-sm">
-          <p className="text-lg font-semibold">Decision makers</p>
           <p className="mt-2 text-sm leading-relaxed text-zinc-600">
             For invited workspaces, Threadly looks up people in these roles{c.companies.length ? ` at ${c.companies.slice(0, 3).join(", ")}` : ""} through a licensed contact data provider and records where each contact came from. Profiles are not scraped and addresses are not guessed.
           </p>
@@ -862,7 +897,6 @@ function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; to
     <div>
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-lg font-semibold">Reddit, X and LinkedIn leads</p>
           <p className="text-sm text-zinc-600">
             {topic ? <>Public posts about <span className="font-semibold text-zinc-900">{topic}</span>, ranked by buying intent.</> : "Searching public posts for people asking for what you sell."} Nothing behind a login is read.
           </p>

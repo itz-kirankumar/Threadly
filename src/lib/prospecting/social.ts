@@ -125,8 +125,8 @@ export async function findSocialLeads(
           : /^\/(posts|feed\/update|pulse)\//.test(path);
         if (!isPost || seen.has(h.url)) continue;
         seen.add(h.url);
-        const textForIntent = `${h.title} ${h.content}`;
-        const { intent, score } = classifyIntent(textForIntent, h.title);
+        // The post's own headline: snippets carry page text that is not the ask.
+        const { intent, score } = classifyIntent(h.title);
         const { author, community } = postAuthor(h.url);
         const lead: SocialLead = {
           platform,

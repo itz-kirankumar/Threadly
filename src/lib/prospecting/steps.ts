@@ -448,6 +448,8 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
   if (!searchAvailable()) throw new StepBlocked("Web search is not configured on this deployment (TAVILY_API_KEY), so companies cannot be discovered.");
   const at = now();
   const exclude = new Set([research.domain, ...state.competitors.items.map((c) => c.domain)]);
+  // A competitor can appear on several domains (slack.engineering, slack.com).
+  const brands = new Set([...exclude].map((d) => d.split(".")[0]));
   // Fit evidence for a prospect is the campaign's own vocabulary found on
   // the prospect's homepage.
   const campaignTerms = new Map(campaigns.map((c) => [c.id, campaignVocabulary(c)]));
@@ -465,7 +467,7 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
         let added = 0;
         const add = (domain: string, ev: Evidence) => {
           const d = rootDomain(domain);
-          if (!d || exclude.has(d) || isNonCompany(d) || candidates.some((c) => c.domain === d)) return;
+          if (!d || exclude.has(d) || brands.has(d.split(".")[0]) || isNonCompany(d) || candidates.some((c) => c.domain === d)) return;
           candidates.push({ domain: d, campaignId: campaign.id, ev });
           added++;
         };

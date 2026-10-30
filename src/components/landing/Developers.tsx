@@ -107,7 +107,6 @@ export default function Developers({ heading = true }: { heading?: boolean }) {
         <div className="mt-6 flex flex-wrap gap-3 text-sm">
           <Link href="/docs/public-api" className="btn-primary rounded-xl px-4 py-2 font-medium">API reference</Link>
           <a href="https://www.npmjs.com/package/threadly-geo" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-medium text-[#111114] hover:border-[#5B3DF5]">SDK documentation ↗</a>
-          <a href="https://github.com/itz-kirankumar/Threadly" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-medium text-[#111114] hover:border-[#5B3DF5]">GitHub ↗</a>
         </div>
       </div>
 

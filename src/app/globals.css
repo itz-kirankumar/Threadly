@@ -458,3 +458,16 @@ body:has(.site) .assistant-fab {
 .site [aria-label="Steps"] { scrollbar-width: none; }
 .site .bg-violet-600 { background-color: #5B3DF5; }
 .site .hover\:bg-violet-500:hover { background-color: #4A2FD6; }
+
+/* Docs and blog: headings, code and notes on paper. */
+.site .text-zinc-50 { color: #111114; }
+.site .text-emerald-300, .site .text-emerald-400 { color: #5B3DF5; }
+.site .border-emerald-400 { border-color: #5B3DF5; }
+.site .border-zinc-700, .site .border-zinc-800 { border-color: rgba(17, 17, 20, 0.1); }
+.site pre, .site pre.text-emerald-200 { background: #F3F2EE; color: #17161B; font-size: 13px; line-height: 1.65; }
+.site .code-panel pre { background: transparent; color: #E9E8EC; }
+.site .border-emerald-900\/60 { border-color: rgba(91, 61, 245, 0.25); }
+.site .bg-emerald-950\/30 { background-color: rgba(91, 61, 245, 0.06); }
+.site [class*="text-emerald-200"]:not(pre) { color: #2B2A31; }
+.site .bg-violet-500 { background-color: #5B3DF5; }
+.demo-scroll { scrollbar-width: thin; scrollbar-color: rgba(17, 17, 20, 0.16) transparent; }
