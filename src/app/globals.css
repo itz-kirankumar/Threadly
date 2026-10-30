@@ -298,6 +298,21 @@ body:has(.portal) .assistant-fab {
   to { opacity: 1; transform: scale(1); }
 }
 .demo-workspace-in { animation: demo-workspace-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes demo-logo-in {
+  0% { opacity: 0; transform: translateY(14px) scale(0.85); filter: blur(4px); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.03); filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.demo-ring { animation: demo-ring 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) 200ms both; }
+@keyframes demo-ring { from { stroke-dashoffset: 264; } to { stroke-dashoffset: var(--ring-to); } }
+.demo-logo-in { animation: demo-logo-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes demo-shimmer { 0% { background-position: -120% 0; } 100% { background-position: 220% 0; } }
+.demo-shimmer {
+  background: linear-gradient(90deg, #71717a 0%, #71717a 35%, #18181b 50%, #71717a 65%, #71717a 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: demo-shimmer 1.6s linear infinite;
+}
 @keyframes demo-caret { 50% { opacity: 0; } }
 .demo-caret { display: inline-block; width: 6px; height: 11px; margin-left: 3px; vertical-align: -1px; background: currentColor; animation: demo-caret 1s steps(1) infinite; }
 .demo-pop-in { animation: demo-pop-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
@@ -311,7 +326,8 @@ body:has(.portal) .assistant-fab {
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
 }
 @media (prefers-reduced-motion: reduce) {
-  .demo-card-in, .demo-pop-in, .demo-line-in, .demo-type-in, .demo-workspace-in, .demo-caret { animation: none !important; }
+  .demo-card-in, .demo-pop-in, .demo-line-in, .demo-type-in, .demo-workspace-in, .demo-caret, .demo-logo-in, .demo-shimmer, .demo-ring { animation: none !important; }
+  .demo-ring { stroke-dashoffset: var(--ring-to); }
 }
 
 /* Help assistant animations */

@@ -4,20 +4,24 @@
 // created by Google sign-in, but it cannot provision or use app data while
 // this gate is on. Billing guest-claim opts out so a paid claim is never
 // stranded. Invite accept does not pass through resolveWorkspaceAccess and
-// stays open. Kept dependency-free so it is unit-testable in plain node.
+// stays open. Threadly is invite-only: an email invited from the beta
+// waitlist (scored automatically, see lib/waitlist) may sign up. Kept
+// dependency-free so it is unit-testable in plain node.
 
 export const NEW_SIGNUP_BLOCK_MESSAGE =
-  "New sign-ups are temporarily disabled. Existing accounts can sign in as usual.";
+  "Threadly is invite-only during the beta. Request access at gothreadly.live/#early-access; existing accounts can sign in as usual.";
 
 export interface SignupGateInput {
   isDemo: boolean;
   adminConfigured: boolean;
   hasMembership: boolean;
   hasWorkspaceData: boolean;
+  isApproved?: boolean;
 }
 
 export function decideSignupAccess(input: SignupGateInput): "allow" | "block" {
   if (input.isDemo || !input.adminConfigured) return "allow"; // demo mode and dev path
   if (input.hasMembership || input.hasWorkspaceData) return "allow"; // existing user
+  if (input.isApproved) return "allow"; // invited from the beta waitlist
   return "block";
 }

@@ -17,8 +17,8 @@ export default function Navbar({ tone = "dark" }: { tone?: "dark" | "light" }) {
             <Link href="/pricing" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">Pricing</Link>
             <Link href="/docs" className="hidden text-zinc-600 transition hover:text-zinc-900 md:inline">Docs</Link>
             <Link href="/portal" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">Sign in</Link>
-            <Link href="/portal" className="whitespace-nowrap rounded-full bg-zinc-900 px-4 py-1.5 text-[13px] font-semibold text-white transition hover:bg-zinc-800">
-              Get started
+            <Link href="/#early-access" className="whitespace-nowrap rounded-full bg-zinc-900 px-4 py-1.5 text-[13px] font-semibold text-white transition hover:bg-zinc-800">
+              Request access
             </Link>
           </nav>
         </div>
@@ -41,10 +41,10 @@ export default function Navbar({ tone = "dark" }: { tone?: "dark" | "light" }) {
           </Link>
           <DeveloperMenu />
           <Link
-            href="/portal"
+            href="/#early-access"
             className="whitespace-nowrap rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-200"
           >
-            Get started
+            Request access
           </Link>
         </nav>
       </div>

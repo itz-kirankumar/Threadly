@@ -4,7 +4,7 @@
 // into user-facing flows.
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
-export type LifecycleKind = "welcome-trial" | "trial-scan-complete" | "plan-upgraded";
+export type LifecycleKind = "welcome-trial" | "trial-scan-complete" | "plan-upgraded" | "beta-invite" | "beta-waitlisted";
 
 const PORTAL_URL = "https://www.gothreadly.live/portal";
 const PRICING_URL = "https://www.gothreadly.live/pricing";
@@ -13,7 +13,7 @@ function sender(): string {
   return process.env.EMAIL_FROM || "Threadly <hello@gothreadly.live>";
 }
 
-function shell(title: string, body: string, cta?: { label: string; url: string }): string {
+function shell(title: string, body: string, cta?: { label: string; url: string }, footnote = "you created a Threadly workspace at"): string {
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#0b0f14;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
@@ -27,7 +27,7 @@ function shell(title: string, body: string, cta?: { label: string; url: string }
       ${cta ? `<a href="${cta.url}" style="display:inline-block;margin-top:22px;background:#3b82f6;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 22px;border-radius:8px;">${cta.label}</a>` : ""}
     </div>
     <p style="font-size:12px;color:#5c6a78;margin-top:22px;line-height:1.5;">
-      You are receiving this because you created a Threadly workspace at
+      You are receiving this because ${footnote}
       <a href="https://www.gothreadly.live" style="color:#7f8b98;">gothreadly.live</a>.
     </p>
   </div>
@@ -39,7 +39,7 @@ function firstName(name?: string): string {
   return n || "there";
 }
 
-function template(kind: LifecycleKind, ctx: { name?: string; plan?: string }): { subject: string; html: string } {
+function template(kind: LifecycleKind, ctx: { name?: string; plan?: string; company?: string }): { subject: string; html: string } {
   const hi = `Hi ${firstName(ctx.name)},`;
   switch (kind) {
     case "welcome-trial":
@@ -74,13 +74,41 @@ function template(kind: LifecycleKind, ctx: { name?: string; plan?: string }): {
           { label: "Open your workspace", url: PORTAL_URL },
         ),
       };
+    case "beta-invite":
+      return {
+        subject: "You're invited to the Threadly beta",
+        html: shell(
+          "Your invite is ready",
+          `<p style="margin:0 0 12px;">Hi,</p>
+           <p style="margin:0 0 12px;">Thanks for requesting access${ctx.company ? ` for ${escapeHtml(ctx.company)}` : ""}. Your application qualified, so your account is approved for the Threadly beta.</p>
+           <p style="margin:0;">Sign in with Google using this email address to open your workspace. You pay only for what you use, and your first credits are on us.</p>`,
+          { label: "Sign in to Threadly", url: PORTAL_URL },
+          "you requested early access at",
+        ),
+      };
+    case "beta-waitlisted":
+      return {
+        subject: "You're on the Threadly waitlist",
+        html: shell(
+          "You're on the list",
+          `<p style="margin:0 0 12px;">Hi,</p>
+           <p style="margin:0 0 12px;">Thanks for requesting access${ctx.company ? ` for ${escapeHtml(ctx.company)}` : ""}. Threadly is invite-only while we grow, and we invite teams in batches.</p>
+           <p style="margin:0;">Applying with a work email on your company's domain, and telling us who you sell to, moves you up the list. We'll email you when a spot opens.</p>`,
+          { label: "See pricing", url: PRICING_URL },
+          "you requested early access at",
+        ),
+      };
   }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
 export async function sendLifecycleEmail(
   kind: LifecycleKind,
   to: string,
-  ctx: { name?: string; plan?: string } = {},
+  ctx: { name?: string; plan?: string; company?: string } = {},
 ): Promise<{ sent: boolean; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { sent: false, error: "RESEND_API_KEY not configured" };

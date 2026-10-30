@@ -6,13 +6,15 @@ import Reveal from "@/components/landing/Reveal";
 import LiveDemo from "@/components/landing/LiveDemo";
 import Pricing from "@/components/landing/Pricing";
 import Faq, { FAQ_ITEMS } from "@/components/landing/Faq";
+import EarlyAccess from "@/components/landing/EarlyAccess";
 
 const STEPS = [
   { title: "Research your company", body: "Reads your homepage for what you sell, the words you use and the audiences you name." },
+  { title: "AI crawler check", body: "Reads robots.txt and llms.txt to see which AI assistants can read your site, and scores it." },
   { title: "Map competitors", body: "Web searches and comparison articles, each candidate checked against its own homepage." },
-  { title: "Define campaigns", body: "Audiences your site names, or the one you describe, each turned into a search for companies." },
+  { title: "Define campaigns", body: "Audiences your site and your competitors name, each turned into a search for companies." },
   { title: "Find potential customers", body: "Company homepages read one by one, with publishers, directories and competitors left out." },
-  { title: "Read public conversations", body: "Public Reddit, LinkedIn and X posts about your topic, as search engines index them." },
+  { title: "Reddit, X and LinkedIn leads", body: "Public posts from people asking for what you sell, ranked by buying intent, with a reply drafted for each." },
   { title: "Decision makers", body: "People in the roles you target, from a licensed contact data provider, with their source recorded." },
   { title: "Write the first email", body: "One draft per company that quotes the company's own words and lists every source." },
 ];
@@ -79,7 +81,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-6 py-20">
             <Reveal>
               <p className="text-center text-xs font-semibold uppercase tracking-widest text-indigo-600">How it works</p>
-              <h2 className="mt-3 text-center text-4xl font-semibold tracking-tight sm:text-5xl">Seven steps, one run</h2>
+              <h2 className="mt-3 text-center text-4xl font-semibold tracking-tight sm:text-5xl">Eight steps, one run</h2>
               <p className="mx-auto mt-4 max-w-2xl text-center text-zinc-600">
                 The live demo above runs these steps on your site. In your workspace you edit each one, save companies to your CRM and approve what gets sent.
               </p>
@@ -144,15 +146,17 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <EarlyAccess />
+
         {/* Pricing and FAQ */}
         <section className="bg-zinc-950 text-zinc-100">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
               <div className="text-center">
                 <p className="text-xs font-semibold uppercase tracking-widest text-indigo-300">Pricing</p>
-                <h2 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">Simple, honest pricing</h2>
+                <h2 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">Pay only for results</h2>
                 <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-                  Start with a 7-day trial for $7, one-time and with no auto-renewal. Upgrade when your coverage grows.
+                  Threadly is invite-only. Invited teams buy credits and spend them on companies, leads, emails and scans. No seats and no subscription.
                 </p>
               </div>
             </Reveal>

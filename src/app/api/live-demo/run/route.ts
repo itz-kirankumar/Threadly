@@ -1,13 +1,13 @@
 import { readJsonBody, RequestError } from "@/lib/api-request";
-import { parseAuditDomain } from "@/lib/geo/openseo-engine";
+import { parseAuditDomain, runOpenSeoAudit } from "@/lib/geo/openseo-engine";
 import type { BrandProfile } from "@/lib/geo/types";
 import { reserveDemoRun, visitorKey } from "@/lib/live-demo/quota";
 import type { DemoEvent, DemoStep } from "@/lib/live-demo/types";
 import { contactProvider } from "@/lib/prospecting/contacts";
 import { runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
-import { draftCompanyEmail, draftSocialReply, findSocialLeads, type Sender } from "@/lib/prospecting/social";
+import { draftCompanyEmail, draftSocialReply, findSocialLeads, socialTopic, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
-import { fetchPreview, searchAvailable } from "@/lib/prospecting/web";
+import { fetchPreview, fetchSiteIcon, mapLimit, searchAvailable } from "@/lib/prospecting/web";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,8 +34,8 @@ export async function POST(request: Request) {
   const quota = await reserveDemoRun(visitorKey(request));
   if (!quota.allowed) {
     const message = quota.reason === "visitor"
-      ? "You have used today's live demo runs. Create a free workspace to keep going."
-      : "The live demo is at capacity for today. Create a free workspace to run it on your own site.";
+      ? "This network has run the live demo many times today. Try again tomorrow, or request early access below."
+      : "The live demo is at capacity for today. Try again tomorrow, or request early access below.";
     return Response.json({ error: message, code: `quota_${quota.reason}` }, { status: 429, headers: { "Cache-Control": "no-store" } });
   }
 
@@ -80,9 +80,34 @@ export async function POST(request: Request) {
         send({ type: "result", step: "research", data: { name: r.name, domain: r.domain, summary: r.summary, keywords: r.keywords, iconDataUrl: preview?.iconDataUrl ?? null, readHomepage: Boolean(r.page) } });
         if (stopped()) return;
 
+        begin("crawler");
+        log(`reading https://${target}/robots.txt`);
+        log(`checking https://${target}/llms.txt`);
+        const audit = await runOpenSeoAudit(target);
+        for (const b of audit.crawlerStatuses) log(`${b.userAgent}: ${b.status === "blocked" ? "blocked" : "can crawl"}`);
+        send({
+          type: "result",
+          step: "crawler",
+          data: {
+            score: Math.round((audit.checksPassed / audit.checksTotal) * 100),
+            checksPassed: audit.checksPassed,
+            checksTotal: audit.checksTotal,
+            checks: audit.checks.map((c) => ({ label: c.label, passed: c.passed, detail: c.detail })),
+            bots: audit.crawlerStatuses.map((b) => ({ name: b.userAgent, engine: b.engine, status: b.status })),
+            issues: audit.criticalIssues,
+          },
+        });
+        if (stopped()) return;
+
         begin("competitors");
         state = await runCompetitors(state, ctx);
-        send({ type: "result", step: "competitors", data: state.competitors!.items.slice(0, 12).map((c) => ({ domain: c.domain, name: c.name, description: c.description })) });
+        log("loading competitor logos");
+        const competitorList = await mapLimit(state.competitors!.items.slice(0, 12), 6, async (c) => {
+          const item = { domain: c.domain, name: c.name, description: c.description, iconDataUrl: await fetchSiteIcon(c.domain) };
+          send({ type: "item", step: "competitors", data: item });
+          return item;
+        });
+        send({ type: "result", step: "competitors", data: competitorList });
         if (stopped()) return;
 
         begin("campaigns");
@@ -110,15 +135,22 @@ export async function POST(request: Request) {
         begin("companies");
         state = await runCompanies(state, ctx);
         const companies = state.companies!.items.slice(0, 8);
-        send({ type: "result", step: "companies", data: companies.map((c) => ({ domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms })) });
+        const companyList = await mapLimit(companies, 6, async (c) => {
+          const item = { domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms, iconDataUrl: await fetchSiteIcon(c.domain) };
+          send({ type: "item", step: "companies", data: item });
+          return item;
+        });
+        send({ type: "result", step: "companies", data: companyList });
         if (stopped()) return;
 
         const sender: Sender = { name: r.name, domain: r.domain, summary: r.summary, category: brand.category, keywords: r.keywords };
 
         begin("social");
-        const topic = brand.category || (r.keywords.find((k) => k.includes(" ")) ?? r.keywords[0] ?? brand.name);
+        const topic = socialTopic(brand.category, r.keywords, brand.name);
         const competitorNames = state.competitors!.items.slice(0, 2).map((c) => c.name);
-        const leads = await findSocialLeads(topic, competitorNames, log, 9);
+        const leads = await findSocialLeads(topic, competitorNames, log, 9, (lead) =>
+          send({ type: "item", step: "social", data: { platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, community: lead.community, intent: lead.intent, reply: null } }),
+        );
         log(`ranked ${leads.length} posts by buying intent; drafting replies to the top ${Math.min(3, leads.length)}`);
         const withReplies = await Promise.all(leads.map(async (lead, i) => ({
           platform: lead.platform,

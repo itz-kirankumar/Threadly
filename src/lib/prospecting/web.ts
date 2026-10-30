@@ -181,6 +181,21 @@ async function fetchIcon(url: string): Promise<string | null> {
   }
 }
 
+// A company's logo for lists: its favicon or touch icon, inlined. One or two
+// small requests, same public-host rules; null when neither is available.
+export async function fetchSiteIcon(domain: string): Promise<string | null> {
+  try {
+    await assertPublicHost(domain);
+  } catch {
+    return null;
+  }
+  for (const path of ["/favicon.ico", "/apple-touch-icon.png"]) {
+    const icon = await fetchIcon(`https://${domain}${path}`);
+    if (icon) return icon;
+  }
+  return null;
+}
+
 // Name, description and icon for the type-ahead preview. One page read plus
 // at most one small image, with the same public-host and robots.txt rules.
 export async function fetchPreview(domain: string): Promise<SitePreview> {

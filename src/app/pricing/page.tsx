@@ -6,7 +6,7 @@ import Pricing from "@/components/landing/Pricing";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Threadly pricing: 7-day trial for $7 (10 questions, 1 full scan), Pro and Growth for marketing teams, and Enterprise for global brands. One-time purchases, no auto-renewal.",
+    "Threadly pricing: pay per result with credits. Packs from $49 for 1,000 credits, no seat fees, invite-only beta with 200 free credits for qualified teams.",
 };
 
 export default function PricingPage() {
@@ -16,10 +16,10 @@ export default function PricingPage() {
       <main className="mx-auto w-full max-w-6xl flex-grow px-6 py-16">
         <div className="text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">Pricing</p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-white">Enterprise GEO intelligence, priced for every team</h1>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight text-white">Pay for leads, not seats</h1>
           <p className="mx-auto mt-4 max-w-2xl text-zinc-400">
-            Measure how ChatGPT, Claude and Gemini talk about your brand. Start with the $7 trial, upgrade when
-            your coverage grows - one-time purchases, no auto-renewal.
+            Threadly is invite-only. Qualified teams get 200 free credits, then pay per company, social lead,
+            email, contact and AI visibility scan.
           </p>
         </div>
         <div className="mt-12">

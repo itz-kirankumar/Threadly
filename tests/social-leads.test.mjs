@@ -28,6 +28,7 @@ test("a composed email quotes the prospect and introduces the sender, without te
   assert.match(d.body, /I was reading how Beta describes itself: "Beta helps finance teams close the books with pipeline data\."/);
   assert.match(d.body, /Acme is the forecasting platform for revenue teams\./);
   assert.match(d.subject, /Beta and pipeline/);
+  assert.equal(d.body.split("\n").at(-1), "The Acme team", "signs off as the searched company's team");
   assert.doesNotMatch(d.body, /\{\{|\[One sentence/);
   assert.deepEqual(d.sources, ["https://beta.com/", "https://acme.io/"]);
 });
@@ -47,4 +48,17 @@ test("with no search configured there are no leads and no requests", async () =>
   } finally {
     if (saved !== undefined) process.env.TAVILY_API_KEY = saved;
   }
+});
+
+test("the social search topic skips page copy that reads as a sentence", () => {
+  assert.equal(social.socialTopic("What our customers got out of it", ["personalized emails", "105m companies"], "Explee"), "personalized emails");
+  assert.equal(social.socialTopic("Revenue forecasting", ["pipeline"], "Acme"), "Revenue forecasting");
+  assert.equal(social.socialTopic("", ["105m companies", "leads"], "Acme"), "105m companies");
+});
+
+test("an imperative tagline reads as what the sender lets you do", async () => {
+  const s = { ...sender, name: "Explee", domain: "explee.com", summary: "Enter your domain and let AI find ideal customers.", keywords: [] };
+  const d = await social.draftCompanyEmail(s, { name: "Stripe", domain: "stripe.com", description: "Stripe is a payments platform." });
+  assert.match(d.body, /With Explee, you can enter your domain and let AI find ideal customers\./);
+  assert.doesNotMatch(d.body, /we build enter/);
 });

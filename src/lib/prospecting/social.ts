@@ -76,6 +76,15 @@ export function postAuthor(url: string): { author: string | null; community: str
   return { author: null, community: null };
 }
 
+// The phrase searched on Reddit, X and LinkedIn: a short category when the
+// site states one, else its first multi-word keyword without numbers. Page
+// copy that reads as a sentence ("what our customers got") is skipped.
+export function socialTopic(category: string, keywords: string[], name: string): string {
+  const sentence = /\b(our|we|you|your|i|my|got|get)\b/i;
+  if (category && category.split(/\s+/).length <= 4 && !sentence.test(category)) return category;
+  return keywords.find((k) => k.includes(" ") && !/\d/.test(k) && !sentence.test(k)) ?? keywords[0] ?? name;
+}
+
 export function socialQueries(topic: string, competitors: string[]): string[] {
   const qs = [`looking for ${topic} recommendations`, `best ${topic} tool`];
   if (competitors[0]) qs.push(`alternative to ${competitors[0]}`);
@@ -83,7 +92,13 @@ export function socialQueries(topic: string, competitors: string[]): string[] {
 }
 
 // Public posts with buying intent around the topic, best first.
-export async function findSocialLeads(topic: string, competitors: string[], log: (t: string) => void, limit = 9): Promise<SocialLead[]> {
+export async function findSocialLeads(
+  topic: string,
+  competitors: string[],
+  log: (t: string) => void,
+  limit = 9,
+  onLead?: (lead: SocialLead) => void,
+): Promise<SocialLead[]> {
   if (!searchAvailable() || !topic.trim()) return [];
   const queries = socialQueries(topic, competitors);
   const seen = new Set<string>();
@@ -113,7 +128,7 @@ export async function findSocialLeads(topic: string, competitors: string[], log:
         const textForIntent = `${h.title} ${h.content}`;
         const { intent, score } = classifyIntent(textForIntent, h.title);
         const { author, community } = postAuthor(h.url);
-        leads.push({
+        const lead: SocialLead = {
           platform,
           url: h.url,
           title: h.title.replace(/\s*[:|-]\s*(r\/\w+|Reddit|LinkedIn|X)\s*$/i, "").slice(0, 160),
@@ -123,7 +138,9 @@ export async function findSocialLeads(topic: string, competitors: string[], log:
           intent,
           intentScore: score + (author ? 0.5 : 0),
           query: q,
-        });
+        };
+        leads.push(lead);
+        onLead?.(lead);
         kept++;
       }
       log(`  ${kept} public posts`);
@@ -157,10 +174,14 @@ function sentenceCase(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
+const IMPERATIVE = /^(enter|get|find|build|turn|let|automate|grow|start|create|make|send|reach|book|close|scale|track|launch|write|run|connect|discover|generate|stop|boost|win|meet|ship|sell|hire|manage|plan|see|know|use|try)\b/i;
+
 function whatWeDo(sender: Sender): string {
   const line = firstSentence(sender.summary, 200) ?? sender.category;
   if (!line) return `${sender.name} may be relevant here.`;
   if (line.toLowerCase().includes(sender.name.toLowerCase())) return line;
+  // Homepage taglines are often instructions ("Enter your domain and...").
+  if (IMPERATIVE.test(line)) return `With ${sender.name}, you can ${sentenceCase(line.replace(/\.$/, ""))}.`;
   return /^(the|a|an)\s/i.test(line) ? `${sender.name} is ${sentenceCase(line)}` : `At ${sender.name}, we build ${sentenceCase(line.replace(/\.$/, ""))}.`;
 }
 
@@ -174,7 +195,7 @@ export async function draftCompanyEmail(sender: Sender, company: { name: string;
   const sources = [`https://${company.domain}/`, `https://${sender.domain}/`];
   if (modelEnabled() && company.description) {
     const out = await modelJson<{ subject?: string; body?: string }>(
-      `Write a short first cold email (70 to 110 words) from ${sender.name} to a decision maker at ${company.name}. Open with one specific observation about ${company.name} taken from THEIRS. Connect it to one concrete way ${sender.name} helps, taken from OURS. No flattery, no invented facts, numbers or customers, no "I hope this finds you well". End with one low-pressure question. Sign off as "[Your name]". Shape: {"subject": string (under 7 words), "body": string}`,
+      `Write a short first cold email (70 to 110 words) from ${sender.name} to a decision maker at ${company.name}. Open with one specific observation about ${company.name} taken from THEIRS. Connect it to one concrete way ${sender.name} helps, taken from OURS. No flattery, no invented facts, numbers or customers, no "I hope this finds you well". End with one low-pressure question. Sign off as "The ${sender.name} team". Shape: {"subject": string (under 7 words), "body": string}`,
       { THEIRS: `${company.name} (${company.domain}): ${company.description}`, OURS: `${sender.name}: ${sender.summary} Category: ${sender.category}` },
       400,
     );
@@ -190,7 +211,7 @@ export async function draftCompanyEmail(sender: Sender, company: { name: string;
     : whatWeDo(sender);
   const ask = `Would a two-line note on how this could apply to ${company.name} be useful?`;
   const subject = shared ? `${company.name} and ${shared}` : `A question for ${company.name}`;
-  return { subject: subject.slice(0, 90), body: ["Hi,", "", opener, "", bridge, "", ask, "", "[Your name]"].join("\n"), engine: "composed", sources };
+  return { subject: subject.slice(0, 90), body: ["Hi,", "", opener, "", bridge, "", ask, "", `The ${sender.name} team`].join("\n"), engine: "composed", sources };
 }
 
 // A reply to one public post, answering what the author asked.

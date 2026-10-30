@@ -6,8 +6,8 @@
 
 import { createHash } from "node:crypto";
 
-export const DEMO_RUNS_PER_VISITOR = Number(process.env.PUBLIC_DEMO_RUNS_PER_VISITOR ?? "3");
-export const DEMO_RUNS_PER_DAY = Number(process.env.PUBLIC_DEMO_DAILY_RUNS ?? "150");
+export const DEMO_RUNS_PER_VISITOR = Number(process.env.PUBLIC_DEMO_RUNS_PER_VISITOR ?? "10");
+export const DEMO_RUNS_PER_DAY = Number(process.env.PUBLIC_DEMO_DAILY_RUNS ?? "300");
 
 export type QuotaResult = { allowed: true } | { allowed: false; reason: "visitor" | "site" | "unavailable" };
 

@@ -12,16 +12,16 @@ export const FAQ_ITEMS = [
     a: "Yes. On Pro and above you can connect your own OpenAI, Anthropic or Gemini keys - scans then run on your accounts and quota. Keys are encrypted with AES-256-GCM and never shown again after saving.",
   },
   {
-    q: "How does team pricing work?",
-    a: "Seats are included per plan (1 on Starter, 5 on Pro, 25 on Growth, unlimited on Enterprise). Invite your whole company with one link and manage roles - owner, admin and member - from Settings.",
+    q: "How does pricing work?",
+    a: "You pay per result in credits: 1 credit per research run, matching company or AI-written email, 2 per social lead with a drafted reply, 5 per decision-maker contact found and 10 per AI visibility scan. Packs start at $49 for 1,000 credits. There are no seat fees, so invite your whole team.",
   },
   {
     q: "How often do scans run?",
     a: "Automatically every day, plus unlimited manual scans whenever you want a fresh read. Trends, deltas and history build up from every run.",
   },
   {
-    q: "When does billing start?",
-    a: "Billing is live. The 7-day trial is $7 (one-time, no auto-renewal), and Pro and Growth are one-time purchases for a monthly or annual term through Razorpay. Plans do not renew by themselves, and early users keep their workspaces and history.",
+    q: "How do I get access?",
+    a: "Threadly is invite-only during the beta. Request access with your work email and company website; we score your lead-generation fit from your homepage and use case. Teams that qualify are invited immediately with 200 free credits, and everyone else joins the waitlist. Existing customers keep their workspaces and history.",
   },
 ];
 

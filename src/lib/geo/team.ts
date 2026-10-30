@@ -119,6 +119,7 @@ async function writeInvite(ownerUid: string, invite: TeamInvite | null): Promise
 // ---- access resolution for every API route ----
 
 import { NEW_SIGNUP_BLOCK_MESSAGE, decideSignupAccess } from "./signup-gate.ts";
+import { isEmailApproved } from "../waitlist/store.ts";
 
 // Throws 403 when the caller is a brand-new signup (no team membership and no
 // existing workspace data). Exported so billing guest routes apply the same
@@ -133,6 +134,7 @@ export async function assertSignupAllowed(identity: FirebaseIdentity): Promise<v
     adminConfigured: true,
     hasMembership: false,
     hasWorkspaceData: snapshot.exists(),
+    isApproved: snapshot.exists() ? false : await isEmailApproved(identity.email),
   });
   if (decision === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
 }
@@ -153,6 +155,7 @@ export async function resolveWorkspaceAccess(request: Request, permission: TeamP
       adminConfigured: true,
       hasMembership: false,
       hasWorkspaceData: snapshot.exists(),
+    isApproved: snapshot.exists() ? false : await isEmailApproved(identity.email),
     });
     if (decision === "block") throw new RequestError(NEW_SIGNUP_BLOCK_MESSAGE, 403);
   }
