@@ -30,7 +30,7 @@ declare global {
   }
 }
 
-function loadRazorpayScript(): Promise<void> {
+export function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (window.Razorpay) return resolve();
     const script = document.createElement("script");
@@ -43,7 +43,7 @@ function loadRazorpayScript(): Promise<void> {
 
 // Billing-country options for region routing. Only India vs non-India changes
 // the provider; the list covers common regions, and any valid code works.
-const BILLING_COUNTRIES = [
+export const BILLING_COUNTRIES = [
   { code: "IN", name: "India" },
   { code: "US", name: "United States" },
   { code: "GB", name: "United Kingdom" },
@@ -258,7 +258,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
             )}
             {status.plan === "none" && (
               <p className="mt-1.5 text-xs text-zinc-500">
-                No active plan. <a href="/checkout?plan=trial" className="text-violet-300 underline underline-offset-2">Start the 7-day trial for $7</a> - one-time, no auto-renewal.
+                No plan: this workspace pays per use with credits. Plans below remain available for teams that prefer a fixed term.
               </p>
             )}
           </div>

@@ -27,7 +27,8 @@ export interface PlanLimits {
 }
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
-  none: { scans: 0, queries: 0, historyDays: 7, seats: 1, socialHourly: 0 },
+  // No plan: pay per use with credits (scans and social are charged per use).
+  none: { scans: 0, queries: 25, historyDays: 30, seats: null, socialHourly: 0 },
   trial: { scans: 1, queries: 10, historyDays: 7, seats: 1, socialHourly: null },
   pro: { scans: null, queries: 50, historyDays: null, seats: 5, socialHourly: null },
   growth: { scans: null, queries: 150, historyDays: null, seats: 25, socialHourly: null },

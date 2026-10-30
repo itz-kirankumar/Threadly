@@ -1,6 +1,7 @@
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { loadBrand } from "@/lib/geo/store";
 import { loadPlan, socialGate, planBlockResponse } from "@/lib/geo/plan";
+import { assertCanAfford, charge, InsufficientCredits } from "@/lib/credits/ledger";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -109,11 +110,20 @@ export async function POST(request: Request) {
     const user = access.identity;
     return await inWorkspace(access, async () => {
       // Plan reads need the workspace context, so gating happens inside it.
+      // Without a plan that includes social, each buyer-intent thread costs
+      // credits; brand mentions stay free.
+      let payPerLead = false;
       if (user.idToken !== "demo-token") {
         const plan = await loadPlan(user.email);
         const gate = socialGate(plan);
         if (gate.kind === "blocked") {
-          return planBlockResponse("Reddit intelligence is part of the paid plans - start the 7-day trial for $7 to use it.", plan);
+          try {
+            await assertCanAfford(access.workspaceUid, "socialLead");
+          } catch (error) {
+            if (error instanceof InsufficientCredits) return planBlockResponse(error.message, plan);
+            throw error;
+          }
+          payPerLead = true;
         }
         // null cap = unlimited per PLAN_LIMITS; only finite caps rate-check.
         if (gate.kind === "capped") {
@@ -188,9 +198,16 @@ export async function POST(request: Request) {
         }
       }
       opportunities.sort((a, b) => b.intentScore - a.intentScore);
+      let shown = opportunities.slice(0, 25);
+      let credits: { charged: number; balance: number } | undefined;
+      if (payPerLead && shown.length) {
+        const paid = await charge(access.workspaceUid, "socialLead", shown.length, "Reddit buyer-intent threads");
+        shown = shown.slice(0, paid.units);
+        credits = { charged: paid.credits, balance: paid.balance };
+      }
 
       const subreddits: Record<string, number> = {};
-      for (const post of [...mentions, ...opportunities]) {
+      for (const post of [...mentions, ...shown]) {
         subreddits[post.subreddit] = (subreddits[post.subreddit] ?? 0) + 1;
       }
       const topSubreddits = Object.entries(subreddits)
@@ -205,7 +222,8 @@ export async function POST(request: Request) {
         competitors: competitorNames,
         category,
         mentions: mentions.slice(0, 40),
-        opportunities: opportunities.slice(0, 25),
+        opportunities: shown,
+        credits,
         topSubreddits,
         queriesRun: results.filter((r) => r.posts.length > 0).length,
         queriesTotal: Math.min(queries.length, 7),

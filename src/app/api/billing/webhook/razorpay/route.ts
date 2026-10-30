@@ -1,3 +1,5 @@
+import { grant } from "@/lib/credits/ledger";
+import { decideCreditGrant } from "@/lib/credits/fulfil";
 import { withWorkspace } from "@/lib/portal-db";
 import { savePlan } from "@/lib/geo/plan";
 import { adminConfigured } from "@/lib/geo/admin-store";
@@ -67,6 +69,20 @@ export async function POST(request: Request) {
   // payment fetch); the webhook only keeps attempt state honest.
   if (type === "payment.captured" || type === "payment.failed") {
     const payment = event.payload?.payment?.entity ?? {};
+    // Credit packs: add the credits (idempotent by payment id, so the verify
+    // route and this webhook can both report the same payment).
+    if (payment.notes?.kind === "credits") {
+      const decision = decideCreditGrant({ provider: "razorpay", paymentId: payment.id, status: payment.status, amount: payment.amount, currency: payment.currency, tags: payment.notes });
+      if (decision.grant) {
+        try {
+          await grant(decision.workspaceUid, decision.credits, decision.reason, decision.ref);
+        } catch (error) {
+          console.error("[credits] razorpay webhook grant failed", error);
+          return Response.json({ error: "Credit grant failed." }, { status: 500 });
+        }
+      }
+      return Response.json({ received: true });
+    }
     const workspaceUid = payment.notes?.workspace_uid;
     if (workspaceUid && payment.order_id) {
       try {

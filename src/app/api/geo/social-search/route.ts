@@ -1,6 +1,7 @@
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { loadPlan, socialGate, planBlockResponse } from "@/lib/geo/plan";
+import { assertCanAfford, charge, InsufficientCredits } from "@/lib/credits/ledger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,11 +76,19 @@ export async function POST(request: Request) {
 
     return await inWorkspace(access, async () => {
       // Plan reads need the workspace context, so gating happens inside it.
+      // Without a plan that includes social search, each result costs credits.
+      let payPerResult = false;
       if (user.idToken !== "demo-token") {
         const plan = await loadPlan(user.email);
         const gate = socialGate(plan);
         if (gate.kind === "blocked") {
-          return planBlockResponse("Social search is part of the paid plans - start the 7-day trial for $7 to use it.", plan);
+          try {
+            await assertCanAfford(access.workspaceUid, "socialLead");
+          } catch (error) {
+            if (error instanceof InsufficientCredits) return planBlockResponse(error.message, plan);
+            throw error;
+          }
+          payPerResult = true;
         }
         // null cap = unlimited per PLAN_LIMITS; only finite caps rate-check.
         if (gate.kind === "capped") {
@@ -90,7 +99,7 @@ export async function POST(request: Request) {
         }
       }
       const settled = await Promise.allSettled(selected.map((source) => searchSource(source, query, apiKey)));
-      const results: SocialResult[] = [];
+      let results: SocialResult[] = [];
       const sourceStatus: Record<SourceId, { count: number; error?: string }> = {} as never;
       settled.forEach((outcome, index) => {
         const source = selected[index];
@@ -101,7 +110,14 @@ export async function POST(request: Request) {
           sourceStatus[source] = { count: 0, error: outcome.reason instanceof Error ? outcome.reason.message : "Search failed." };
         }
       });
+      let credits: { charged: number; balance: number } | undefined;
+      if (payPerResult && results.length) {
+        const paid = await charge(access.workspaceUid, "socialLead", results.length, `Social search: ${query.slice(0, 60)}`);
+        results = results.slice(0, paid.units);
+        credits = { charged: paid.credits, balance: paid.balance };
+      }
       return Response.json({
+        credits,
         query,
         searchedAt: new Date().toISOString(),
         results,

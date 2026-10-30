@@ -128,7 +128,10 @@ export default function ProspectingFlow({ authedFetch, getToken, brand, onOpenTa
           if (!line) continue;
           const event = JSON.parse(line) as StepEvent;
           if (event.type === "log") setLiveLog((prev) => [...prev, event.text]);
-          else if (event.type === "done") setState(event.state);
+          else if (event.type === "done") {
+            setState(event.state);
+            if (event.credits?.charged) setNotice(`${event.credits.charged} credit${event.credits.charged === 1 ? "" : "s"} used. ${event.credits.balance} left.`);
+          }
           else if (event.type === "error") setError(event.message);
         }
         if (finished) break;

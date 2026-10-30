@@ -7,6 +7,8 @@ import { loadPlan, loadRunCount, PLAN_LIMITS, planBlockResponse } from "@/lib/ge
 import { readData, writeData } from "@/lib/portal-db";
 import { sendLifecycleEmail } from "@/lib/email";
 import { appendAudit } from "@/lib/geo/store";
+import { charge, grant, InsufficientCredits } from "@/lib/credits/ledger";
+import { CREDIT_RATES } from "@/lib/credits/rates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,17 +37,26 @@ export async function POST(request: Request) {
       }
       const [brand, queries, keySettings, plan] = await Promise.all([loadBrand(), loadQueries(), loadKeySettings(), loadPlan(access.identity.email)]);
       if (!brand) throw new Error("Set up your brand profile first.");
+      // Plans cover their scans; beyond the plan, each scan costs credits.
       const scanCap = PLAN_LIMITS[plan].scans;
+      let charged = 0;
       if (scanCap !== null && (await loadRunCount()) >= scanCap) {
-        return planBlockResponse(
-          plan === "none"
-            ? "Your workspace has no active plan - start the 7-day trial for $7 or choose a paid plan to run scans."
-            : `Your trial includes ${scanCap} full scan - and it is used. Upgrade to Pro or Growth for unlimited scans.`,
-          plan,
-        );
+        const paid = await charge(access.workspaceUid, "scan", 1, "AI visibility scan");
+        if (!paid.units) {
+          const error = new InsufficientCredits(CREDIT_RATES.scan, paid.balance);
+          return planBlockResponse(error.message, plan);
+        }
+        charged = paid.credits;
       }
-      const { run, results, snapshot, queries: scannedQueries } = await runScan(brand, queries, keySettings, queryIds);
-      await saveRun(run, results, snapshot, scannedQueries);
+      let scan: Awaited<ReturnType<typeof runScan>>;
+      try {
+        scan = await runScan(brand, queries, keySettings, queryIds);
+        await saveRun(scan.run, scan.results, scan.snapshot, scan.queries);
+      } catch (error) {
+        if (charged) await grant(access.workspaceUid, charged, "Refund: scan did not finish", `refund_scan_${Date.now()}`, "refund");
+        throw error;
+      }
+      const { run, results, snapshot, queries: scannedQueries } = scan;
       // Trial accounts get one scan - when it lands, email the results pointer
       // plus the upgrade nudge. Flagged so it sends once per workspace.
       if (plan === "trial" && access.identity.email) {

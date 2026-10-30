@@ -321,3 +321,29 @@ export async function razorpayFindOrdersByReceipt(receipt: string): Promise<Arra
     return null;
   }
 }
+
+// One-time order for a credit pack. The amount comes from CREDIT_PACKS on
+// the server; notes carry kind=credits so verify and the webhook grant
+// credits rather than a plan.
+export async function razorpayCreateCreditOrder(params: {
+  pack: string;
+  amount: number;
+  currency: string;
+  workspaceUid: string;
+  email: string;
+}): Promise<{ id: string; amount: number; currency: string }> {
+  const response = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: authHeader() },
+    body: JSON.stringify({
+      amount: params.amount,
+      currency: params.currency,
+      receipt: `cr_${params.workspaceUid.slice(0, 24)}_${Date.now().toString(36)}`,
+      notes: { kind: "credits", pack: params.pack, workspace_uid: params.workspaceUid, email: params.email },
+    }),
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => ({}))) as { error?: { description?: string } };
+  if (!response.ok) throw new Error(payload.error?.description ?? `Razorpay returned HTTP ${response.status}`);
+  return payload as unknown as { id: string; amount: number; currency: string };
+}

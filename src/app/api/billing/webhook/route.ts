@@ -1,4 +1,6 @@
 import { withWorkspace } from "@/lib/portal-db";
+import { grant } from "@/lib/credits/ledger";
+import { decideCreditGrant } from "@/lib/credits/fulfil";
 import { savePlan } from "@/lib/geo/plan";
 import { adminConfigured } from "@/lib/geo/admin-store";
 import { appendAudit } from "@/lib/geo/store";
@@ -54,6 +56,28 @@ export async function POST(request: Request) {
   }
 
   const type = event.type ?? "";
+  // Credit packs are one-time payments: add the credits once per payment id.
+  if (type === "payment.succeeded") {
+    const payment = (event.data ?? {}) as { payment_id?: string; status?: string; total_amount?: number; currency?: string; metadata?: Record<string, string>; product_cart?: Array<{ product_id?: string }> | null };
+    const decision = decideCreditGrant({
+      provider: "dodo",
+      paymentId: payment.payment_id,
+      status: payment.status ?? "succeeded",
+      amount: payment.total_amount,
+      currency: payment.currency,
+      tags: payment.metadata,
+      productIds: (payment.product_cart ?? []).map((item) => item.product_id ?? "").filter(Boolean),
+    });
+    if (decision.grant) {
+      try {
+        await grant(decision.workspaceUid, decision.credits, decision.reason, decision.ref);
+      } catch (error) {
+        console.error("[credits] dodo webhook grant failed", error);
+        return Response.json({ error: "Credit grant failed." }, { status: 500 });
+      }
+    }
+    return Response.json({ received: true });
+  }
   if (!type.startsWith("subscription.")) return Response.json({ received: true });
   const status = STATUS_BY_EVENT[type];
   if (!status) return Response.json({ received: true });

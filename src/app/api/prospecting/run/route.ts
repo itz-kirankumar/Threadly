@@ -5,10 +5,16 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { STEP_RUNNERS, StepBlocked } from "@/lib/prospecting/steps";
 import { loadState, saveState } from "@/lib/prospecting/store";
 import { STEP_ORDER, type StepEvent, type StepId } from "@/lib/prospecting/types";
+import { assertCanAfford, charge, grant, InsufficientCredits } from "@/lib/credits/ledger";
+import { keepPaid, stepBill } from "@/lib/credits/prospecting";
+import type { CreditAction } from "@/lib/credits/rates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
+
+// The credit each billable step needs at least one of before it starts.
+const STEP_ACTION: Partial<Record<StepId, CreditAction>> = { research: "research", companies: "company", contacts: "contact", emails: "email" };
 
 // Runs one pipeline step and streams its progress as newline-delimited JSON:
 // {"type":"log"} lines while it works, then {"type":"done"} with the saved
@@ -29,6 +35,16 @@ export async function POST(request: Request) {
       }
     }
 
+    const action = STEP_ACTION[step];
+    if (action) {
+      try {
+        await assertCanAfford(access.workspaceUid, action);
+      } catch (error) {
+        if (error instanceof InsufficientCredits) return Response.json({ error: error.message, code: "INSUFFICIENT_CREDITS" }, { status: 402 });
+        throw error;
+      }
+    }
+
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -44,10 +60,27 @@ export async function POST(request: Request) {
               lines.push(text);
               send({ type: "log", step, text, at });
             };
-            const after = await STEP_RUNNERS[step](before, { brand, senderName: user.name || user.email || "", log });
+            let after = await STEP_RUNNERS[step](before, { brand, senderName: user.name || user.email || "", log });
+            // Bill the results the step added; keep only what the balance paid for.
+            const bill = stepBill(step, before, after);
+            let credits: { charged: number; balance: number } | undefined;
+            if (bill && bill.units > 0) {
+              const paid = await charge(access.workspaceUid, bill.action, bill.units, `Prospecting: ${step}`);
+              credits = { charged: paid.credits, balance: paid.balance };
+              if (paid.units < bill.units) {
+                after = keepPaid(step, before, after, paid.units);
+                log(`kept ${paid.units} of ${bill.units} results the balance covers; buy credits to get the rest`);
+              }
+              log(`charged ${paid.credits} credit${paid.credits === 1 ? "" : "s"}, ${paid.balance} left`);
+            }
             const saved = { ...after, logs: { ...(after.logs ?? {}), [step]: lines.slice(-60) } };
-            await saveState(saved);
-            send({ type: "done", step, state: saved });
+            try {
+              await saveState(saved);
+            } catch (error) {
+              if (credits?.charged) await grant(access.workspaceUid, credits.charged, `Refund: ${step} could not be saved`, `refund_${step}_${Date.now()}`, "refund");
+              throw error;
+            }
+            send({ type: "done", step, state: saved, credits });
           });
         } catch (error) {
           const message = error instanceof StepBlocked || error instanceof RequestError

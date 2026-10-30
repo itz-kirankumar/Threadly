@@ -159,5 +159,5 @@ export interface ProspectingState {
 
 export type StepEvent =
   | { type: "log"; step: StepId; text: string; at: string }
-  | { type: "done"; step: StepId; state: ProspectingState }
+  | { type: "done"; step: StepId; state: ProspectingState; credits?: { charged: number; balance: number } }
   | { type: "error"; step: StepId; message: string };

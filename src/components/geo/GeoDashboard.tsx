@@ -14,6 +14,7 @@ import SocialPanel from "./SocialPanel";
 import ProviderKeysPanel from "./ProviderKeysPanel";
 import TeamPanel from "./TeamPanel";
 import BillingPanel from "./BillingPanel";
+import CreditsPanel from "./CreditsPanel";
 import ActivityPanel from "./ActivityPanel";
 import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
@@ -981,7 +982,10 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
               <ApiKeysPanel authedFetch={authedFetch} />
             )}
             {settingsSection === "billing" && user && (
-              <BillingPanel authedFetch={authedFetch} />
+              <div className="space-y-6">
+                <CreditsPanel authedFetch={authedFetch} />
+                <BillingPanel authedFetch={authedFetch} />
+              </div>
             )}
             {settingsSection === "keys" && (
               <ProviderKeysPanel
