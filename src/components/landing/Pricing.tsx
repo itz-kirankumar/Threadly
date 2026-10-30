@@ -50,7 +50,7 @@ const PACKS: Pack[] = [
 export default function Pricing({ compact = false }: { compact?: boolean }) {
   return (
     <div>
-      <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         {[
           ["Invite-only", "Teams are invited from the waitlist by fit score, so every workspace has real lead-generation use."],
           ["No seats, no subscription", "Invite your whole team. You pay for results the platform produces, nothing else."],
@@ -65,10 +65,10 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
 
       <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {PACKS.map((pack) => (
-          <div key={pack.name} className={`relative flex flex-col rounded-2xl border p-6 ${pack.highlight ? "border-violet-400/50 bg-violet-500/[0.07]" : "border-white/10 bg-white/[0.02]"}`}>
-            {pack.highlight && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-violet-500 px-3 py-1 text-[11px] font-semibold text-white">Best value</span>}
+          <div key={pack.name} className={`relative flex flex-col rounded-2xl border p-6 ${pack.highlight ? "gloss-panel !border-[#D8B982]/35" : "border-white/10 bg-white/[0.02]"}`}>
+            {pack.highlight && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full border border-[#D8B982]/40 bg-[#17131F] px-3 py-1 text-[11px] text-[#D8B982]">Best value</span>}
             <h3 className="text-sm font-semibold uppercase tracking-widest text-zinc-400">{pack.name}</h3>
-            <p className="mt-4 text-3xl font-bold text-white">{pack.price}</p>
+            <p className="mt-4 font-display text-4xl text-white">{pack.price}</p>
             <p className="mt-1 text-sm text-zinc-300">{pack.credits}</p>
             <p className="text-xs text-zinc-500">{pack.perCredit}</p>
             <p className="mt-3 flex-1 text-sm leading-relaxed text-zinc-400">{pack.blurb}</p>

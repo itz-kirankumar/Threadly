@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import OnboardModal from "./OnboardModal";
+import ResearchPreview from "./ResearchPreview";
 import {
   DEMO_STEPS,
   DEMO_STEP_LABELS,
@@ -92,6 +93,8 @@ function CountUp({ value, className }: { value: number; className?: string }) {
 // How long a visitor can look back at an earlier step before the story
 // returns to the live one.
 const RETURN_MS = 4000;
+const RECENT_KEY = "threadly-recent-searches";
+const EXAMPLE_DOMAINS = ["stripe.com", "notion.so", "linear.app"];
 
 const PLATFORM_STYLE: Record<string, string> = {
   Reddit: "bg-orange-50 text-orange-800 ring-orange-200",
@@ -124,6 +127,22 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   const [onboardOpen, setOnboardOpen] = useState(false);
   const autoOpened = useRef(false);
   const openOnboard = useCallback(() => setOnboardOpen(true), []);
+  const [focused, setFocused] = useState(false);
+  const [recent, setRecent] = useState<string[]>([]);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  // Recent searches stay in this browser only; the page works without them.
+  useEffect(() => {
+    try {
+      setRecent(JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]"));
+    } catch {
+      setRecent([]);
+    }
+  }, []);
+  const suggestions = useMemo(() => {
+    if (!focused || phase === "running") return [];
+    const typed = input.trim().toLowerCase();
+    return [...new Set([...recent, ...EXAMPLE_DOMAINS])].filter((d) => d !== typed && d.includes(typed)).slice(0, 5);
+  }, [focused, phase, input, recent]);
 
   // Type-ahead preview: name, category and icon while the visitor types.
   useEffect(() => {
@@ -190,6 +209,16 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     abortRef.current = controller;
     setRunDomain(domain);
     setBlocked(null);
+    setFocused(false);
+    setRecent((prev) => {
+      const next = [domain, ...prev.filter((d) => d !== domain)].slice(0, 4);
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      } catch {
+        // Private windows can refuse storage; history is optional.
+      }
+      return next;
+    });
     setPhase("running");
     setError("");
     setResults({});
@@ -306,7 +335,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     const timer = setTimeout(() => {
       autoOpened.current = true;
       setOnboardOpen(true);
-    }, 9000);
+    }, 16000);
     return () => clearTimeout(timer);
   }, [phase, viewing]);
   const competitorsShown = results.competitors ?? streamed.competitors;
@@ -323,21 +352,58 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
         }}
         className="relative mx-auto max-w-3xl"
       >
-        <div className="flex items-center gap-2 rounded-2xl border-2 border-violet-500 bg-white p-1.5 shadow-[0_18px_50px_-20px_rgba(124,58,237,0.6)] ring-4 ring-violet-100 transition focus-within:ring-violet-200">
-          {previewState === "ready" && preview ? <span className="pl-1.5"><Logo name={preview.name} icon={preview.iconDataUrl} size="h-7 w-7" /></span> : null}
-          <label htmlFor="demo-domain" className="sr-only">Your website</label>
+        <div className="relative">
+        <div className="search-shell flex items-center gap-2 rounded-2xl p-2">
+          {previewState === "ready" && preview ? (
+            <span className="pl-1.5"><Logo name={preview.name} icon={preview.iconDataUrl} size="h-7 w-7" /></span>
+          ) : (
+            <svg viewBox="0 0 24 24" className="ml-2 h-5 w-5 shrink-0 text-[#A7A0AE]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+          )}
+          <label htmlFor="demo-domain" className="sr-only">Your company website or domain</label>
           <input
             id="demo-domain"
-            autoComplete="url"
+            role="combobox"
+            aria-expanded={suggestions.length > 0}
+            aria-controls="demo-suggestions"
+            aria-autocomplete="list"
+            aria-activedescendant={activeSuggestion >= 0 ? `demo-suggestion-${activeSuggestion}` : undefined}
+            autoComplete="off"
             inputMode="url"
-            placeholder="Paste your website, e.g. acme.com"
+            placeholder="Enter your company website or domain..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-base text-zinc-900 placeholder-zinc-400 focus:outline-none"
+            onChange={(e) => { setInput(e.target.value); setActiveSuggestion(-1); }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setTimeout(() => setFocused(false), 120)}
+            onKeyDown={(e) => {
+              if (!suggestions.length) return;
+              if (e.key === "ArrowDown") { e.preventDefault(); setActiveSuggestion((i) => (i + 1) % suggestions.length); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setActiveSuggestion((i) => (i <= 0 ? suggestions.length - 1 : i - 1)); }
+              else if (e.key === "Escape") { setFocused(false); }
+              else if (e.key === "Enter" && activeSuggestion >= 0) { e.preventDefault(); setInput(suggestions[activeSuggestion]); setActiveSuggestion(-1); setFocused(false); }
+            }}
+            className="min-w-0 flex-1 bg-transparent px-2 py-2.5 text-base text-[#F5F0E8] placeholder-[#A7A0AE]/70 focus:outline-none"
           />
-          <button type="submit" disabled={phase === "running"} className="shrink-0 rounded-xl btn-gold px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(124,58,237,0.8)] transition hover:brightness-110 disabled:opacity-60">
-            {phase === "running" ? "Running..." : "Find my leads"}
+          {input && phase !== "running" && (
+            <button type="button" aria-label="Clear" onClick={() => { setInput(""); setPreview(null); setBlocked(null); }} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#A7A0AE] transition-colors hover:bg-white/[0.07] hover:text-[#F5F0E8]">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+          )}
+          <button type="submit" disabled={phase === "running"} className="btn-gold shrink-0 rounded-xl px-5 py-2.5 text-sm font-medium disabled:opacity-60">
+            {phase === "running" ? "Researching..." : <><span className="hidden sm:inline">Explore your market</span><span className="sm:hidden">Explore</span></>}
           </button>
+        </div>
+        {suggestions.length > 0 && (
+          <ul id="demo-suggestions" role="listbox" aria-label="Suggestions" className="demo-pop-in absolute inset-x-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#17131F] p-1 text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)]">
+            {suggestions.map((s, i) => (
+              <li key={s} id={`demo-suggestion-${i}`} role="option" aria-selected={activeSuggestion === i}>
+                <button type="button" tabIndex={-1} onMouseDown={(e) => { e.preventDefault(); setInput(s); setFocused(false); }} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors ${activeSuggestion === i ? "bg-white/[0.07] text-[#F5F0E8]" : "text-[#A7A0AE] hover:bg-white/[0.05]"}`}>
+                  {s}
+                  <span className="text-xs text-[#A7A0AE]/70">{recent.includes(s) ? "Recent" : "Example"}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         </div>
         {phase === "idle" && previewState !== "none" && (
           <div className="demo-pop-in mt-2 rounded-xl border border-zinc-200 bg-white/95 px-3 py-2 text-left shadow-sm backdrop-blur" aria-live="polite">
@@ -356,12 +422,18 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
             )}
           </div>
         )}
-        <p className="mt-2 text-center text-xs text-zinc-500">Free, no sign-up. Uses real public web data.</p>
+        {phase === "idle" && !blocked && (
+          <div className="mt-5 text-center">
+            <p className="text-sm text-[#A7A0AE]">Start with a website. Let intelligence do the research.</p>
+            <p className="mt-1 text-xs text-[#A7A0AE]/75">Reads public pages only. Nothing is stored and nothing is sent.</p>
+            <a href="#how-it-works" className="mt-5 inline-block rounded-full border border-white/[0.12] px-5 py-2 text-sm text-[#F5F0E8] transition-colors hover:border-[#D8B982]/50">See how it works</a>
+          </div>
+        )}
         {blocked && <OutOfRuns kind={blocked} onEligibility={openOnboard} />}
       </form>
 
       {phase !== "idle" && (
-        <div ref={panelRef} className="demo-workspace-in mx-auto mt-8 max-w-6xl scroll-mt-20 overflow-hidden rounded-3xl border border-zinc-200 bg-[#f7f6f3]/95 text-left shadow-[0_40px_100px_-40px_rgba(30,27,75,0.5)] backdrop-blur" aria-label={`Live demo for ${runDomain}`}>
+        <div ref={panelRef} className="demo-workspace-in mx-auto mt-8 max-w-6xl scroll-mt-20 overflow-hidden rounded-3xl border border-zinc-200 bg-[#100D16] text-left shadow-[0_40px_100px_-50px_rgba(0,0,0,0.9)]" aria-label={`Live demo for ${runDomain}`}>
           {/* Stepper */}
           <div className="flex items-center gap-3 border-b border-zinc-200 bg-white/70 px-4 py-3 sm:px-6">
             <Logo name={brandName} icon={brandIcon} size="h-7 w-7" />
@@ -481,6 +553,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
           </div>
         </div>
       )}
+      {phase === "done" && <div className="mx-auto max-w-6xl"><ResearchPreview results={results} category={preview?.category ?? null} /></div>}
       <OnboardModal
         open={onboardOpen}
         onClose={() => setOnboardOpen(false)}

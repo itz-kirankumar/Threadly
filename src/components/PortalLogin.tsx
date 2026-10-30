@@ -239,14 +239,14 @@ export default function PortalLogin() {
           <p className="premium-eyebrow">Members only</p>
           <h1 className="mt-3 font-display text-4xl leading-tight">Welcome back</h1>
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-            Threadly is open to onboarded teams. Sign in with the email you were approved with. Not a member yet? <Link href="/#early-access" className="font-semibold text-[#d4b26a] hover:text-[#f0dca6]">Request an invitation</Link>.
+            Threadly is open to onboarded teams. Sign in with the email you were approved with. Not a member yet? <Link href="/#early-access" className="font-semibold text-[#D8B982] hover:text-[#f0dca6]">Request an invitation</Link>.
           </p>
 
           <form onSubmit={loginGoogle} className="mt-8">
             <button
               type="submit"
               disabled={busy}
-              className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/15 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-[#f4efe6] transition hover:border-[#d4b26a]/50 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/15 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-[#F5F0E8] transition hover:border-[#D8B982]/50 disabled:opacity-60"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.66-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.09 3.57-5.16 3.57-8.81z"/>
@@ -292,7 +292,7 @@ export default function PortalLogin() {
                 <button
                   type="button"
                   onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setError(""); setNotice(""); }}
-                  className="text-[#d4b26a] hover:text-[#f0dca6]"
+                  className="text-[#D8B982] hover:text-[#f0dca6]"
                 >
                   {mode === "signup" ? "Sign in" : "Activate your account"}
                 </button>
@@ -329,12 +329,12 @@ export default function PortalLogin() {
                   type="button"
                   onClick={() => void resendOtp()}
                   disabled={busy || resendCooldown > 0}
-                  className="text-[#d4b26a] hover:text-[#f0dca6] disabled:text-zinc-600 disabled:hover:text-zinc-600"
+                  className="text-[#D8B982] hover:text-[#f0dca6] disabled:text-zinc-600 disabled:hover:text-zinc-600"
                 >
                   {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
                 </button>
                 {" · Wrong number? "}
-                <button type="button" onClick={() => { setConfirmation(null); setOtp(""); setNotice(""); }} className="text-[#d4b26a] hover:text-[#f0dca6]">
+                <button type="button" onClick={() => { setConfirmation(null); setOtp(""); setNotice(""); }} className="text-[#D8B982] hover:text-[#f0dca6]">
                   Go back
                 </button>
               </p>
@@ -366,7 +366,7 @@ export default function PortalLogin() {
           )}
           <p className="mt-6 text-center text-sm text-zinc-500">
             Just looking?{" "}
-            <Link href="/#live-demo" className="text-[#d4b26a] hover:text-[#f0dca6]">
+            <Link href="/#live-demo" className="text-[#D8B982] hover:text-[#f0dca6]">
               Open the live demo
             </Link>
           </p>

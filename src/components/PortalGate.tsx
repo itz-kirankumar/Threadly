@@ -82,17 +82,17 @@ export default function PortalGate() {
 // Signed in, but not an onboarded account: nothing of the platform is shown.
 function NotOnboarded({ email }: { email: string | null }) {
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#08070c] px-6 text-[#f4efe6]">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#08070B] px-6 text-[#F5F0E8]">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[760px] -translate-x-1/2 rounded-full bg-violet-700/20 blur-[130px]" aria-hidden />
-      <div className="relative w-full max-w-md rounded-3xl border border-[#d4b26a]/25 bg-white/[0.03] p-8 text-center backdrop-blur">
+      <div className="relative w-full max-w-md rounded-3xl border border-[#D8B982]/25 bg-white/[0.03] p-8 text-center backdrop-blur">
         <div className="flex justify-center"><ThreadlyLogo size={44} /></div>
-        <p className="mt-6 text-[11px] font-medium uppercase tracking-[0.3em] text-[#d4b26a]">By invitation</p>
+        <p className="mt-6 text-[11px] font-medium uppercase tracking-[0.3em] text-[#D8B982]">By invitation</p>
         <h1 className="mt-3 font-display text-4xl leading-tight">This account has not been onboarded</h1>
         <p className="mt-3 text-sm leading-relaxed text-zinc-400">
           Threadly is open to eligible teams only.{email ? ` ${email} is not on the member list.` : " Sign in with the email you applied with."} If you were invited, use that exact email.
         </p>
         <div className="mt-7 grid gap-2">
-          <a href="/#early-access" className="rounded-xl bg-[#d4b26a] px-5 py-2.5 text-sm font-semibold text-[#14110a] transition hover:bg-[#e2c684]">Check your eligibility</a>
+          <a href="/#early-access" className="rounded-xl bg-[#D8B982] px-5 py-2.5 text-sm font-semibold text-[#14110a] transition hover:bg-[#e2c684]">Check your eligibility</a>
           <button type="button" onClick={() => signOut(getFirebaseAuth()).then(() => { window.location.href = "/portal/login"; })} className="rounded-xl border border-white/15 px-5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-white/30">
             Use a different account
           </button>

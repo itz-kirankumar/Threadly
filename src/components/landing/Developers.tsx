@@ -56,9 +56,29 @@ npx threadly-geo scan \\
   },
 ] as const;
 
+// Light syntax colouring: strings, comments, flags and keywords.
+function highlight(code: string) {
+  const parts = code.split(/("(?:[^"\\]|\\.)*"|\/\/.*|#.*|\s--?[a-zA-Z-]+|\b(?:import|from|const|await|export|curl|npx)\b)/g);
+  return parts.map((part, i) => {
+    if (!part) return null;
+    const cls = part.startsWith('"') ? "text-[#D8B982]" : part.startsWith("//") || part.startsWith("#") ? "text-[#A7A0AE]/70" : /^\s--?/.test(part) ? "text-[#C4AEEC]" : /^(import|from|const|await|export|curl|npx)$/.test(part) ? "text-[#C4AEEC]" : "";
+    return cls ? <span key={i} className={cls}>{part}</span> : part;
+  });
+}
+
 export default function Developers({ heading = true }: { heading?: boolean }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("api");
   const active = TABS.find((t) => t.id === tab)!;
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(active.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
   return (
     <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
       <div>
@@ -85,13 +105,13 @@ export default function Developers({ heading = true }: { heading?: boolean }) {
           ))}
         </ul>
         <div className="mt-6 flex flex-wrap gap-3 text-sm">
-          <Link href="/docs/public-api" className="rounded-xl bg-violet-600 px-4 py-2 font-semibold text-white hover:bg-violet-500">API reference</Link>
-          <a href="https://www.npmjs.com/package/threadly-geo" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-semibold text-zinc-900 hover:border-violet-400">threadly-geo on npm ↗</a>
+          <Link href="/docs/public-api" className="btn-gold rounded-xl px-4 py-2 font-medium">API reference</Link>
+          <a href="https://www.npmjs.com/package/threadly-geo" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-semibold text-zinc-900 hover:border-violet-400">SDK documentation ↗</a>
           <a href="https://github.com/itz-kirankumar/Threadly" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-semibold text-zinc-900 hover:border-violet-400">GitHub ↗</a>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-violet-900/40 bg-[#13111c] shadow-[0_40px_90px_-40px_rgba(91,33,182,0.8)]">
+      <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[#100D16] shadow-[0_30px_80px_-50px_rgba(0,0,0,0.9)]">
         <div className="flex items-center gap-1 border-b border-white/10 px-3 pt-3" role="tablist" aria-label="Code examples">
           {TABS.map((t) => (
             <button
@@ -105,9 +125,9 @@ export default function Developers({ heading = true }: { heading?: boolean }) {
               {t.label}
             </button>
           ))}
-          <span className="ml-auto pb-2 pr-2 font-mono text-[11px] text-zinc-500">{active.file}</span>
+          <button type="button" onClick={copy} className="ml-auto mb-2 mr-1 rounded-md border border-white/[0.1] px-2.5 py-1 text-[11px] text-[#A7A0AE] transition-colors hover:text-[#F5F0E8]">{copied ? "Copied" : "Copy"}</button>
         </div>
-        <pre key={tab} className="demo-story-in overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed text-violet-100"><code>{active.code}</code></pre>
+        <pre key={tab} className="demo-story-in overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed text-[#F5F0E8]/90"><code>{highlight(active.code)}</code></pre>
         <p className="border-t border-white/10 px-5 py-3 text-xs text-zinc-400">{active.note}</p>
       </div>
     </div>
