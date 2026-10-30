@@ -83,17 +83,16 @@ export default function PortalGate() {
 function NotOnboarded({ email }: { email: string | null }) {
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F6F5F2] px-6 text-[#111114]">
-      <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[760px] -translate-x-1/2 rounded-full bg-violet-700/20 blur-[130px]" aria-hidden />
-      <div className="relative w-full max-w-md rounded-3xl border border-[#5B3DF5]/25 bg-black/[0.03] p-8 text-center backdrop-blur">
+      <div className="relative w-full max-w-md rounded-3xl border border-black/[0.08] bg-[#FFFFFF] p-8 text-center shadow-[0_8px_30px_-18px_rgba(17,17,20,0.25)]">
         <div className="flex justify-center"><ThreadlyLogo size={44} /></div>
         <p className="mt-6 text-[11px] font-medium uppercase tracking-[0.3em] text-[#5B3DF5]">By invitation</p>
         <h1 className="mt-3 font-display text-4xl leading-tight">This account has not been onboarded</h1>
-        <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+        <p className="mt-3 text-sm leading-relaxed text-[#6B6A72]">
           Threadly is open to eligible teams only.{email ? ` ${email} is not on the member list.` : " Sign in with the email you applied with."} If you were invited, use that exact email.
         </p>
         <div className="mt-7 grid gap-2">
-          <a href="/#early-access" className="rounded-xl bg-[#5B3DF5] px-5 py-2.5 text-sm font-semibold text-[#FFFFFF] transition hover:bg-[#e2c684]">Check your eligibility</a>
-          <button type="button" onClick={() => signOut(getFirebaseAuth()).then(() => { window.location.href = "/portal/login"; })} className="rounded-xl border border-black/15 px-5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-black/30">
+          <a href="/#early-access" className="rounded-xl bg-[#111114] px-5 py-2.5 text-sm font-semibold text-[#FFFFFF] transition hover:bg-[#2B2A31]">Check your eligibility</a>
+          <button type="button" onClick={() => signOut(getFirebaseAuth()).then(() => { window.location.href = "/portal/login"; })} className="rounded-xl border border-black/15 bg-[#FFFFFF] px-5 py-2.5 text-sm font-semibold text-[#111114] transition hover:bg-[#F3F2EE]">
             Use a different account
           </button>
         </div>
