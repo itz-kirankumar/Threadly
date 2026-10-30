@@ -33,7 +33,7 @@ const ITEMS = [
 
 export default function SecurityPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-[#fdfcff] text-[#02010a]">
+    <div className="min-h-screen flex flex-col site">
       <Navbar />
 
       <main className="flex-grow pt-32 pb-24 px-6">

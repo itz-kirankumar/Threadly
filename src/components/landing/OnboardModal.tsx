@@ -32,10 +32,10 @@ export default function OnboardModal({ open, onClose, stats, bonus }: { open: bo
   const extra = (credits: number) => Math.min(bonus.cap, Math.round((credits * bonus.percent) / 100));
 
   return (
-    <Dialog open={open} onClose={onClose} aria-label="Start with Threadly" className="premium relative z-[60] !bg-transparent">
+    <Dialog open={open} onClose={onClose} aria-label="Start with Threadly" className="site relative z-[60] !bg-transparent">
       <DialogBackdrop className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
       <div className="fixed inset-0 flex items-end justify-center sm:items-center sm:p-6">
-      <DialogPanel className="demo-modal-in relative grid max-h-[92vh] w-full max-w-5xl gap-4 overflow-y-auto rounded-t-3xl border border-[#D8B982]/25 bg-[#f7f6f3] p-4 text-left sm:rounded-3xl sm:p-5 lg:grid-cols-2">
+      <DialogPanel className="demo-modal-in relative grid max-h-[92vh] w-full max-w-5xl gap-4 overflow-y-auto rounded-t-3xl border border-[#5B3DF5]/25 bg-[#f7f6f3] p-4 text-left sm:rounded-3xl sm:p-5 lg:grid-cols-2">
         <button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white text-zinc-500 shadow-sm hover:text-zinc-900">✕</button>
 
         <div className="grid content-start gap-4">

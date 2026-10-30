@@ -9,6 +9,8 @@ import { FAQ_ITEMS } from "@/components/landing/faq-items";
 import ProductShowcase from "@/components/landing/ProductShowcase";
 import HowItWorks from "@/components/landing/HowItWorks";
 import AIVisibility from "@/components/landing/AIVisibility";
+import CreditCalculator from "@/components/landing/CreditCalculator";
+import ThreadLines from "@/components/landing/ThreadLines";
 import EarlyAccess from "@/components/landing/EarlyAccess";
 import Developers from "@/components/landing/Developers";
 import { FIRST_PACK_BONUS_CAP, FIRST_PACK_BONUS_PERCENT } from "@/lib/credits/rates";
@@ -31,19 +33,19 @@ export default function LandingPage() {
     })),
   };
   return (
-    <div className="premium flex min-h-screen flex-col">
+    <div className="site flex min-h-screen flex-col">
       <Navbar />
       <main className="flex-grow">
         {/* Hero and live search */}
         <section className="relative">
-          <div className="premium-aura pointer-events-none absolute inset-x-0 top-0 h-[720px]" aria-hidden />
+          <ThreadLines mode="sides" target=".search-shell" className="hidden md:block" />
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-40 text-center sm:pt-48">
-            <p className="premium-eyebrow">A private intelligence desk for B2B teams</p>
-            <h1 className="mx-auto mt-6 max-w-4xl font-display text-[3.4rem] leading-[1.03] tracking-tight sm:text-[5.5rem]">
+            <p className="eyebrow">A private intelligence desk for B2B teams</p>
+            <h1 className="mx-auto mt-6 max-w-4xl font-display text-5xl leading-[1.05] tracking-tight sm:text-7xl">
               Know your market.<br />
-              <span className="text-[#F5F0E8]/70">Find your next customer.</span>
+              <span className="text-[#5B3DF5]">Find your next customer.</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-[#A7A0AE]">
+            <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-[#6B6A72]">
               Threadly researches your market, discovers companies showing relevant buying signals, identifies decision-makers, and helps your team approach them with context.
             </p>
             <div className="mt-10">
@@ -56,45 +58,44 @@ export default function LandingPage() {
         <section id="product" className="scroll-mt-20">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
-              <p className="premium-eyebrow">The product</p>
+              <p className="eyebrow">The product</p>
               <h2 className="mt-4 max-w-2xl font-display text-5xl leading-[1.08] tracking-tight">One desk for your whole market.</h2>
-              <p className="mt-4 max-w-xl text-[#A7A0AE]">From the first company you find to the first email you approve, every view shares the same sources.</p>
+              <p className="mt-4 max-w-xl text-[#6B6A72]">From the first company you find to the first email you approve, every view shares the same sources.</p>
             </Reveal>
             <Reveal className="mt-12"><ProductShowcase /></Reveal>
           </div>
         </section>
 
         {/* How it works */}
-        <section id="how-it-works" className="scroll-mt-20 bg-[#0B0910]">
+        <section id="how-it-works" className="scroll-mt-20 bg-[#EFEEEA]">
           <div className="mx-auto max-w-6xl px-6 py-24"><HowItWorks /></div>
         </section>
 
         {/* AI visibility */}
         <section id="ai-visibility" className="relative scroll-mt-20 overflow-hidden">
-          <div className="premium-aura-violet pointer-events-none absolute inset-0" aria-hidden />
           <div className="relative mx-auto max-w-6xl px-6 py-24">
             <Reveal>
-              <p className="premium-eyebrow">AI visibility</p>
+              <p className="eyebrow">AI visibility</p>
               <h2 className="mt-4 max-w-2xl font-display text-5xl leading-[1.08] tracking-tight">Be visible where your buyers ask.</h2>
-              <p className="mt-4 max-w-xl text-[#A7A0AE]">Understand how AI assistants describe your brand, which sources they cite, and how your visibility compares with competitors.</p>
+              <p className="mt-4 max-w-xl text-[#6B6A72]">Understand how AI assistants describe your brand, which sources they cite, and how your visibility compares with competitors.</p>
             </Reveal>
             <Reveal className="mt-12"><AIVisibility /></Reveal>
           </div>
         </section>
 
         {/* Standards */}
-        <section className="bg-[#0B0910]">
+        <section className="bg-[#EFEEEA]">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
-              <p className="premium-eyebrow">Standards</p>
+              <p className="eyebrow">Standards</p>
               <h2 className="mt-4 font-display text-5xl leading-[1.08] tracking-tight">Intelligence you can account for.</h2>
             </Reveal>
             <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {STANDARDS.map((item, index) => (
                 <Reveal key={item.title} delay={index * 60}>
-                  <div className="h-full rounded-2xl border border-white/[0.08] p-6 transition-colors duration-300 hover:border-[#D8B982]/30">
-                    <h3 className="text-[17px] text-[#F5F0E8]">{item.title}</h3>
-                    <p className="mt-3 text-sm leading-relaxed text-[#A7A0AE]">{item.body}</p>
+                  <div className="h-full rounded-2xl border border-black/[0.08] p-6 transition-colors duration-300 hover:border-[#5B3DF5]/30">
+                    <h3 className="text-[17px] text-[#111114]">{item.title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-[#6B6A72]">{item.body}</p>
                   </div>
                 </Reveal>
               ))}
@@ -110,25 +111,25 @@ export default function LandingPage() {
         </section>
 
         {/* Pricing */}
-        <section id="pricing" className="scroll-mt-20 bg-[#0B0910]">
+        <section id="pricing" className="scroll-mt-20 bg-[#EFEEEA]">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
-              <p className="premium-eyebrow">Membership</p>
-              <h2 className="mt-4 font-display text-5xl tracking-tight">Pay only for results.</h2>
-              <p className="mt-4 max-w-xl text-[#A7A0AE]">Members buy credits and spend them on companies, leads, emails and scans. No seats and no subscription.</p>
+              <h2 className="text-center font-display text-5xl tracking-tight">Pay as you go with no subscription</h2>
+              <p className="mx-auto mt-4 max-w-xl text-center text-[#6B6A72]">Members buy credits and spend them on companies, leads, emails and scans. No seats and no subscription.</p>
             </Reveal>
-            <div className="mt-12"><Pricing /></div>
+            <div className="mt-12"><CreditCalculator /></div>
+            <div className="mt-6"><Pricing /></div>
           </div>
         </section>
 
         <EarlyAccess />
 
         {/* FAQ */}
-        <section id="faq" className="scroll-mt-20 bg-[#0B0910]">
+        <section id="faq" className="scroll-mt-20 bg-[#EFEEEA]">
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
           <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
             <Reveal>
-              <p className="premium-eyebrow">Questions</p>
+              <p className="eyebrow">Questions</p>
               <h2 className="mt-4 font-display text-5xl leading-[1.08] tracking-tight">Before you apply.</h2>
             </Reveal>
             <Faq />
@@ -137,14 +138,14 @@ export default function LandingPage() {
 
         {/* Final CTA */}
         <section className="relative overflow-hidden">
-          <div className="premium-aura pointer-events-none absolute inset-x-0 bottom-0 h-full rotate-180" aria-hidden />
-          <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
+          <ThreadLines mode="fan" target="#final-cta-actions" />
+          <div className="relative mx-auto max-w-3xl px-6 pb-72 pt-28 text-center">
             <Reveal>
               <h2 className="font-display text-5xl leading-[1.06] tracking-tight sm:text-6xl">Your next opportunity is already out there.</h2>
-              <p className="mx-auto mt-5 max-w-lg text-lg text-[#A7A0AE]">Research your market, discover the right companies, and approach them with intelligence.</p>
-              <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-                <Link href="/#early-access" className="btn-gold rounded-full px-7 py-3 text-sm font-medium">Request an invitation</Link>
-                <Link href="/portal" className="rounded-full border border-white/[0.14] px-7 py-3 text-sm text-[#F5F0E8] transition-colors hover:border-[#D8B982]/50">Member sign in</Link>
+              <p className="mx-auto mt-5 max-w-lg text-lg text-[#6B6A72]">Research your market, discover the right companies, and approach them with intelligence.</p>
+              <div id="final-cta-actions" className="mt-9 flex flex-wrap items-center justify-center gap-3">
+                <Link href="/#early-access" className="btn-primary rounded-xl px-7 py-3 text-sm font-medium">Request an invitation</Link>
+                <Link href="/portal" className="rounded-xl border border-black/[0.14] bg-white px-7 py-3 text-sm text-[#111114] transition-colors hover:border-[#5B3DF5]/50">Member sign in</Link>
               </div>
             </Reveal>
           </div>

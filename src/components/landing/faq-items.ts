@@ -18,7 +18,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: "How often do scans run?",
-    a: "Automatically every day, plus manual scans whenever you want a fresh read. Trends, deltas and history build up from every run.",
+    a: "Run a scan whenever you want a fresh read, for 10 credits. Workspaces on a plan that includes scans also get an automatic daily scan. Trends, deltas and history build up from every run.",
   },
   {
     q: "Is there an API or SDK?",

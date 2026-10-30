@@ -65,8 +65,8 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
 
       <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {PACKS.map((pack) => (
-          <div key={pack.name} className={`relative flex flex-col rounded-2xl border p-6 ${pack.highlight ? "gloss-panel !border-[#D8B982]/35" : "border-white/10 bg-white/[0.02]"}`}>
-            {pack.highlight && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full border border-[#D8B982]/40 bg-[#17131F] px-3 py-1 text-[11px] text-[#D8B982]">Best value</span>}
+          <div key={pack.name} className={`relative flex flex-col rounded-2xl border p-6 ${pack.highlight ? "gloss-panel !border-[#5B3DF5]/35" : "border-white/10 bg-white/[0.02]"}`}>
+            {pack.highlight && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full border border-[#5B3DF5]/40 bg-[#FFFFFF] px-3 py-1 text-[11px] text-[#5B3DF5]">Best value</span>}
             <h3 className="text-sm font-semibold uppercase tracking-widest text-zinc-400">{pack.name}</h3>
             <p className="mt-4 font-display text-4xl text-white">{pack.price}</p>
             <p className="mt-1 text-sm text-zinc-300">{pack.credits}</p>
@@ -74,7 +74,7 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
             <p className="mt-3 flex-1 text-sm leading-relaxed text-zinc-400">{pack.blurb}</p>
             <Link
               href={pack.name === "Enterprise" ? "/contact" : "/#early-access"}
-              className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition ${pack.highlight ? "btn-gold" : "border border-white/15 text-white hover:bg-white/[0.06]"}`}
+              className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition ${pack.highlight ? "btn-primary" : "border border-white/15 text-white hover:bg-white/[0.06]"}`}
             >
               {pack.name === "Enterprise" ? "Talk to us" : "Request an invite"}
             </Link>

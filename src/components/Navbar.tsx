@@ -48,7 +48,7 @@ export default function Navbar(_props: { tone?: "dark" | "light" }) {
 
   const solid = scrolled || open || !home;
   return (
-    <header className={`sticky top-0 z-40 border-b transition-colors duration-300 ${home ? "-mb-[4.5rem]" : ""} ${solid ? "border-white/[0.08] bg-[#08070B]/90 backdrop-blur-xl" : "border-transparent bg-transparent"}`}>
+    <header className={`sticky top-0 z-40 border-b transition-colors duration-300 ${home ? "-mb-[4.5rem]" : ""} ${solid ? "border-black/[0.08] bg-[#F6F5F2]/90 backdrop-blur-xl" : "border-transparent bg-transparent"}`}>
       <div className="mx-auto flex h-[4.5rem] max-w-6xl items-center justify-between gap-6 px-6">
         <Link href="/" aria-label="Threadly home" className="shrink-0">
           <ThreadlyLogo size={30} wordmark />
@@ -59,22 +59,22 @@ export default function Navbar(_props: { tone?: "dark" | "light" }) {
               key={link.id}
               href={`/#${link.id}`}
               aria-current={active === link.id ? "true" : undefined}
-              className={`rounded-full px-3.5 py-1.5 text-[13px] transition-colors duration-200 ${active === link.id ? "bg-white/[0.07] text-[#F5F0E8]" : "text-[#A7A0AE] hover:text-[#F5F0E8]"}`}
+              className={`rounded-full px-3.5 py-1.5 text-[13px] transition-colors duration-200 ${active === link.id ? "bg-black/[0.07] text-[#111114]" : "text-[#6B6A72] hover:text-[#111114]"}`}
             >
               {link.label}
             </Link>
           ))}
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/portal" className="hidden px-3 py-1.5 text-[13px] text-[#A7A0AE] transition-colors hover:text-[#F5F0E8] sm:inline">Sign in</Link>
-          <Link href="/#early-access" className="btn-gold whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-medium">Request an invitation</Link>
+          <Link href="/portal" className="hidden px-3 py-1.5 text-[13px] text-[#6B6A72] transition-colors hover:text-[#111114] sm:inline">Sign in</Link>
+          <Link href="/#early-access" className="btn-primary whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-medium">Request an invitation</Link>
           <button
             type="button"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             aria-controls="mobile-nav"
             onClick={() => setOpen((v) => !v)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#F5F0E8] hover:bg-white/[0.07] lg:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#111114] hover:bg-black/[0.07] lg:hidden"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
               {open ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 8h16M4 16h16" />}
@@ -83,11 +83,11 @@ export default function Navbar(_props: { tone?: "dark" | "light" }) {
         </div>
       </div>
       {open && (
-        <nav id="mobile-nav" aria-label="Mobile" className="border-t border-white/[0.08] px-6 py-3 lg:hidden">
+        <nav id="mobile-nav" aria-label="Mobile" className="border-t border-black/[0.08] px-6 py-3 lg:hidden">
           {LINKS.map((link) => (
-            <Link key={link.id} href={`/#${link.id}`} onClick={() => setOpen(false)} className="block py-3 text-[15px] text-[#F5F0E8]">{link.label}</Link>
+            <Link key={link.id} href={`/#${link.id}`} onClick={() => setOpen(false)} className="block py-3 text-[15px] text-[#111114]">{link.label}</Link>
           ))}
-          <Link href="/portal" onClick={() => setOpen(false)} className="block py-3 text-[15px] text-[#A7A0AE]">Sign in</Link>
+          <Link href="/portal" onClick={() => setOpen(false)} className="block py-3 text-[15px] text-[#6B6A72]">Sign in</Link>
         </nav>
       )}
     </header>

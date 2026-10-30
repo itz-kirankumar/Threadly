@@ -68,7 +68,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     mainEntityOfPage: `${baseUrl}/blog/${post.slug}`,
   };
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950">
+    <div className="flex min-h-screen flex-col site bg-zinc-950">
       <Navbar />
       <main className="mx-auto w-full max-w-3xl flex-grow px-6 py-16">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />

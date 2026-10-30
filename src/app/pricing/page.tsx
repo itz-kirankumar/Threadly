@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Pricing from "@/components/landing/Pricing";
+import CreditCalculator from "@/components/landing/CreditCalculator";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -11,11 +12,11 @@ export const metadata: Metadata = {
 
 export default function PricingPage() {
   return (
-    <div className="premium flex min-h-screen flex-col">
+    <div className="site flex min-h-screen flex-col">
       <Navbar />
       <main className="mx-auto w-full max-w-6xl flex-grow px-6 py-16">
         <div className="text-center">
-          <p className="premium-eyebrow">Members&apos; pricing</p>
+          <p className="eyebrow">Members&apos; pricing</p>
           <h1 className="mt-4 font-display text-6xl tracking-tight">Pay for leads, not seats</h1>
           <p className="mx-auto mt-4 max-w-2xl text-zinc-400">
             Threadly is invite-only. Qualified teams get 200 free credits, then pay per company, social lead,
@@ -23,6 +24,9 @@ export default function PricingPage() {
           </p>
         </div>
         <div className="mt-12">
+          <CreditCalculator />
+        </div>
+        <div className="mt-6">
           <Pricing />
         </div>
       </main>

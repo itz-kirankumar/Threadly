@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-[#fdfcff] text-[#02010a]">
+    <div className="min-h-screen flex flex-col site">
       <Navbar />
 
       <main className="flex-grow pt-32 pb-24">

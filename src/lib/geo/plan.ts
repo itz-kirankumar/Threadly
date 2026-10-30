@@ -81,6 +81,18 @@ export function lapsedPlan(
   return { plan: stored, lapsed: false };
 }
 
+/** Daily scheduled scans run only for live plans with unlimited scans. Credit
+ * workspaces scan on demand, so nothing spends their credits unasked. */
+export function scheduledScanIncluded(
+  stored: unknown,
+  billing: { provider?: string; status?: string; periodEnd?: string | null } | null,
+  now: Date = new Date(),
+): boolean {
+  if (typeof stored !== "string" || !(stored in PLAN_LIMITS)) return false;
+  const { plan } = lapsedPlan(stored as PlanId, billing, now);
+  return plan !== "none" && PLAN_LIMITS[plan].scans === null;
+}
+
 // Exempt accounts (the product owner) are floored at Growth: the exemption
 // must hold even when a stored plan record exists (e.g. a test purchase), or
 // Growth-gated surfaces break for exactly the person running the product.

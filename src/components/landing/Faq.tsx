@@ -7,11 +7,11 @@ import { FAQ_ITEMS } from "./faq-items";
 export default function Faq() {
   const [open, setOpen] = useState(0);
   return (
-    <div className="border-t border-white/[0.08]">
+    <div className="border-t border-black/[0.08]">
       {FAQ_ITEMS.map((item, i) => {
         const expanded = open === i;
         return (
-          <div key={item.q} className="border-b border-white/[0.08]">
+          <div key={item.q} className="border-b border-black/[0.08]">
             <h3>
               <button
                 type="button"
@@ -19,15 +19,15 @@ export default function Faq() {
                 aria-expanded={expanded}
                 aria-controls={`faq-a-${i}`}
                 onClick={() => setOpen(expanded ? -1 : i)}
-                className="flex w-full items-center justify-between gap-6 py-5 text-left text-[15px] text-[#F5F0E8] transition-colors hover:text-[#D8B982]"
+                className="flex w-full items-center justify-between gap-6 py-5 text-left text-[15px] text-[#111114] transition-colors hover:text-[#5B3DF5]"
               >
                 {item.q}
-                <span aria-hidden className={`shrink-0 text-lg leading-none text-[#D8B982] transition-transform duration-300 ${expanded ? "rotate-45" : ""}`}>+</span>
+                <span aria-hidden className={`shrink-0 text-lg leading-none text-[#5B3DF5] transition-transform duration-300 ${expanded ? "rotate-45" : ""}`}>+</span>
               </button>
             </h3>
             <div id={`faq-a-${i}`} role="region" aria-labelledby={`faq-q-${i}`} className="faq-panel" data-open={expanded}>
               <div className="overflow-hidden">
-                <p className="pb-5 pr-8 text-sm leading-relaxed text-[#A7A0AE]">{item.a}</p>
+                <p className="pb-5 pr-8 text-sm leading-relaxed text-[#6B6A72]">{item.a}</p>
               </div>
             </div>
           </div>

@@ -662,3 +662,16 @@ test("applyExemption: exempt emails floored at growth, stored higher plans kept,
   assert.equal(applyExemption("pro", "owner@example.com", ""), "pro");
   assert.equal(applyExemption("none", " second@example.com ", list), "growth");
 });
+
+// ---- scheduled scans: only live plans with unlimited scans ----
+test("daily scans run for live paid plans, never for credit workspaces or lapsed terms", async () => {
+  const { scheduledScanIncluded } = await import("../src/lib/geo/plan.ts");
+  const now = new Date("2026-10-30T00:00:00Z");
+  assert.equal(scheduledScanIncluded("pro", null, now), true);
+  assert.equal(scheduledScanIncluded("growth", { provider: "razorpay", status: "active", periodEnd: "2026-12-01T00:00:00Z" }, now), true);
+  assert.equal(scheduledScanIncluded("pro", { provider: "razorpay", status: "active", periodEnd: "2026-10-01T00:00:00Z" }, now), false);
+  assert.equal(scheduledScanIncluded("none", null, now), false);
+  assert.equal(scheduledScanIncluded("trial", null, now), false);
+  assert.equal(scheduledScanIncluded(null, null, now), false);
+  assert.equal(scheduledScanIncluded("forged", null, now), false);
+});

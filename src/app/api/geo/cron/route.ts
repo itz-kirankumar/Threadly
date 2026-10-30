@@ -1,4 +1,5 @@
 import { runScan } from "@/lib/geo/engine";
+import { scheduledScanIncluded } from "@/lib/geo/plan";
 import { adminConfigured, adminLoadKeySettings, adminLoadWorkspace, adminSaveRun, listWorkspaceIds } from "@/lib/geo/admin-store";
 
 export const runtime = "nodejs";
@@ -70,6 +71,12 @@ export async function GET(request: Request) {
   const uids = await listWorkspaceIds(50);
   for (const uid of uids) {
     try {
+      const planNode = await db.ref(`users/${uid}/geo`).child("plan").get();
+      const billingNode = await db.ref(`users/${uid}/geo/billing`).get();
+      if (!scheduledScanIncluded(planNode.val(), billingNode.val())) {
+        scanned.push({ uid, error: "no plan with daily scans" });
+        continue;
+      }
       const { brand, queries } = await adminLoadWorkspace(uid);
       if (!brand || !queries.length) {
         scanned.push({ uid, error: "no brand or queries" });

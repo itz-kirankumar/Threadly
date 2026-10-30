@@ -357,7 +357,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
           {previewState === "ready" && preview ? (
             <span className="pl-1.5"><Logo name={preview.name} icon={preview.iconDataUrl} size="h-7 w-7" /></span>
           ) : (
-            <svg viewBox="0 0 24 24" className="ml-2 h-5 w-5 shrink-0 text-[#A7A0AE]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+            <svg viewBox="0 0 24 24" className="ml-2 h-5 w-5 shrink-0 text-[#6B6A72]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
           )}
           <label htmlFor="demo-domain" className="sr-only">Your company website or domain</label>
           <input
@@ -381,24 +381,24 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
               else if (e.key === "Escape") { setFocused(false); }
               else if (e.key === "Enter" && activeSuggestion >= 0) { e.preventDefault(); setInput(suggestions[activeSuggestion]); setActiveSuggestion(-1); setFocused(false); }
             }}
-            className="min-w-0 flex-1 bg-transparent px-2 py-2.5 text-base text-[#F5F0E8] placeholder-[#A7A0AE]/70 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent px-2 py-2.5 text-base text-[#111114] placeholder-[#6B6A72]/70 focus:outline-none"
           />
           {input && phase !== "running" && (
-            <button type="button" aria-label="Clear" onClick={() => { setInput(""); setPreview(null); setBlocked(null); }} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#A7A0AE] transition-colors hover:bg-white/[0.07] hover:text-[#F5F0E8]">
+            <button type="button" aria-label="Clear" onClick={() => { setInput(""); setPreview(null); setBlocked(null); }} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#6B6A72] transition-colors hover:bg-black/[0.07] hover:text-[#111114]">
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
             </button>
           )}
-          <button type="submit" disabled={phase === "running"} className="btn-gold shrink-0 rounded-xl px-5 py-2.5 text-sm font-medium disabled:opacity-60">
+          <button type="submit" disabled={phase === "running"} className="btn-primary shrink-0 rounded-xl px-5 py-2.5 text-sm font-medium disabled:opacity-60">
             {phase === "running" ? "Researching..." : <><span className="hidden sm:inline">Explore your market</span><span className="sm:hidden">Explore</span></>}
           </button>
         </div>
         {suggestions.length > 0 && (
-          <ul id="demo-suggestions" role="listbox" aria-label="Suggestions" className="demo-pop-in absolute inset-x-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#17131F] p-1 text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)]">
+          <ul id="demo-suggestions" role="listbox" aria-label="Suggestions" className="demo-pop-in absolute inset-x-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-black/[0.08] bg-[#FFFFFF] p-1 text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)]">
             {suggestions.map((s, i) => (
               <li key={s} id={`demo-suggestion-${i}`} role="option" aria-selected={activeSuggestion === i}>
-                <button type="button" tabIndex={-1} onMouseDown={(e) => { e.preventDefault(); setInput(s); setFocused(false); }} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors ${activeSuggestion === i ? "bg-white/[0.07] text-[#F5F0E8]" : "text-[#A7A0AE] hover:bg-white/[0.05]"}`}>
+                <button type="button" tabIndex={-1} onMouseDown={(e) => { e.preventDefault(); setInput(s); setFocused(false); }} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors ${activeSuggestion === i ? "bg-black/[0.07] text-[#111114]" : "text-[#6B6A72] hover:bg-black/[0.05]"}`}>
                   {s}
-                  <span className="text-xs text-[#A7A0AE]/70">{recent.includes(s) ? "Recent" : "Example"}</span>
+                  <span className="text-xs text-[#6B6A72]/70">{recent.includes(s) ? "Recent" : "Example"}</span>
                 </button>
               </li>
             ))}
@@ -424,16 +424,16 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
         )}
         {phase === "idle" && !blocked && (
           <div className="mt-5 text-center">
-            <p className="text-sm text-[#A7A0AE]">Start with a website. Let intelligence do the research.</p>
-            <p className="mt-1 text-xs text-[#A7A0AE]/75">Reads public pages only. Nothing is stored and nothing is sent.</p>
-            <a href="#how-it-works" className="mt-5 inline-block rounded-full border border-white/[0.12] px-5 py-2 text-sm text-[#F5F0E8] transition-colors hover:border-[#D8B982]/50">See how it works</a>
+            <p className="text-sm text-[#6B6A72]">Start with a website. Let intelligence do the research.</p>
+            <p className="mt-1 text-xs text-[#6B6A72]/75">Reads public pages only. Nothing is stored and nothing is sent.</p>
+            <a href="#how-it-works" className="mt-5 inline-block rounded-full border border-black/[0.12] px-5 py-2 text-sm text-[#111114] transition-colors hover:border-[#5B3DF5]/50">See how it works</a>
           </div>
         )}
         {blocked && <OutOfRuns kind={blocked} onEligibility={openOnboard} />}
       </form>
 
       {phase !== "idle" && (
-        <div ref={panelRef} className="demo-workspace-in mx-auto mt-8 max-w-6xl scroll-mt-20 overflow-hidden rounded-3xl border border-zinc-200 bg-[#100D16] text-left shadow-[0_40px_100px_-50px_rgba(0,0,0,0.9)]" aria-label={`Live demo for ${runDomain}`}>
+        <div ref={panelRef} className="demo-workspace-in mx-auto mt-8 max-w-6xl scroll-mt-20 overflow-hidden rounded-3xl border border-zinc-200 bg-[#FFFFFF] text-left shadow-[0_40px_100px_-50px_rgba(0,0,0,0.9)]" aria-label={`Live demo for ${runDomain}`}>
           {/* Stepper */}
           <div className="flex items-center gap-3 border-b border-zinc-200 bg-white/70 px-4 py-3 sm:px-6">
             <Logo name={brandName} icon={brandIcon} size="h-7 w-7" />
@@ -587,7 +587,7 @@ function OutOfRuns({ kind, onEligibility }: { kind: "free" | "busy"; onEligibili
   }
   return (
     <div className="demo-modal-in mx-auto mt-6 max-w-3xl overflow-hidden rounded-3xl border border-violet-200 bg-white text-left shadow-[0_30px_80px_-40px_rgba(91,33,182,0.55)]">
-      <div className="bg-gradient-to-br from-violet-600 via-violet-600 to-fuchsia-600 px-6 py-5 text-white">
+      <div className="bg-violet-700 px-6 py-5 text-white">
         <p className="text-xs font-semibold uppercase tracking-widest text-violet-100">Free runs used</p>
         <p className="mt-1 text-2xl font-semibold tracking-tight">You&apos;ve seen what Threadly finds. Keep going with full runs.</p>
         <p className="mt-1 text-sm text-violet-100">Full runs find every matching company, look up decision makers and send from your own domain.</p>
@@ -625,7 +625,7 @@ function StoryBars({ viewing, status, ready, follow }: { viewing: DemoStep; stat
             <span className="block h-full w-full bg-violet-600" />
           ) : i === at ? (
             ready ? (
-              <span key={`${s}-${follow}`} className={`block h-full bg-gradient-to-r from-[#a67c32] to-[#f0dca6] ${follow ? "demo-story-fill" : "w-full opacity-40"}`} />
+              <span key={`${s}-${follow}`} className={`block h-full bg-violet-600 ${follow ? "demo-story-fill" : "w-full opacity-40"}`} />
             ) : (
               <span className="demo-story-wait block h-full w-1/3 bg-violet-500/70" />
             )
@@ -773,7 +773,7 @@ function CrawlerStage({ audit }: { audit: DemoCrawler }) {
             <div className="flex items-center gap-3">
               <p className="w-36 shrink-0 text-xs font-semibold">{cat.name}</p>
               <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                <span className="demo-bar block h-full rounded-full bg-gradient-to-r from-[#a67c32] to-[#f0dca6]" style={{ ["--bar-to" as string]: `${(cat.score / cat.max) * 100}%`, animationDelay: `${200 + ci * 140}ms` }} />
+                <span className="demo-bar block h-full rounded-full bg-violet-600" style={{ ["--bar-to" as string]: `${(cat.score / cat.max) * 100}%`, animationDelay: `${200 + ci * 140}ms` }} />
               </span>
               <span className="w-12 text-right text-xs tabular-nums text-zinc-500">{cat.score}/{cat.max}</span>
             </div>

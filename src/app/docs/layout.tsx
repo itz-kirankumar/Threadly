@@ -15,7 +15,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
     pages: DOC_PAGES.filter((p) => p.section === section),
   }));
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
+    <div className="flex min-h-screen flex-col site bg-zinc-950 text-zinc-100">
       <Navbar />
       <div className="mx-auto flex w-full max-w-6xl flex-grow gap-10 px-6 py-10">
         <aside className="hidden w-60 shrink-0 md:block">

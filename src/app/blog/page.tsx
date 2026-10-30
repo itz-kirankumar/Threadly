@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default function BlogIndex() {
   const posts = publishedPosts();
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950">
+    <div className="flex min-h-screen flex-col site bg-zinc-950">
       <Navbar />
       <main className="mx-auto w-full max-w-3xl flex-grow px-6 py-16">
         <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">Blog</p>

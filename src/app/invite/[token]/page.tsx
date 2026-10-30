@@ -98,7 +98,7 @@ export default function InvitePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950">
+    <div className="flex min-h-screen flex-col site bg-zinc-950">
       <header className="border-b border-white/10">
         <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
           <Link href="/" className="flex items-center gap-2.5">

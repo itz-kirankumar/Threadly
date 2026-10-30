@@ -7,6 +7,8 @@
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid",
         "geo": {
+          "plan": { ".validate": "false" },
+          "billing": { ".validate": "false" },
           "queries": {
             ".indexOn": ["createdAt"]
           },

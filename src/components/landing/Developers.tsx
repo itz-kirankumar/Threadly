@@ -61,7 +61,7 @@ function highlight(code: string) {
   const parts = code.split(/("(?:[^"\\]|\\.)*"|\/\/.*|#.*|\s--?[a-zA-Z-]+|\b(?:import|from|const|await|export|curl|npx)\b)/g);
   return parts.map((part, i) => {
     if (!part) return null;
-    const cls = part.startsWith('"') ? "text-[#D8B982]" : part.startsWith("//") || part.startsWith("#") ? "text-[#A7A0AE]/70" : /^\s--?/.test(part) ? "text-[#C4AEEC]" : /^(import|from|const|await|export|curl|npx)$/.test(part) ? "text-[#C4AEEC]" : "";
+    const cls = part.startsWith('"') ? "text-[#B7A8FF]" : part.startsWith("//") || part.startsWith("#") ? "text-[#8F8E96]" : /^\s--?/.test(part) ? "text-[#CFC7FF]" : /^(import|from|const|await|export|curl|npx)$/.test(part) ? "text-[#CFC7FF]" : "";
     return cls ? <span key={i} className={cls}>{part}</span> : part;
   });
 }
@@ -84,7 +84,7 @@ export default function Developers({ heading = true }: { heading?: boolean }) {
       <div>
         {heading && (
           <>
-            <p className="premium-eyebrow">For developers</p>
+            <p className="eyebrow">For developers</p>
             <h2 className="mt-4 font-display text-5xl leading-tight tracking-tight">Build on Threadly</h2>
           </>
         )}
@@ -105,13 +105,13 @@ export default function Developers({ heading = true }: { heading?: boolean }) {
           ))}
         </ul>
         <div className="mt-6 flex flex-wrap gap-3 text-sm">
-          <Link href="/docs/public-api" className="btn-gold rounded-xl px-4 py-2 font-medium">API reference</Link>
-          <a href="https://www.npmjs.com/package/threadly-geo" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-semibold text-zinc-900 hover:border-violet-400">SDK documentation ↗</a>
-          <a href="https://github.com/itz-kirankumar/Threadly" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-semibold text-zinc-900 hover:border-violet-400">GitHub ↗</a>
+          <Link href="/docs/public-api" className="btn-primary rounded-xl px-4 py-2 font-medium">API reference</Link>
+          <a href="https://www.npmjs.com/package/threadly-geo" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-medium text-[#111114] hover:border-[#5B3DF5]">SDK documentation ↗</a>
+          <a href="https://github.com/itz-kirankumar/Threadly" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-medium text-[#111114] hover:border-[#5B3DF5]">GitHub ↗</a>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[#100D16] shadow-[0_30px_80px_-50px_rgba(0,0,0,0.9)]">
+      <div className="overflow-hidden rounded-3xl border border-white/[0.08] code-panel bg-[#15141A]">
         <div className="flex items-center gap-1 border-b border-white/10 px-3 pt-3" role="tablist" aria-label="Code examples">
           {TABS.map((t) => (
             <button
@@ -125,9 +125,9 @@ export default function Developers({ heading = true }: { heading?: boolean }) {
               {t.label}
             </button>
           ))}
-          <button type="button" onClick={copy} className="ml-auto mb-2 mr-1 rounded-md border border-white/[0.1] px-2.5 py-1 text-[11px] text-[#A7A0AE] transition-colors hover:text-[#F5F0E8]">{copied ? "Copied" : "Copy"}</button>
+          <button type="button" onClick={copy} className="ml-auto mb-2 mr-1 rounded-md border border-white/20 px-2.5 py-1 text-[11px] text-[#B4B3BA] transition-colors hover:text-white">{copied ? "Copied" : "Copy"}</button>
         </div>
-        <pre key={tab} className="demo-story-in overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed text-[#F5F0E8]/90"><code>{highlight(active.code)}</code></pre>
+        <pre key={tab} className="demo-story-in overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed text-[#E9E8EC]"><code>{highlight(active.code)}</code></pre>
         <p className="border-t border-white/10 px-5 py-3 text-xs text-zinc-400">{active.note}</p>
       </div>
     </div>
