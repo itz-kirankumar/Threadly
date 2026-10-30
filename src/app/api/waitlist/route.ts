@@ -5,7 +5,8 @@ import { fetchHomepageRaw, fetchPage } from "@/lib/prospecting/web";
 import { runOpenSeoAudit } from "@/lib/geo/openseo-engine";
 import { auditSite } from "@/lib/geo/site-audit";
 import { checkRateLimit, requestAddressKey } from "@/lib/rate-limit";
-import { OUTREACH_VOLUMES, QUALIFY_SCORE, scoreApplicant, TEAM_SIZES, type ApplicantSite } from "@/lib/waitlist/score";
+import { BUDGETS, CRMS, MAX_APPLICATIONS, OUTREACH_VOLUMES, QUALIFY_SCORE, scoreApplicant, TEAM_SIZES, type ApplicantSite } from "@/lib/waitlist/score";
+import { domainAgeDays, mailSetup } from "@/lib/waitlist/signals";
 import { loadApplication, saveApplication, type WaitlistApplication } from "@/lib/waitlist/store";
 
 export const runtime = "nodejs";
@@ -30,6 +31,8 @@ export async function POST(request: Request) {
   const useCase = clean(body.useCase, 600);
   const teamSize = (TEAM_SIZES as readonly string[]).includes(String(body.teamSize)) ? String(body.teamSize) : "";
   const monthlyOutreach = (OUTREACH_VOLUMES as readonly string[]).includes(String(body.monthlyOutreach)) ? String(body.monthlyOutreach) : "";
+  const monthlyBudget = (BUDGETS as readonly string[]).includes(String(body.monthlyBudget)) ? String(body.monthlyBudget) : "";
+  const crm = (CRMS as readonly string[]).includes(String(body.crm)) ? String(body.crm) : "";
   if (!EMAIL.test(email)) return Response.json({ error: "Enter a valid email address." }, { status: 400 });
   if (!domain) return Response.json({ error: "Enter your company website, like acme.com." }, { status: 400 });
 
@@ -42,17 +45,24 @@ export async function POST(request: Request) {
   if (existing?.status === "invited") {
     return Response.json({ status: "invited", score: existing.score, reasons: existing.reasons, tests: existing.tests ?? [], already: true });
   }
+  // A few tries only, so answers cannot be tuned until they pass.
+  const attempts = (existing?.attempts ?? 0) + 1;
+  if (existing && attempts > MAX_APPLICATIONS) {
+    return Response.json({ status: existing.status, score: existing.score, threshold: QUALIFY_SCORE, reasons: existing.reasons, tests: existing.tests ?? [], blockers: existing.blockers ?? [], locked: true });
+  }
 
   let site: ApplicantSite | null = null;
   let company = domain;
   try {
-    const [page, crawl, home] = await Promise.all([
+    const [page, crawl, home, mail, age] = await Promise.all([
       fetchPage(domain, 8000),
       runOpenSeoAudit(domain).catch(() => null),
       fetchHomepageRaw(domain).catch(() => null),
+      mailSetup(domain),
+      domainAgeDays(domain),
     ]);
     company = page.siteName ?? domain;
-    const readiness = crawl && home
+    const audit = crawl && home
       ? auditSite({
           hasRobotsTxt: crawl.hasRobotsTxt,
           hasSitemap: crawl.hasSitemap,
@@ -60,14 +70,22 @@ export async function POST(request: Request) {
           crawlersBlocked: crawl.crawlerStatuses.filter((b) => !b.allowed).length,
           crawlersTotal: crawl.crawlerStatuses.length,
           ...home,
-        }).score
+        })
       : null;
-    site = { name: company, description: page.description, text: [page.title, ...page.headings, ...page.paragraphs.slice(0, 12)].filter(Boolean).join(" ").slice(0, 6000), readiness };
+    site = {
+      name: company,
+      description: page.description,
+      text: [page.title, ...page.headings, ...page.paragraphs.slice(0, 12)].filter(Boolean).join(" ").slice(0, 6000),
+      readiness: audit?.score ?? null,
+      commercial: audit?.categories.find((c) => c.name === "Business signals")?.score ?? null,
+      mail,
+      domainAgeDays: age,
+    };
   } catch {
     site = null;
   }
 
-  const fit = scoreApplicant({ email, domain, role, useCase, teamSize, monthlyOutreach }, site);
+  const fit = scoreApplicant({ email, domain, role, useCase, teamSize, monthlyOutreach, monthlyBudget, crm }, site);
   const now = new Date().toISOString();
   const application: WaitlistApplication = {
     email,
@@ -77,6 +95,8 @@ export async function POST(request: Request) {
     score: fit.score,
     reasons: fit.reasons,
     tests: fit.tests,
+    blockers: fit.blockers,
+    attempts,
     status: fit.qualified ? "invited" : "waitlisted",
     appliedAt: existing?.appliedAt ?? now,
     ...(fit.qualified ? { invitedAt: now } : {}),
@@ -91,5 +111,5 @@ export async function POST(request: Request) {
   if (fit.qualified || !existing) {
     await sendLifecycleEmail(fit.qualified ? "beta-invite" : "beta-waitlisted", email, { company });
   }
-  return Response.json({ status: application.status, score: fit.score, threshold: QUALIFY_SCORE, reasons: fit.reasons, tests: fit.tests, company });
+  return Response.json({ status: application.status, score: fit.score, threshold: QUALIFY_SCORE, reasons: fit.reasons, tests: fit.tests, blockers: fit.blockers, attemptsLeft: MAX_APPLICATIONS - attempts, company });
 }

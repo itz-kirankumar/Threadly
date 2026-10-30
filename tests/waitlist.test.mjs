@@ -11,35 +11,45 @@ const b2bSite = {
   text: "Built for teams. Book a demo. Pricing. Trusted by 400 customers. Integrations with Salesforce.",
 };
 
-test("a founder with a team, outreach plan, work email and B2B site qualifies", () => {
-  const fit = scoreApplicant(
-    { email: "jo@acme.io", domain: "acme.io", role: "Co-founder & CEO", useCase: "Find mid-market finance teams and book outbound meetings", teamSize: "11-50", monthlyOutreach: "500-2000" },
-    { ...b2bSite, readiness: 72 },
-    60,
-  );
+const strong = { ...b2bSite, readiness: 72, commercial: 10, mail: { mx: true, spf: true, dmarc: true }, domainAgeDays: 1500 };
+const founder = { email: "jo@acme.io", domain: "acme.io", role: "Co-founder & CEO", useCase: "Heads of finance at mid-market SaaS companies, reached by outbound email", teamSize: "11-50", monthlyOutreach: "500-2000", monthlyBudget: "$200-1,000", crm: "HubSpot" };
+
+test("an established B2B company with a team, budget and sending setup scores full marks", () => {
+  const fit = scoreApplicant(founder, strong, 70);
   assert.equal(fit.qualified, true);
   assert.equal(fit.score, 100);
-  assert.ok(fit.tests.every((t) => t.points === t.max));
+  assert.deepEqual(fit.blockers, []);
+  assert.equal(fit.tests.reduce((s, t) => s + t.max, 0), 100, "tests total 100 points");
+  assert.ok(fit.tests.every((t) => t.passed));
 });
 
-test("a personal email with no readable site and nothing else is not onboarded, with every test shown", () => {
-  const fit = scoreApplicant({ email: "someone@gmail.com", domain: "unknown.example", role: "", useCase: "" }, null, 60);
+test("hard requirements stop onboarding at any score", () => {
+  assert.equal(scoreApplicant({ ...founder, email: "jo@gmail.com" }, strong, 10).qualified, false);
+  assert.equal(scoreApplicant({ ...founder, email: "jo@mailinator.com" }, strong, 10).qualified, false);
+  assert.equal(scoreApplicant({ ...founder, email: "jo@other.io" }, strong, 10).qualified, false);
+  assert.equal(scoreApplicant(founder, { ...strong, domainAgeDays: 30 }, 10).qualified, false);
+  assert.equal(scoreApplicant(founder, { ...strong, description: null, text: "A blog about my holidays" }, 10).qualified, false);
+  assert.equal(scoreApplicant(founder, null, 0).qualified, false);
+});
+
+test("a lookup that failed scores nothing but blocks nothing", () => {
+  const fit = scoreApplicant(founder, { ...strong, mail: null, domainAgeDays: null }, 70);
+  assert.deepEqual(fit.blockers, []);
+  assert.equal(fit.score, 100 - 5 - 10 - 7);
+  assert.equal(fit.qualified, true);
+});
+
+test("shared inboxes and thin capacity lose points", () => {
+  const fit = scoreApplicant({ ...founder, email: "info@acme.io", teamSize: "1", monthlyOutreach: "0-100", monthlyBudget: "Under $50", crm: "None" }, { ...strong, mail: { mx: true, spf: false, dmarc: false }, domainAgeDays: 200 }, 70);
+  assert.equal(fit.tests.find((t) => t.id === "email").points, 8);
   assert.equal(fit.qualified, false);
-  assert.equal(fit.score, 0);
-  assert.equal(fit.tests.length, 9);
-  assert.equal(fit.tests.reduce((s, t) => s + t.max, 0), 100, "tests total 100 points");
+  assert.ok(fit.score < 70, `score ${fit.score}`);
 });
 
 test("subdomains of the company count as the company's email domain", () => {
   assert.equal(emailDomain("A@Mail.Acme.io"), "mail.acme.io");
-  const fit = scoreApplicant({ email: "a@mail.acme.io", domain: "acme.io", role: "", useCase: "" }, null, 60);
-  assert.equal(fit.tests.find((t) => t.id === "email").points, 20);
-});
-
-test("a solo founder with a weak site falls below the bar", () => {
-  const fit = scoreApplicant({ email: "me@solo.dev", domain: "solo.dev", role: "Founder", useCase: "", teamSize: "1", monthlyOutreach: "0-100" }, { name: "Solo", description: null, text: "", readiness: 30 }, 60);
-  assert.equal(fit.qualified, false);
-  assert.ok(fit.score < 60, `score ${fit.score}`);
+  const fit = scoreApplicant({ ...founder, email: "a@mail.acme.io" }, strong, 70);
+  assert.equal(fit.tests.find((t) => t.id === "email").points, 15);
 });
 
 test("an invited application is approved; a waitlisted one is not (in-memory store)", async () => {

@@ -415,7 +415,7 @@ body:has(.portal) .assistant-fab {
 
 .site.bg-zinc-950, .site .bg-zinc-950 { background-color: #F6F5F2; }
 .site .bg-zinc-900, .site .bg-zinc-900\/60 { background-color: #fff; }
-.site .text-white:not([class*="bg-"]):not(.btn-primary) { color: #111114; }
+.site .text-white:not([class^="bg-"]):not([class*=" bg-"]):not(.btn-primary) { color: #111114; }
 .site .text-zinc-100, .site .text-zinc-200, .site .text-zinc-300 { color: #2B2A31; }
 .site .text-zinc-400, .site .text-zinc-500, .site .text-zinc-600 { color: #6B6A72; }
 .site .text-violet-200, .site .text-violet-300, .site .text-violet-400 { color: #5B3DF5; }

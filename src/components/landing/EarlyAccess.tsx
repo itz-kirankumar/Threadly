@@ -10,12 +10,12 @@ export default function EarlyAccess() {
           <p className="eyebrow">Eligibility</p>
           <h2 className="mt-4 font-display text-5xl leading-tight tracking-tight">Request an invitation</h2>
           <p className="mt-4 text-zinc-600">
-            Threadly onboards teams that can put leads to work. When you apply we read your company website, audit its AI readiness and score your business against a set of lead-generation checks. Pass the bar and you are onboarded on the spot; otherwise we tell you plainly that we cannot onboard you yet.
+            Threadly onboards teams that can put leads to work. When you apply we check your domain and mail setup, read your website and score your business across identity, business, capacity and intent. Pass and you are onboarded on the spot; otherwise we tell you plainly that we cannot onboard you yet.
           </p>
           <ul className="mt-6 space-y-2 text-sm text-zinc-700">
-            <li>✓ Work email on your company&apos;s domain</li>
-            <li>✓ A live website that says what you sell, to businesses</li>
-            <li>✓ A team and an outreach plan to use the leads</li>
+            <li>✓ Personal work email on your company&apos;s domain</li>
+            <li>✓ An established website selling to businesses</li>
+            <li>✓ A team, budget and sending setup to use the leads</li>
             <li>Already onboarded? <Link href="/portal" className="font-semibold text-zinc-900 underline underline-offset-4">Sign in</Link></li>
           </ul>
         </div>

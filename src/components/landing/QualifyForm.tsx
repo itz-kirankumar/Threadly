@@ -5,6 +5,7 @@ import { useState } from "react";
 
 interface Test {
   id: string;
+  group: string;
   label: string;
   points: number;
   max: number;
@@ -17,17 +18,23 @@ interface Outcome {
   score: number;
   threshold?: number;
   tests?: Test[];
+  blockers?: string[];
+  attemptsLeft?: number;
+  locked?: boolean;
   company?: string;
   already?: boolean;
 }
 
 const TEAM_SIZES = ["1", "2-10", "11-50", "51-200", "200+"];
 const VOLUMES = ["0-100", "100-500", "500-2000", "2000+"];
+const BUDGETS = ["Under $50", "$50-200", "$200-1,000", "$1,000+"];
+const CRMS = ["None", "Spreadsheets", "HubSpot", "Salesforce", "Other CRM"];
+const GROUPS = ["Identity", "Business", "Capacity", "Intent"];
 
 // Onboarding eligibility: the server runs the business-capability tests and
 // either onboards the applicant or says, plainly, that it cannot yet.
 export default function QualifyForm({ defaultDomain = "", pack, compact = false }: { defaultDomain?: string; pack?: string; compact?: boolean }) {
-  const [form, setForm] = useState({ email: "", domain: defaultDomain, role: "", teamSize: "", monthlyOutreach: "", useCase: "" });
+  const [form, setForm] = useState({ email: "", domain: defaultDomain, role: "", teamSize: "", monthlyOutreach: "", monthlyBudget: "", crm: "", useCase: "" });
   const [agree, setAgree] = useState(false);
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const [error, setError] = useState("");
@@ -58,7 +65,7 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
         <span className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900" aria-hidden />
         <p className="mt-4 font-semibold">Running eligibility checks</p>
         <ul className="mt-3 space-y-1 text-sm text-zinc-500">
-          {["Reading your company website", "Auditing AI readiness", "Checking business signals", "Scoring lead-generation fit"].map((s, i) => (
+          {["Reading your company website", "Checking domain age and mail records", "Auditing AI readiness", "Scoring your business"].map((s, i) => (
             <li key={s} className="demo-line-in" style={{ animationDelay: `${i * 600}ms` }}>{s}</li>
           ))}
         </ul>
@@ -77,22 +84,38 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
         <p className="mt-2 text-sm leading-relaxed text-zinc-600">
           {invited
             ? `${outcome.already ? "This email is already approved." : "Your invite is in your inbox."} Sign in with Google as ${form.email || "the email you applied with"}${pack ? ` and pick the ${pack} pack` : ""} to start.`
-            : "Threadly is invite-only and onboards teams that pass our lead-generation checks. Your application is kept on file; if your team, website or outreach plans change, apply again with a work email on your company's domain."}
+            : outcome.locked ? "You have used all your applications for this email. We keep your application on file." : "Threadly is invite-only and onboards teams that pass our lead-generation checks. Your application is kept on file."}
         </p>
-        {outcome.tests && outcome.tests.length > 0 && (
-          <ul className="mt-4 grid gap-1.5 sm:grid-cols-2">
-            {outcome.tests.map((t, i) => (
-              <li key={t.id} className="demo-pop-in flex items-start gap-2 rounded-lg border border-zinc-200 px-2.5 py-2 text-xs" style={{ animationDelay: `${i * 60}ms` }}>
-                <span aria-hidden className={t.points === t.max ? "text-emerald-600" : t.points > 0 ? "text-amber-600" : "text-rose-600"}>{t.points === t.max ? "✓" : t.points > 0 ? "◐" : "✕"}</span>
-                <span className="min-w-0 flex-1"><span className="font-semibold">{t.label}</span> <span className="text-zinc-500">{t.points}/{t.max}</span><span className="block truncate text-zinc-500">{t.detail}</span></span>
-              </li>
-            ))}
-          </ul>
+        {outcome.blockers && outcome.blockers.length > 0 && (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3">
+            <p className="text-xs font-semibold text-rose-800">Required before we can onboard you</p>
+            <ul className="mt-1 space-y-0.5 text-sm text-rose-800">{outcome.blockers.map((b) => <li key={b}>{b}</li>)}</ul>
+          </div>
         )}
+        {GROUPS.map((group) => {
+          const tests = (outcome.tests ?? []).filter((x) => x.group === group);
+          if (!tests.length) return null;
+          const got = tests.reduce((s, x) => s + x.points, 0);
+          const max = tests.reduce((s, x) => s + x.max, 0);
+          return (
+            <section key={group} className="mt-4">
+              <p className="flex items-center justify-between text-xs font-semibold text-zinc-900"><span>{group}</span><span className="tabular-nums text-zinc-500">{got}/{max}</span></p>
+              <span className="mt-1 block h-1 overflow-hidden rounded-full bg-zinc-100"><span className="demo-bar block h-full rounded-full bg-violet-600" style={{ ["--bar-to" as string]: `${(got / max) * 100}%` }} /></span>
+              <ul className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                {tests.map((x) => (
+                  <li key={x.id} className="flex items-start gap-1.5 text-xs">
+                    <span aria-hidden className={x.passed ? "text-emerald-600" : x.points > 0 ? "text-amber-600" : "text-rose-600"}>{x.passed ? "✓" : x.points > 0 ? "◐" : "✕"}</span>
+                    <span className="min-w-0"><span className="text-zinc-900">{x.label}</span><span className="block truncate text-zinc-500">{x.detail}</span></span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })}
         {invited ? (
           <Link href="/portal" className="mt-6 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Sign in and start</Link>
         ) : (
-          <button type="button" onClick={() => setOutcome(null)} className="mt-6 text-sm font-semibold text-zinc-900 underline underline-offset-4">Apply with different details</button>
+          outcome.locked || !outcome.attemptsLeft ? null : <button type="button" onClick={() => setOutcome(null)} className="mt-6 text-sm font-semibold text-zinc-900 underline underline-offset-4">Update my details ({outcome.attemptsLeft} {outcome.attemptsLeft === 1 ? "try" : "tries"} left)</button>
         )}
       </div>
     );
@@ -125,12 +148,26 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
           </select>
         </label>
       </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1 text-xs font-medium text-zinc-600">Monthly lead generation budget
+          <select value={form.monthlyBudget} onChange={set("monthlyBudget")} className={field}>
+            <option value="">Choose</option>
+            {BUDGETS.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-zinc-600">Where you track leads today
+          <select value={form.crm} onChange={set("crm")} className={field}>
+            <option value="">Choose</option>
+            {CRMS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+      </div>
       <label className="grid gap-1 text-xs font-medium text-zinc-600">Who do you want to reach, and how do you find them today?
         <textarea rows={compact ? 2 : 3} value={form.useCase} onChange={set("useCase")} placeholder="Heads of sales at mid-market SaaS companies; we prospect by hand on LinkedIn" className={field} />
       </label>
       <label className="flex items-start gap-2 text-xs text-zinc-600">
         <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5" required />
-        <span>Threadly may read my company&apos;s public website to check eligibility, and I accept the <Link href="/terms" className="underline">Terms</Link> and <Link href="/privacy" className="underline">Privacy policy</Link>.</span>
+        <span>Threadly may read my company&apos;s public website and domain records to check eligibility, and I accept the <Link href="/terms" className="underline">Terms</Link> and <Link href="/privacy" className="underline">Privacy policy</Link>.</span>
       </label>
       {state === "error" && <p className="text-sm text-rose-700">{error}</p>}
       <button type="submit" disabled={!agree} className="rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_-12px_rgba(124,58,237,0.7)] transition hover:bg-violet-500 disabled:opacity-40">
