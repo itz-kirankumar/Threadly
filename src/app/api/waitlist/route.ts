@@ -1,9 +1,11 @@
 import { readJsonBody, RequestError } from "@/lib/api-request";
 import { sendLifecycleEmail } from "@/lib/email";
 import { parseAuditDomain } from "@/lib/geo/openseo-engine";
-import { fetchPage } from "@/lib/prospecting/web";
+import { fetchHomepageRaw, fetchPage } from "@/lib/prospecting/web";
+import { runOpenSeoAudit } from "@/lib/geo/openseo-engine";
+import { auditSite } from "@/lib/geo/site-audit";
 import { checkRateLimit, requestAddressKey } from "@/lib/rate-limit";
-import { scoreApplicant, type ApplicantSite } from "@/lib/waitlist/score";
+import { OUTREACH_VOLUMES, QUALIFY_SCORE, scoreApplicant, TEAM_SIZES, type ApplicantSite } from "@/lib/waitlist/score";
 import { loadApplication, saveApplication, type WaitlistApplication } from "@/lib/waitlist/store";
 
 export const runtime = "nodejs";
@@ -26,6 +28,8 @@ export async function POST(request: Request) {
   const domain = parseAuditDomain(clean(body.domain, 120));
   const role = clean(body.role, 80);
   const useCase = clean(body.useCase, 600);
+  const teamSize = (TEAM_SIZES as readonly string[]).includes(String(body.teamSize)) ? String(body.teamSize) : "";
+  const monthlyOutreach = (OUTREACH_VOLUMES as readonly string[]).includes(String(body.monthlyOutreach)) ? String(body.monthlyOutreach) : "";
   if (!EMAIL.test(email)) return Response.json({ error: "Enter a valid email address." }, { status: 400 });
   if (!domain) return Response.json({ error: "Enter your company website, like acme.com." }, { status: 400 });
 
@@ -36,20 +40,34 @@ export async function POST(request: Request) {
 
   const existing = await loadApplication(email).catch(() => null);
   if (existing?.status === "invited") {
-    return Response.json({ status: "invited", score: existing.score, reasons: existing.reasons, already: true });
+    return Response.json({ status: "invited", score: existing.score, reasons: existing.reasons, tests: existing.tests ?? [], already: true });
   }
 
   let site: ApplicantSite | null = null;
   let company = domain;
   try {
-    const page = await fetchPage(domain, 8000);
+    const [page, crawl, home] = await Promise.all([
+      fetchPage(domain, 8000),
+      runOpenSeoAudit(domain).catch(() => null),
+      fetchHomepageRaw(domain).catch(() => null),
+    ]);
     company = page.siteName ?? domain;
-    site = { name: company, description: page.description, text: [page.title, ...page.headings, ...page.paragraphs.slice(0, 12)].filter(Boolean).join(" ").slice(0, 6000) };
+    const readiness = crawl && home
+      ? auditSite({
+          hasRobotsTxt: crawl.hasRobotsTxt,
+          hasSitemap: crawl.hasSitemap,
+          hasLlmsTxt: crawl.hasLlmsTxt,
+          crawlersBlocked: crawl.crawlerStatuses.filter((b) => !b.allowed).length,
+          crawlersTotal: crawl.crawlerStatuses.length,
+          ...home,
+        }).score
+      : null;
+    site = { name: company, description: page.description, text: [page.title, ...page.headings, ...page.paragraphs.slice(0, 12)].filter(Boolean).join(" ").slice(0, 6000), readiness };
   } catch {
     site = null;
   }
 
-  const fit = scoreApplicant({ email, domain, role, useCase }, site);
+  const fit = scoreApplicant({ email, domain, role, useCase, teamSize, monthlyOutreach }, site);
   const now = new Date().toISOString();
   const application: WaitlistApplication = {
     email,
@@ -58,6 +76,7 @@ export async function POST(request: Request) {
     useCase,
     score: fit.score,
     reasons: fit.reasons,
+    tests: fit.tests,
     status: fit.qualified ? "invited" : "waitlisted",
     appliedAt: existing?.appliedAt ?? now,
     ...(fit.qualified ? { invitedAt: now } : {}),
@@ -72,5 +91,5 @@ export async function POST(request: Request) {
   if (fit.qualified || !existing) {
     await sendLifecycleEmail(fit.qualified ? "beta-invite" : "beta-waitlisted", email, { company });
   }
-  return Response.json({ status: application.status, score: fit.score, reasons: fit.reasons });
+  return Response.json({ status: application.status, score: fit.score, threshold: QUALIFY_SCORE, reasons: fit.reasons, tests: fit.tests, company });
 }

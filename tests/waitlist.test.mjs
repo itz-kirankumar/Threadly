@@ -11,29 +11,35 @@ const b2bSite = {
   text: "Built for teams. Book a demo. Pricing. Trusted by 400 customers. Integrations with Salesforce.",
 };
 
-test("a founder on a work email with a B2B homepage and an outbound use case qualifies", () => {
-  const fit = scoreApplicant({ email: "jo@acme.io", domain: "acme.io", role: "Co-founder & CEO", useCase: "Find mid-market finance teams and book outbound meetings for our sales team" }, b2bSite, 60);
+test("a founder with a team, outreach plan, work email and B2B site qualifies", () => {
+  const fit = scoreApplicant(
+    { email: "jo@acme.io", domain: "acme.io", role: "Co-founder & CEO", useCase: "Find mid-market finance teams and book outbound meetings", teamSize: "11-50", monthlyOutreach: "500-2000" },
+    { ...b2bSite, readiness: 72 },
+    60,
+  );
   assert.equal(fit.qualified, true);
-  assert.ok(fit.score >= 90, `score ${fit.score}`);
-  assert.ok(fit.reasons.some((r) => r.includes("work email on the company's domain")));
+  assert.equal(fit.score, 100);
+  assert.ok(fit.tests.every((t) => t.points === t.max));
 });
 
-test("a personal email with no readable site and no use case is waitlisted, with reasons", () => {
+test("a personal email with no readable site and nothing else is not onboarded, with every test shown", () => {
   const fit = scoreApplicant({ email: "someone@gmail.com", domain: "unknown.example", role: "", useCase: "" }, null, 60);
   assert.equal(fit.qualified, false);
   assert.equal(fit.score, 0);
-  assert.deepEqual(fit.reasons, ["+0 personal email address", "+0 company homepage could not be read"]);
+  assert.equal(fit.tests.length, 9);
+  assert.equal(fit.tests.reduce((s, t) => s + t.max, 0), 100, "tests total 100 points");
 });
 
 test("subdomains of the company count as the company's email domain", () => {
   assert.equal(emailDomain("A@Mail.Acme.io"), "mail.acme.io");
   const fit = scoreApplicant({ email: "a@mail.acme.io", domain: "acme.io", role: "", useCase: "" }, null, 60);
-  assert.ok(fit.reasons.includes("+25 work email on the company's domain"));
+  assert.equal(fit.tests.find((t) => t.id === "email").points, 20);
 });
 
-test("the score never exceeds 100", () => {
-  const fit = scoreApplicant({ email: "jo@acme.io", domain: "acme.io", role: "VP Sales", useCase: "outbound leads pipeline for our sales team across accounts in our ICP".repeat(3) }, b2bSite, 60);
-  assert.ok(fit.score <= 100);
+test("a solo founder with a weak site falls below the bar", () => {
+  const fit = scoreApplicant({ email: "me@solo.dev", domain: "solo.dev", role: "Founder", useCase: "", teamSize: "1", monthlyOutreach: "0-100" }, { name: "Solo", description: null, text: "", readiness: 30 }, 60);
+  assert.equal(fit.qualified, false);
+  assert.ok(fit.score < 60, `score ${fit.score}`);
 });
 
 test("an invited application is approved; a waitlisted one is not (in-memory store)", async () => {

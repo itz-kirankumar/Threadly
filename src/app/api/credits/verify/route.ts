@@ -1,7 +1,7 @@
 import { errorResponse, readJsonBody } from "@/lib/api-request";
 import { resolveWorkspaceAccess } from "@/lib/geo/team";
 import { razorpayFetchPayment, verifyPaymentSignature } from "@/lib/billing/razorpay";
-import { grant } from "@/lib/credits/ledger";
+import { grantPack } from "@/lib/credits/ledger";
 import { decideCreditGrant } from "@/lib/credits/fulfil";
 
 export const runtime = "nodejs";
@@ -33,8 +33,8 @@ export async function POST(request: Request) {
     const decision = decideCreditGrant({ provider: "razorpay", paymentId: payment.id, status: payment.status, amount: payment.amount, currency: payment.currency, tags: payment.notes });
     if (!decision.grant) return Response.json({ error: `No credits added: ${decision.why}.` }, { status: 402, headers: noStore });
     if (decision.workspaceUid !== access.workspaceUid) return Response.json({ error: "Payment is not bound to this workspace." }, { status: 400, headers: noStore });
-    const result = await grant(decision.workspaceUid, decision.credits, decision.reason, decision.ref);
-    return Response.json({ added: result.granted ? decision.credits : 0, balance: result.balance }, { headers: noStore });
+    const result = await grantPack(decision.workspaceUid, decision.credits, decision.reason, decision.ref);
+    return Response.json({ added: result.granted ? decision.credits + result.bonus : 0, bonus: result.bonus, balance: result.balance }, { headers: noStore });
   } catch (error) {
     return errorResponse(error, "POST /api/credits/verify");
   }

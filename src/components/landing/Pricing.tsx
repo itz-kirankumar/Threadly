@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CREDIT_LABELS, CREDIT_PACKS, CREDIT_RATES, WELCOME_CREDITS, formatPackPrice, type CreditAction } from "@/lib/credits/rates";
+import { CREDIT_LABELS, CREDIT_PACKS, CREDIT_RATES, FIRST_PACK_BONUS_CAP, FIRST_PACK_BONUS_PERCENT, WELCOME_CREDITS, formatPackPrice, type CreditAction } from "@/lib/credits/rates";
 
 // Pay for what you use, invite-only. Every action in a workspace costs
 // credits; packs buy credits at a lower rate. Rates are set below the usual
@@ -81,7 +81,7 @@ export default function Pricing({ compact = false }: { compact?: boolean }) {
           </div>
         ))}
       </div>
-      <p className="mt-4 text-center text-xs text-zinc-500">Credits do not expire during the beta. Plans cover AI visibility scans for teams on a fixed term. Prices in USD, excluding tax.</p>
+      <p className="mt-4 text-center text-xs text-zinc-500">{FIRST_PACK_BONUS_PERCENT > 0 ? `Your first pack earns ${FIRST_PACK_BONUS_PERCENT === 100 ? "double credits" : `+${FIRST_PACK_BONUS_PERCENT}% credits`}, up to ${FIRST_PACK_BONUS_CAP.toLocaleString("en-US")} extra. ` : ""}Credits do not expire during the beta. Plans cover AI visibility scans for teams on a fixed term. Prices in USD, excluding tax.</p>
 
       {!compact && (
         <div className="mt-14 overflow-x-auto rounded-2xl border border-white/10">

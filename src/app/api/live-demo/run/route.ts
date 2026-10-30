@@ -7,7 +7,8 @@ import { contactProvider } from "@/lib/prospecting/contacts";
 import { runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
 import { draftCompanyEmail, draftSocialReply, findSocialLeads, socialTopic, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
-import { fetchPreview, fetchSiteIcon, mapLimit, searchAvailable } from "@/lib/prospecting/web";
+import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, searchAvailable } from "@/lib/prospecting/web";
+import { auditSite } from "@/lib/geo/site-audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,16 +84,30 @@ export async function POST(request: Request) {
         begin("crawler");
         log(`reading https://${target}/robots.txt`);
         log(`checking https://${target}/llms.txt`);
-        const audit = await runOpenSeoAudit(target);
+        const [audit, home] = await Promise.all([
+          runOpenSeoAudit(target),
+          fetchHomepageRaw(target).catch(() => ({ html: "", finalUrl: `https://${target}/`, status: 0, ms: 0 })),
+        ]);
         for (const b of audit.crawlerStatuses) log(`${b.userAgent}: ${b.status === "blocked" ? "blocked" : "can crawl"}`);
+        log(`reading homepage markup: title, description, schema.org, Open Graph (${home.ms} ms)`);
+        const site = auditSite({
+          hasRobotsTxt: audit.hasRobotsTxt,
+          hasSitemap: audit.hasSitemap,
+          hasLlmsTxt: audit.hasLlmsTxt,
+          crawlersBlocked: audit.crawlerStatuses.filter((b) => !b.allowed).length,
+          crawlersTotal: audit.crawlerStatuses.length,
+          ...home,
+        });
+        log(`scored ${site.passed} of ${site.total} checks: ${site.score}/100`);
         send({
           type: "result",
           step: "crawler",
           data: {
-            score: Math.round((audit.checksPassed / audit.checksTotal) * 100),
-            checksPassed: audit.checksPassed,
-            checksTotal: audit.checksTotal,
-            checks: audit.checks.map((c) => ({ label: c.label, passed: c.passed, detail: c.detail })),
+            score: site.score,
+            grade: site.grade,
+            passed: site.passed,
+            total: site.total,
+            categories: site.categories.map((c) => ({ name: c.name, score: c.score, max: c.max, checks: c.checks.map((k) => ({ label: k.label, passed: k.passed, detail: k.detail, weight: k.weight })) })),
             bots: audit.crawlerStatuses.map((b) => ({ name: b.userAgent, engine: b.engine, status: b.status })),
             issues: audit.criticalIssues,
           },

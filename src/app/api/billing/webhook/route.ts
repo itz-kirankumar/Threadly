@@ -1,5 +1,5 @@
 import { withWorkspace } from "@/lib/portal-db";
-import { grant } from "@/lib/credits/ledger";
+import { grantPack } from "@/lib/credits/ledger";
 import { decideCreditGrant } from "@/lib/credits/fulfil";
 import { savePlan } from "@/lib/geo/plan";
 import { adminConfigured } from "@/lib/geo/admin-store";
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     });
     if (decision.grant) {
       try {
-        await grant(decision.workspaceUid, decision.credits, decision.reason, decision.ref);
+        await grantPack(decision.workspaceUid, decision.credits, decision.reason, decision.ref);
       } catch (error) {
         console.error("[credits] dodo webhook grant failed", error);
         return Response.json({ error: "Credit grant failed." }, { status: 500 });

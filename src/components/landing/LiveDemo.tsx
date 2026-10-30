@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import OnboardModal from "./OnboardModal";
 import {
   DEMO_STEPS,
   DEMO_STEP_LABELS,
@@ -50,19 +51,47 @@ function Logo({ name, icon, size = "h-8 w-8" }: { name: string; icon: string | n
   );
 }
 
-// Actions the public demo cannot take: replying, sending, saving. They lead
-// to sign-in (invited accounts) or the beta request.
-function LockedAction({ label }: { label: string }) {
+// The free run reads and drafts; sending, posting and tracking happen in a
+// workspace. These buttons open the onboarding sheet.
+const OnboardContext = createContext<() => void>(() => {});
+
+function ActionButton({ label, tone = "dark" }: { label: string; tone?: "dark" | "green" }) {
+  const open = useContext(OnboardContext);
   return (
-    <span className="inline-flex flex-wrap items-center gap-1.5 text-xs">
-      <a href="/portal" className="inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-2.5 py-1 font-semibold text-white hover:bg-zinc-800">
-        <svg aria-hidden viewBox="0 0 16 16" className="h-3 w-3 fill-current"><path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1Zm2 6H6V4.5a2 2 0 1 1 4 0V7Z" /></svg>
-        {label}
-      </a>
-      <span className="text-zinc-500">Sign in, or <a href="#early-access" className="font-semibold text-zinc-800 underline underline-offset-2">request access</a></span>
-    </span>
+    <button type="button" onClick={open} className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-px ${tone === "green" ? "bg-emerald-600 hover:bg-emerald-500" : "bg-zinc-900 hover:bg-zinc-800"}`}>
+      {label}
+    </button>
   );
 }
+
+// Animates a number up to its value.
+function useCountUp(value: number, ms = 900): number {
+  const [shown, setShown] = useState(0);
+  const from = useRef(0);
+  useEffect(() => {
+    const start = performance.now();
+    const base = from.current;
+    let frame = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      const next = Math.round(base + (value - base) * (1 - Math.pow(1 - t, 3)));
+      setShown(next);
+      from.current = next;
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value, ms]);
+  return shown;
+}
+
+function CountUp({ value, className }: { value: number; className?: string }) {
+  return <span className={className}>{useCountUp(value)}</span>;
+}
+
+// How long a visitor can look back at an earlier step before the story
+// returns to the live one.
+const RETURN_MS = 4000;
 
 const PLATFORM_STYLE: Record<string, string> = {
   Reddit: "bg-orange-50 text-orange-800 ring-orange-200",
@@ -70,7 +99,7 @@ const PLATFORM_STYLE: Record<string, string> = {
   LinkedIn: "bg-sky-50 text-sky-800 ring-sky-200",
 };
 
-export default function LiveDemo() {
+export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonus?: { percent: number; cap: number } }) {
   const [input, setInput] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewState, setPreviewState] = useState<"none" | "loading" | "ready" | "error">("none");
@@ -90,6 +119,9 @@ export default function LiveDemo() {
   const logBox = useRef<HTMLOListElement>(null);
   const logId = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [onboardOpen, setOnboardOpen] = useState(false);
+  const autoOpened = useRef(false);
+  const openOnboard = useCallback(() => setOnboardOpen(true), []);
 
   // Type-ahead preview: name, category and icon while the visitor types.
   useEffect(() => {
@@ -246,11 +278,35 @@ export default function LiveDemo() {
     setFollow(false);
     setViewing(step);
   };
+  // The step the story should be on: the one running, else the last one
+  // with results.
+  const liveStep = runningStep ?? [...DEMO_STEPS].reverse().find((s) => results[s]) ?? "research";
+  // Looking back pauses the story briefly, then it returns to the live step.
+  useEffect(() => {
+    if (follow || phase === "idle") return;
+    const timer = setTimeout(() => {
+      setFollow(true);
+      setViewing(liveStep);
+      lastSwitch.current = Date.now();
+    }, RETURN_MS);
+    return () => clearTimeout(timer);
+  }, [follow, phase, viewing, liveStep]);
+  // At the end of the run, after the emails have been on screen a while,
+  // offer onboarding once.
+  useEffect(() => {
+    if (phase !== "done" || viewing !== "pitch" || autoOpened.current) return;
+    const timer = setTimeout(() => {
+      autoOpened.current = true;
+      setOnboardOpen(true);
+    }, 9000);
+    return () => clearTimeout(timer);
+  }, [phase, viewing]);
   const competitorsShown = results.competitors ?? streamed.competitors;
   const companiesShown = results.companies ?? streamed.companies;
   const socialShown = results.social?.leads ?? streamed.social;
 
   return (
+    <OnboardContext.Provider value={openOnboard}>
     <div id="live-demo" className="mx-auto w-full scroll-mt-24">
       <form
         onSubmit={(e) => {
@@ -324,6 +380,7 @@ export default function LiveDemo() {
               })}
             </ol>
           </div>
+          <StoryBars viewing={viewing} status={status} ready={Boolean(results[viewing])} follow={follow} />
 
           <div className="grid min-h-[560px] lg:grid-cols-[300px_minmax(0,1fr)]">
             {/* Findings rail */}
@@ -391,13 +448,13 @@ export default function LiveDemo() {
 
             {/* Stage */}
             <div className="min-w-0 px-4 py-6 sm:px-8">
-              <div key={viewing} className="demo-card-in">
+              <div key={viewing} className="demo-story-in">
                 <Stage step={viewing} status={status[viewing]} results={results} streamed={streamed} logs={logs.filter((l) => l.step === viewing)} counters={counters} brandIcon={brandIcon} />
               </div>
               {phase === "error" && (
                 <div className="mx-auto mt-6 max-w-2xl rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
                   <p>{error || "The run stopped early."}</p>
-                  <a href="#early-access" className="mt-3 inline-block rounded-lg bg-zinc-900 px-3 py-1.5 font-semibold text-white">Request early access</a>
+                  <div className="mt-3"><ActionButton label="Check eligibility for full runs" /></div>
                 </div>
               )}
             </div>
@@ -405,18 +462,54 @@ export default function LiveDemo() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 bg-white/80 px-4 py-3 sm:px-6">
             <p className="text-xs text-zinc-500">
-              {!follow && phase === "running" && runningStep ? (
-                <button type="button" onClick={() => { setFollow(true); setViewing(runningStep); }} className="font-semibold text-zinc-900 underline underline-offset-4">Back to the live step</button>
+              {!follow ? (
+                <button type="button" onClick={() => { setFollow(true); setViewing(liveStep); }} className="font-semibold text-zinc-900 underline underline-offset-4">Back to the live step</button>
               ) : (
-                "Real public web data. Nothing is stored and nothing is sent."
+                "Free run: real public data, 3 drafts, nothing sent. Full runs and sending need a workspace."
               )}
             </p>
-            <a href="#early-access" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
-              {phase === "done" ? "Get leads like these every week" : "Request early access"}
-            </a>
+            <ActionButton tone="green" label={phase === "done" ? "Get leads like these every week" : "Start with Threadly"} />
           </div>
         </div>
       )}
+      <OnboardModal
+        open={onboardOpen}
+        onClose={() => setOnboardOpen(false)}
+        bonus={bonus}
+        stats={{
+          domain: runDomain || preview?.domain || "",
+          name: brandName,
+          readiness: results.crawler?.score ?? null,
+          competitors: competitorsShown.length,
+          companies: companiesShown.length,
+          socialLeads: socialShown.length,
+          drafts: results.pitch?.length ?? 0,
+        }}
+      />
+    </div>
+    </OnboardContext.Provider>
+  );
+}
+
+// Story-style progress: one bar per step. The bar of the step on screen
+// fills while its results are shown, then the story moves on.
+function StoryBars({ viewing, status, ready, follow }: { viewing: DemoStep; status: Record<DemoStep, StepStatus>; ready: boolean; follow: boolean }) {
+  const at = DEMO_STEPS.indexOf(viewing);
+  return (
+    <div className="flex gap-1 bg-white/70 px-4 pb-2 sm:px-6" aria-hidden>
+      {DEMO_STEPS.map((s, i) => (
+        <span key={s} className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200">
+          {i < at || (i !== at && status[s] === "done" && i < at) ? (
+            <span className="block h-full w-full bg-zinc-900" />
+          ) : i === at ? (
+            ready ? (
+              <span key={`${s}-${follow}`} className={`block h-full bg-zinc-900 ${follow ? "demo-story-fill" : "w-full opacity-40"}`} />
+            ) : (
+              <span className="demo-story-wait block h-full w-1/3 bg-zinc-900/60" />
+            )
+          ) : null}
+        </span>
+      ))}
     </div>
   );
 }
@@ -438,11 +531,11 @@ function LiveCard({ step, logs, counters }: { step: DemoStep; logs: LogLine[]; c
       <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">Working on: {DEMO_STEP_LABELS[step]}</p>
       <div className="mt-5 grid grid-cols-2 gap-4">
         <div>
-          <p className="text-5xl font-semibold tabular-nums tracking-tight">{counters.searches}</p>
+          <CountUp value={counters.searches} className="block text-5xl font-semibold tabular-nums tracking-tight" />
           <p className="mt-1 text-sm text-zinc-500">web searches run</p>
         </div>
         <div>
-          <p className="text-5xl font-semibold tabular-nums tracking-tight">{counters.pages}</p>
+          <CountUp value={counters.pages} className="block text-5xl font-semibold tabular-nums tracking-tight" />
           <p className="mt-1 text-sm text-zinc-500">public pages read</p>
         </div>
       </div>
@@ -544,20 +637,33 @@ function CrawlerStage({ audit }: { audit: DemoCrawler }) {
             <circle cx="50" cy="50" r="42" className="fill-none stroke-zinc-100" strokeWidth="9" />
             <circle cx="50" cy="50" r="42" className={`demo-ring fill-none stroke-current ${tone}`} strokeWidth="9" strokeLinecap="round" strokeDasharray={circumference} style={{ ["--ring-to" as string]: `${circumference * (1 - audit.score / 100)}` }} />
           </svg>
-          <p className={`absolute inset-0 flex items-center justify-center text-4xl font-semibold tabular-nums ${tone}`}>{audit.score}</p>
+          <p className={`absolute inset-0 flex flex-col items-center justify-center ${tone}`}>
+            <CountUp value={audit.score} className="text-4xl font-semibold tabular-nums" />
+            <span className="text-xs font-semibold">Grade {audit.grade}</span>
+          </p>
         </div>
         <p className="mt-2 text-sm font-semibold">AI readiness score</p>
-        <p className="text-xs text-zinc-500">{audit.checksPassed} of {audit.checksTotal} checks passed. Crawl access does not guarantee citation.</p>
+        <p className="text-xs text-zinc-500">{audit.passed} of {audit.total} checks passed. Readiness, not a promise of citation.</p>
       </div>
-      <div className="min-w-0">
-        <ul className="grid gap-1.5 sm:grid-cols-2">
-          {audit.checks.map((c, i) => (
-            <li key={c.label} className="demo-pop-in rounded-lg border border-zinc-200 px-3 py-2" style={{ animationDelay: `${i * 90}ms` }}>
-              <p className="text-sm font-semibold"><span aria-hidden className={c.passed ? "text-emerald-600" : "text-rose-600"}>{c.passed ? "✓" : "✕"}</span> {c.label}</p>
-              <p className="truncate text-xs text-zinc-500">{c.detail}</p>
-            </li>
-          ))}
-        </ul>
+      <div className="min-w-0 space-y-3">
+        {audit.categories.map((cat, ci) => (
+          <div key={cat.name} className="demo-pop-in" style={{ animationDelay: `${ci * 140}ms` }}>
+            <div className="flex items-center gap-3">
+              <p className="w-36 shrink-0 text-xs font-semibold">{cat.name}</p>
+              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
+                <span className="demo-bar block h-full rounded-full bg-zinc-900" style={{ ["--bar-to" as string]: `${(cat.score / cat.max) * 100}%`, animationDelay: `${200 + ci * 140}ms` }} />
+              </span>
+              <span className="w-12 text-right text-xs tabular-nums text-zinc-500">{cat.score}/{cat.max}</span>
+            </div>
+            <ul className="mt-1.5 flex flex-wrap gap-1">
+              {cat.checks.map((c) => (
+                <li key={c.label} title={c.detail} className={`rounded-md px-1.5 py-0.5 text-[11px] ring-1 ${c.passed ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-rose-50 text-rose-800 ring-rose-200"}`}>
+                  {c.passed ? "✓" : "✕"} {c.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
         <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">AI crawlers</p>
         <ul className="mt-2 flex flex-wrap gap-1.5">
           {audit.bots.map((b, i) => (
@@ -567,7 +673,7 @@ function CrawlerStage({ audit }: { audit: DemoCrawler }) {
           ))}
         </ul>
         {audit.issues.length > 0 && <p className="mt-3 text-xs text-rose-700">{audit.issues[0]}</p>}
-        <div className="mt-4"><LockedAction label="Track AI visibility weekly" /></div>
+        <div className="pt-1"><ActionButton label="Track AI visibility weekly" /></div>
       </div>
     </div>
   );
@@ -644,7 +750,7 @@ function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; to
       {!live && leads.length > 0 && (
         <div className="demo-pop-in mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-900 bg-white px-4 py-2.5">
           <p className="text-sm"><span className="font-semibold">{leads.length} people</span> are asking about what you sell. Reply and track every thread from your workspace.</p>
-          <LockedAction label="Reach out to all" />
+          <ActionButton tone="green" label="Reach out to all" />
         </div>
       )}
       <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -672,7 +778,7 @@ function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; to
                         <p className="demo-type-in mt-0.5 whitespace-pre-wrap text-xs text-zinc-800">{l.reply}</p>
                       </div>
                     )}
-                    {!live && <div className="mt-2"><LockedAction label={l.reply ? "Post this reply" : "Draft a reply"} /></div>}
+                    {!live && <div className="mt-2"><ActionButton label={l.reply ? "Post this reply" : "Draft a reply"} /></div>}
                   </li>
                 ))}
                 {!items.length && <li className="rounded-xl border border-dashed border-zinc-200 p-3 text-center text-xs text-zinc-400">{live ? <span className="demo-shimmer">waiting</span> : "none found"}</li>}
@@ -715,7 +821,10 @@ function PitchStage({ drafts }: { drafts: DemoDraft[] }) {
           <span>{d.engine === "model" ? "Written for this company from its homepage" : "Composed from this company's own homepage"}</span>
           <span className="truncate">Sources: {d.sources.map((s) => s.replace(/^https?:\/\//, "").replace(/\/$/, "")).join(", ")}</span>
         </div>
-        <div className="border-t border-zinc-100 px-5 py-3"><LockedAction label="Find the decision maker and send" /></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-5 py-3">
+          <span className="text-xs text-zinc-500">The free run drafts 3 emails. A full run writes one for every company.</span>
+          <ActionButton tone="green" label="Find the decision maker and send" />
+        </div>
       </div>
     </div>
   );

@@ -88,12 +88,12 @@ function template(kind: LifecycleKind, ctx: { name?: string; plan?: string; comp
       };
     case "beta-waitlisted":
       return {
-        subject: "You're on the Threadly waitlist",
+        subject: "About your Threadly application",
         html: shell(
-          "You're on the list",
+          "We can't onboard you yet",
           `<p style="margin:0 0 12px;">Hi,</p>
-           <p style="margin:0 0 12px;">Thanks for requesting access${ctx.company ? ` for ${escapeHtml(ctx.company)}` : ""}. Threadly is invite-only while we grow, and we invite teams in batches.</p>
-           <p style="margin:0;">Applying with a work email on your company's domain, and telling us who you sell to, moves you up the list. We'll email you when a spot opens.</p>`,
+           <p style="margin:0 0 12px;">Thanks for applying${ctx.company ? ` for ${escapeHtml(ctx.company)}` : ""}. Threadly is invite-only, and we are sorry that we are unable to onboard you right now: your application did not reach our qualification bar for lead generation.</p>
+           <p style="margin:0;">We keep your application on file. If your team, website or outreach plans change, apply again with a work email on your company's domain and we will re-run the checks.</p>`,
           { label: "See pricing", url: PRICING_URL },
           "you requested early access at",
         ),

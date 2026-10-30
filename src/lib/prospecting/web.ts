@@ -300,3 +300,18 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, in
   await Promise.all(workers);
   return out;
 }
+
+// The homepage's raw HTML plus how it was served, for the readiness audit.
+// Same rules as fetchPage: public hosts only, robots.txt respected, capped.
+export async function fetchHomepageRaw(domain: string, timeoutMs = 8000): Promise<{ html: string; finalUrl: string; status: number; ms: number }> {
+  const host = await assertPublicHost(domain);
+  if (!(await robotsAllows(host, "/"))) throw new FetchRefused("robots.txt disallows ThreadlyBot");
+  const started = Date.now();
+  const { res, finalUrl } = await safeGet(`https://${domain}/`, timeoutMs);
+  const ms = Date.now() - started;
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    return { html: "", finalUrl, status: res.status, ms };
+  }
+  return { html: await readCapped(res), finalUrl, status: res.status, ms };
+}

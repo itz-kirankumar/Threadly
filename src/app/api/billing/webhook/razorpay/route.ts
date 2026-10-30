@@ -1,4 +1,4 @@
-import { grant } from "@/lib/credits/ledger";
+import { grantPack } from "@/lib/credits/ledger";
 import { decideCreditGrant } from "@/lib/credits/fulfil";
 import { withWorkspace } from "@/lib/portal-db";
 import { savePlan } from "@/lib/geo/plan";
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       const decision = decideCreditGrant({ provider: "razorpay", paymentId: payment.id, status: payment.status, amount: payment.amount, currency: payment.currency, tags: payment.notes });
       if (decision.grant) {
         try {
-          await grant(decision.workspaceUid, decision.credits, decision.reason, decision.ref);
+          await grantPack(decision.workspaceUid, decision.credits, decision.reason, decision.ref);
         } catch (error) {
           console.error("[credits] razorpay webhook grant failed", error);
           return Response.json({ error: "Credit grant failed." }, { status: 500 });

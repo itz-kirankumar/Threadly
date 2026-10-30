@@ -25,6 +25,15 @@ export const CREDIT_LABELS: Record<CreditAction, string> = {
 // Granted once to every workspace, the first time it touches credits.
 export const WELCOME_CREDITS = Number(process.env.WELCOME_CREDITS ?? "200");
 
+// The first pack a workspace buys earns bonus credits (100 = doubled),
+// capped. Applied by the ledger at grant time, not by the browser.
+export const FIRST_PACK_BONUS_PERCENT = Number(process.env.FIRST_PACK_BONUS_PERCENT ?? "100");
+export const FIRST_PACK_BONUS_CAP = Number(process.env.FIRST_PACK_BONUS_CAP ?? "5000");
+
+export function firstPackBonus(credits: number): number {
+  return Math.max(0, Math.min(FIRST_PACK_BONUS_CAP, Math.round((credits * FIRST_PACK_BONUS_PERCENT) / 100)));
+}
+
 export type CreditPackId = "starter" | "growth" | "scale";
 
 // Server-authoritative pack prices in the smallest currency unit. Clients

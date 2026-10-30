@@ -7,10 +7,11 @@ import LiveDemo from "@/components/landing/LiveDemo";
 import Pricing from "@/components/landing/Pricing";
 import Faq, { FAQ_ITEMS } from "@/components/landing/Faq";
 import EarlyAccess from "@/components/landing/EarlyAccess";
+import { FIRST_PACK_BONUS_CAP, FIRST_PACK_BONUS_PERCENT } from "@/lib/credits/rates";
 
 const STEPS = [
   { title: "Research your company", body: "Reads your homepage for what you sell, the words you use and the audiences you name." },
-  { title: "AI crawler check", body: "Reads robots.txt and llms.txt to see which AI assistants can read your site, and scores it." },
+  { title: "AI readiness audit", body: "20 checks across crawler access, technical health, content clarity, structured data and business signals, scored out of 100." },
   { title: "Map competitors", body: "Web searches and comparison articles, each candidate checked against its own homepage." },
   { title: "Define campaigns", body: "Audiences your site and your competitors name, each turned into a search for companies." },
   { title: "Find potential customers", body: "Company homepages read one by one, with publishers, directories and competitors left out." },
@@ -71,7 +72,7 @@ export default function LandingPage() {
               <span className="rounded-full border border-zinc-200 bg-white px-3 py-1">No card needed</span>
             </div>
             <div className="mt-8">
-              <LiveDemo />
+              <LiveDemo bonus={{ percent: FIRST_PACK_BONUS_PERCENT, cap: FIRST_PACK_BONUS_CAP }} />
             </div>
           </div>
         </section>

@@ -305,6 +305,22 @@ body:has(.portal) .assistant-fab {
 }
 .demo-ring { animation: demo-ring 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) 200ms both; }
 @keyframes demo-ring { from { stroke-dashoffset: 264; } to { stroke-dashoffset: var(--ring-to); } }
+@keyframes demo-story-in {
+  from { opacity: 0; transform: translateX(28px) scale(0.985); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.demo-story-in { animation: demo-story-in 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes demo-story-fill { from { width: 0%; } to { width: 100%; } }
+.demo-story-fill { animation: demo-story-fill 4200ms linear both; }
+@keyframes demo-story-wait { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+.demo-story-wait { animation: demo-story-wait 1.4s ease-in-out infinite; }
+@keyframes demo-bar { from { width: 0; } to { width: var(--bar-to); } }
+.demo-bar { animation: demo-bar 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes demo-modal-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.demo-modal-in { animation: demo-modal-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .demo-logo-in { animation: demo-logo-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @keyframes demo-shimmer { 0% { background-position: -120% 0; } 100% { background-position: 220% 0; } }
 .demo-shimmer {
@@ -326,7 +342,9 @@ body:has(.portal) .assistant-fab {
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
 }
 @media (prefers-reduced-motion: reduce) {
-  .demo-card-in, .demo-pop-in, .demo-line-in, .demo-type-in, .demo-workspace-in, .demo-caret, .demo-logo-in, .demo-shimmer, .demo-ring { animation: none !important; }
+  .demo-card-in, .demo-pop-in, .demo-line-in, .demo-type-in, .demo-workspace-in, .demo-caret, .demo-logo-in, .demo-shimmer, .demo-ring, .demo-story-in, .demo-story-fill, .demo-story-wait, .demo-bar, .demo-modal-in { animation: none !important; }
+  .demo-story-fill { width: 100%; }
+  .demo-bar { width: var(--bar-to); }
   .demo-ring { stroke-dashoffset: var(--ring-to); }
 }
 

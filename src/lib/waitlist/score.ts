@@ -1,15 +1,18 @@
-// Lead-generation fit score for beta applicants. Threadly is invite-only:
-// an applicant is invited automatically when the score clears the bar,
-// otherwise they stay on the waitlist. Every point comes from something
-// checkable (their email, their own homepage, what they told us), and the
-// reasons are kept so the decision can be explained. Dependency-free so it
-// is unit-testable in plain node.
+// Onboarding qualification for the invite-only beta. An applicant runs a set
+// of business-capability tests; each test is worth fixed points and the
+// total is out of 100. Clearing the bar onboards them at once; anyone below
+// it is told plainly that we cannot onboard them now. Every test reads
+// something checkable: their email, their company's own homepage and its
+// readiness audit, and what they told us. Dependency-free so it is
+// unit-testable in plain node.
 
 export interface ApplicantInput {
   email: string;
   domain: string;
   role: string;
   useCase: string;
+  teamSize?: string; // "1" | "2-10" | "11-50" | "51-200" | "200+"
+  monthlyOutreach?: string; // "0-100" | "100-500" | "500-2000" | "2000+"
 }
 
 // What Threadly could read on the applicant's homepage; null when it could
@@ -18,15 +21,29 @@ export interface ApplicantSite {
   name: string;
   description: string | null;
   text: string;
+  readiness?: number | null; // AI readiness audit score, 0-100
+}
+
+export interface QualificationTest {
+  id: string;
+  label: string;
+  points: number;
+  max: number;
+  passed: boolean;
+  detail: string;
 }
 
 export interface FitScore {
   score: number;
   qualified: boolean;
+  tests: QualificationTest[];
   reasons: string[];
 }
 
 export const QUALIFY_SCORE = Number(process.env.WAITLIST_QUALIFY_SCORE ?? "60");
+
+export const TEAM_SIZES = ["1", "2-10", "11-50", "51-200", "200+"] as const;
+export const OUTREACH_VOLUMES = ["0-100", "100-500", "500-2000", "2000+"] as const;
 
 const FREE_MAIL = new Set([
   "gmail.com", "googlemail.com", "yahoo.com", "ymail.com", "outlook.com", "hotmail.com", "live.com", "msn.com",
@@ -59,35 +76,39 @@ function sameCompany(a: string, b: string): boolean {
 }
 
 export function scoreApplicant(input: ApplicantInput, site: ApplicantSite | null, threshold = QUALIFY_SCORE): FitScore {
-  let score = 0;
-  const reasons: string[] = [];
-  const add = (points: number, reason: string) => {
-    score += points;
-    reasons.push(`+${points} ${reason}`);
-  };
+  const tests: QualificationTest[] = [];
+  const test = (id: string, label: string, max: number, points: number, detail: string) =>
+    tests.push({ id, label, max, points, passed: points > 0, detail });
 
   const mailDomain = emailDomain(input.email);
-  if (FREE_MAIL.has(mailDomain)) reasons.push("+0 personal email address");
-  else if (sameCompany(mailDomain, input.domain)) add(25, "work email on the company's domain");
-  else add(10, "work email on another domain");
+  if (FREE_MAIL.has(mailDomain)) test("email", "Work email", 20, 0, "Personal email address");
+  else if (sameCompany(mailDomain, input.domain)) test("email", "Work email", 20, 20, "On the company's own domain");
+  else test("email", "Work email", 20, 8, "Business email on another domain");
 
-  if (site) {
-    add(15, "company homepage is live and readable");
-    if (site.description && site.description.length >= 30) add(10, "homepage states what the company does");
-    const text = `${site.description ?? ""} ${site.text}`;
-    const hits = B2B_SIGNALS.filter((re) => re.test(text)).length;
-    if (hits) add(Math.min(20, hits * 5), `sells to businesses (${hits} signal${hits === 1 ? "" : "s"} on the homepage)`);
-  } else {
-    reasons.push("+0 company homepage could not be read");
-  }
+  test("site", "Company website is live", 10, site ? 10 : 0, site ? "Homepage read" : "Homepage could not be read");
+  test("clear", "Website says what you do", 8, site?.description && site.description.length >= 30 ? 8 : 0, site?.description ? "Clear description found" : "No clear description");
+  const hits = site ? B2B_SIGNALS.filter((re) => re.test(`${site.description ?? ""} ${site.text}`)).length : 0;
+  test("b2b", "Sells to businesses", 15, Math.min(15, hits * 3), `${hits} of ${B2B_SIGNALS.length} B2B signals on the homepage`);
+  const readiness = site?.readiness ?? null;
+  test("readiness", "Web presence ready (audit 50+)", 10, readiness !== null && readiness >= 50 ? 10 : 0, readiness === null ? "Not audited" : `AI readiness ${readiness}/100`);
 
-  if (DECISION_ROLE.test(input.role)) add(15, "decision maker");
-  else if (GTM_ROLE.test(input.role)) add(10, "sales, growth or marketing role");
+  if (DECISION_ROLE.test(input.role)) test("role", "Decision maker", 12, 12, input.role);
+  else if (GTM_ROLE.test(input.role)) test("role", "Decision maker", 12, 8, `${input.role} (sales, growth or marketing)`);
+  else test("role", "Decision maker", 12, 0, input.role ? input.role : "Role not given");
 
   const useCase = input.useCase.trim();
-  if (useCase.length >= 40) add(5, "described the use case");
-  if (OUTBOUND_USE.test(useCase)) add(10, "use case is lead generation");
+  test("usecase", "Lead generation use case", 10, OUTBOUND_USE.test(useCase) ? 10 : useCase.length >= 40 ? 4 : 0, useCase ? (OUTBOUND_USE.test(useCase) ? "About finding customers" : "Described, not about leads") : "Not described");
 
-  score = Math.min(100, score);
-  return { score, qualified: score >= threshold, reasons };
+  const team = input.teamSize ?? "";
+  test("team", "Team in place", 8, team === "1" ? 3 : team && (TEAM_SIZES as readonly string[]).includes(team) ? 8 : 0, team ? `${team} people` : "Not given");
+  const volume = input.monthlyOutreach ?? "";
+  test("volume", "Outreach capacity", 7, volume === "500-2000" || volume === "2000+" ? 7 : volume === "100-500" ? 4 : 0, volume ? `${volume} prospects a month` : "Not given");
+
+  const score = Math.min(100, tests.reduce((s, t) => s + t.points, 0));
+  return {
+    score,
+    qualified: score >= threshold,
+    tests,
+    reasons: tests.map((t) => `+${t.points} ${t.label.toLowerCase()}: ${t.detail}`),
+  };
 }

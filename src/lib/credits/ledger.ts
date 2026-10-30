@@ -8,7 +8,7 @@
 // History is an append-only list beside the account. Local development
 // without a database keeps both in process memory.
 
-import { CREDIT_RATES, WELCOME_CREDITS, type CreditAction } from "./rates.ts";
+import { CREDIT_RATES, firstPackBonus, WELCOME_CREDITS, type CreditAction } from "./rates.ts";
 
 export interface CreditAccount {
   balance: number;
@@ -147,6 +147,27 @@ export async function charge(workspaceUid: string, action: CreditAction, units: 
     await record(workspaceUid, { at: new Date().toISOString(), credits: -paid * rate, kind: "charge", action, units: paid, detail, balanceAfter: account.balance });
   }
   return { units: paid, credits: paid * rate, balance: account.balance };
+}
+
+// Pack purchases are granted under provider-prefixed references.
+const isPackRef = (key: string) => key.startsWith("razorpay_") || key.startsWith("dodo_");
+
+// Adds a purchased pack once per payment; the workspace's first pack also
+// earns the first-pack bonus, decided inside the same transaction.
+export async function grantPack(workspaceUid: string, credits: number, reason: string, ref: string): Promise<{ granted: boolean; bonus: number; balance: number }> {
+  const key = refKey(ref);
+  let bonus = 0;
+  const { applied, account } = await transact(workspaceUid, (a) => {
+    if (a.grants[key]) return null;
+    bonus = Object.keys(a.grants).some(isPackRef) ? 0 : firstPackBonus(credits);
+    const total = credits + bonus;
+    const at = new Date().toISOString();
+    return { ...a, balance: a.balance + total, granted: a.granted + total, grants: { ...a.grants, [key]: { credits: total, reason, at } }, updatedAt: at };
+  });
+  if (applied) {
+    await record(workspaceUid, { at: new Date().toISOString(), credits: credits + bonus, kind: "grant", action: null, units: 0, detail: bonus ? `${reason} + ${bonus.toLocaleString("en-US")} first-pack bonus` : reason, balanceAfter: account.balance });
+  }
+  return { granted: applied, bonus: applied ? bonus : 0, balance: account.balance };
 }
 
 // Adds credits once per reference. Returns false when the reference was

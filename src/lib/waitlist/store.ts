@@ -11,6 +11,7 @@ export interface WaitlistApplication {
   useCase: string;
   score: number;
   reasons: string[];
+  tests?: import("./score.ts").QualificationTest[];
   status: "invited" | "waitlisted";
   appliedAt: string;
   invitedAt?: string;

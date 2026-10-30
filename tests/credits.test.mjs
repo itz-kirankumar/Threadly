@@ -83,3 +83,16 @@ test("a Dodo pack payment is matched by product id, not the tax-inclusive total"
   assert.equal(decideCreditGrant({ ...dodo, productIds: ["prod_growth"] }).grant, true);
   assert.equal(decideCreditGrant({ ...dodo, productIds: ["prod_other"] }).grant, false);
 });
+
+test("the first pack earns the bonus once; later packs do not", async () => {
+  const { firstPackBonus } = await import("../src/lib/credits/rates.ts");
+  const uid = ws();
+  const first = await ledger.grantPack(uid, 1000, "Starter pack", "razorpay_pay_first");
+  assert.equal(first.bonus, firstPackBonus(1000));
+  const repeat = await ledger.grantPack(uid, 1000, "Starter pack", "razorpay_pay_first");
+  assert.equal(repeat.granted, false);
+  const second = await ledger.grantPack(uid, 1000, "Starter pack", "dodo_pay_second");
+  assert.equal(second.bonus, 0);
+  assert.equal(second.balance, WELCOME_CREDITS + 2000 + firstPackBonus(1000));
+  assert.ok(firstPackBonus(20000) <= 5000, "bonus is capped");
+});

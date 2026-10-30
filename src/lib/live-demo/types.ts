@@ -5,7 +5,7 @@ export type DemoStep = (typeof DEMO_STEPS)[number];
 
 export const DEMO_STEP_LABELS: Record<DemoStep, string> = {
   research: "Research your company",
-  crawler: "AI crawler check",
+  crawler: "AI readiness audit",
   competitors: "Map competitors",
   campaigns: "Define a campaign",
   companies: "Find potential customers",
@@ -22,13 +22,15 @@ export interface DemoResearch {
   iconDataUrl: string | null;
   readHomepage: boolean;
 }
-// Can AI assistants read the site? From robots.txt and llms.txt. The score
-// is the share of checks passed, not a prediction of citation.
+// Can AI assistants read the site, and does the homepage say clearly what
+// the business is? Weighted checks out of 100 (lib/geo/site-audit.ts); a
+// readiness measure, not a prediction of citation.
 export interface DemoCrawler {
   score: number;
-  checksPassed: number;
-  checksTotal: number;
-  checks: Array<{ label: string; passed: boolean; detail: string }>;
+  grade: "A" | "B" | "C" | "D";
+  passed: number;
+  total: number;
+  categories: Array<{ name: string; score: number; max: number; checks: Array<{ label: string; passed: boolean; detail: string; weight: number }> }>;
   bots: Array<{ name: string; engine: string; status: "allowed" | "blocked" | "not_specified" }>;
   issues: string[];
 }
