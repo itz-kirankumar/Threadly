@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { signOut, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
@@ -1043,16 +1042,23 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
             aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="group relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"
           >
-            <Image src="/threadly-mark.svg" alt="Threadly" width={24} height={24} className={`shrink-0 transition ${sidebarCollapsed ? "group-hover:opacity-0" : ""}`} />
+            {state.brand.logoDataUrl ? (
+              // eslint-disable-next-line
+              <img src={state.brand.logoDataUrl} alt="" className={`h-8 w-8 shrink-0 rounded-md border border-white/10 object-cover transition ${sidebarCollapsed ? "group-hover:opacity-0" : ""}`} />
+            ) : (
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-xs font-semibold text-violet-300 transition ${sidebarCollapsed ? "group-hover:opacity-0" : ""}`}>
+                {state.brand.name.slice(0, 1).toUpperCase()}
+              </span>
+            )}
             {sidebarCollapsed && (
               <span aria-hidden className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
                 {PANEL_TOGGLE_ICON}
               </span>
             )}
           </button>
-          <div className={railLabel}>
-            <p className="text-[15px] font-semibold leading-tight tracking-tight text-white">Threadly</p>
-            <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-violet-300">Workspace</p>
+          <div className={`min-w-0 ${railLabel}`}>
+            <p className="truncate text-sm font-semibold leading-tight text-white" title={state.brand.name}>{state.brand.name}</p>
+            <p className="truncate text-xs text-zinc-500" title={state.brand.domain}>{state.brand.domain}</p>
           </div>
           <button
             type="button"
@@ -1063,23 +1069,6 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           >
             {PANEL_TOGGLE_ICON}
           </button>
-        </div>
-
-        <div className="shrink-0 border-b border-white/[0.06] px-3 py-3">
-          <div className="flex items-center gap-2.5">
-            {state.brand.logoDataUrl ? (
-              // eslint-disable-next-line
-              <img src={state.brand.logoDataUrl} alt="" className="h-8 w-8 shrink-0 rounded-md border border-white/10 object-cover" />
-            ) : (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-xs font-semibold text-violet-300">
-                {state.brand.name.slice(0, 1).toUpperCase()}
-              </span>
-            )}
-            <div className={`min-w-0 ${railLabel}`}>
-              <p className="truncate text-sm font-medium text-white">{state.brand.name}</p>
-              <p className="truncate text-xs text-zinc-500">{state.brand.domain}</p>
-            </div>
-          </div>
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
