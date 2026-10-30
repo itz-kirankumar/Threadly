@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import OnboardModal from "./OnboardModal";
 import ResearchReport from "./ResearchReport";
+import ThreadLines from "./ThreadLines";
+import { CompanyTable, Logo, SignalTable } from "./demo-tables";
 import {
   DEMO_STEPS,
   DEMO_STEP_LABELS,
@@ -39,17 +41,6 @@ const EMPTY_STREAM: Streamed = { competitors: [], companies: [], social: [] };
 function normalizeDomain(input: string): string | null {
   const host = input.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[/?#].*$/, "");
   return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(host) ? host : null;
-}
-
-function Logo({ name, icon, size = "h-8 w-8" }: { name: string; icon: string | null | undefined; size?: string }) {
-  if (icon) {
-    return <img src={icon} alt="" className={`${size} shrink-0 rounded-lg border border-zinc-200 bg-white object-contain p-0.5`} />;
-  }
-  return (
-    <span aria-hidden className={`${size} flex shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-[11px] font-semibold text-white`}>
-      {name.replace(/^www\./, "").charAt(0).toUpperCase()}
-    </span>
-  );
 }
 
 // The free run reads and drafts; sending, posting and tracking happen in a
@@ -120,6 +111,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   const [follow, setFollow] = useState(true);
   const [error, setError] = useState("");
   const [runDomain, setRunDomain] = useState("");
+  const [readAt, setReadAt] = useState("");
   // Set when the run cannot start: free runs used, or the demo is busy.
   const [blocked, setBlocked] = useState<null | "free" | "busy">(null);
   const lastSwitch = useRef(0);
@@ -129,6 +121,9 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   const logId = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const [onboardOpen, setOnboardOpen] = useState(false);
+  // The run takes the whole screen. Closing only hides it: it keeps working
+  // and the pill under the search box brings it back.
+  const [focusOpen, setFocusOpen] = useState(false);
   const autoOpened = useRef(false);
   const openOnboard = useCallback(() => setOnboardOpen(true), []);
   const [focused, setFocused] = useState(false);
@@ -214,6 +209,8 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     const controller = new AbortController();
     abortRef.current = controller;
     setRunDomain(domain);
+    setFocusOpen(true);
+    setReadAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
     setBlocked(null);
     setFocused(false);
     setRecent((prev) => {
@@ -235,7 +232,6 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     lastSwitch.current = Date.now();
     resultAt.current = {};
     setStatus(Object.fromEntries(DEMO_STEPS.map((s) => [s, "pending"])) as Record<DemoStep, StepStatus>);
-    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
 
     try {
       const res = await fetch("/api/live-demo/run", {
@@ -346,6 +342,20 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     }, 25000);
     return () => clearTimeout(timer);
   }, [phase, viewing]);
+  const takeover = focusOpen && phase !== "idle";
+  useEffect(() => {
+    if (!takeover) return;
+    const root = document.documentElement;
+    const previous = root.style.overflow;
+    root.style.overflow = "hidden";
+    return () => { root.style.overflow = previous; };
+  }, [takeover]);
+  useEffect(() => {
+    if (!takeover) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !onboardOpen) setFocusOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [takeover, onboardOpen]);
   const competitorsShown = results.competitors ?? streamed.competitors;
   const companiesShown = results.companies ?? streamed.companies;
   const socialShown = results.social?.leads ?? streamed.social;
@@ -361,7 +371,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
         className="relative mx-auto max-w-3xl"
       >
         <div className="relative">
-        <div className="search-shell flex items-center gap-2 rounded-2xl p-2">
+        <div className="search-shell flex items-center gap-2 rounded-2xl p-2" data-running={phase === "running"}>
           {previewState === "ready" && preview ? (
             <span className="pl-1.5"><Logo name={preview.name} icon={preview.iconDataUrl} size="h-7 w-7" /></span>
           ) : (
@@ -440,8 +450,16 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
         {blocked && <OutOfRuns kind={blocked} onEligibility={openOnboard} />}
       </form>
 
-      {phase !== "idle" && (
-        <div ref={panelRef} className="demo-workspace-in mx-auto mt-8 flex h-[calc(100svh-6.5rem)] max-h-[860px] min-h-[540px] max-w-6xl scroll-mt-20 flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-[#FFFFFF] text-left shadow-[0_40px_100px_-50px_rgba(0,0,0,0.9)]" aria-label={`Live demo for ${runDomain}`}>
+      {phase !== "idle" && !focusOpen && (
+        <button type="button" onClick={() => setFocusOpen(true)} className="demo-pop-in mx-auto mt-5 flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-[#111114] shadow-sm transition-colors hover:border-[#5B3DF5]/50">
+          {phase === "running" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#5B3DF5]" aria-hidden />}
+          {phase === "running" ? `Researching ${runDomain}: open` : phase === "done" ? `View the report on ${runDomain}` : "Open the run"}
+        </button>
+      )}
+      {takeover && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#F6F5F2]/75 p-3 backdrop-blur-md sm:p-6" role="dialog" aria-modal="true" aria-label={`Live research on ${runDomain}`}>
+        <ThreadLines mode="sides" target="#demo-panel" className="hidden lg:block" />
+        <div id="demo-panel" data-running={phase === "running"} ref={panelRef} className="demo-workspace-in relative flex h-full max-h-[860px] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-[#FFFFFF] text-left shadow-[0_40px_100px_-50px_rgba(0,0,0,0.9)]" aria-label={`Live demo for ${runDomain}`}>
           {/* Stepper */}
           <div className="flex items-center gap-3 border-b border-zinc-200 bg-white/70 px-4 py-3 sm:px-6">
             <Logo name={brandName} icon={brandIcon} size="h-7 w-7" />
@@ -460,7 +478,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                       className={`flex shrink-0 items-center gap-2 rounded-full text-sm font-semibold transition ${active ? "border border-violet-300 bg-violet-50 px-3 py-1 text-violet-900" : ""}`}
                     >
                       {active && st === "running" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />}
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs transition-colors duration-500 ${st === "done" || active ? "bg-violet-600 text-white" : "border border-zinc-300 text-zinc-500"}`}>{i + 1}</span>
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs transition-colors duration-500 ${st === "done" || active ? "bg-violet-600 text-white" : "border border-dashed border-zinc-400 text-zinc-500"}`}>{i + 1}</span>
                       {active && <span className="whitespace-nowrap">{VIEW_LABELS[s]}</span>}
                     </button>
                     {i < VIEWS.length - 1 && <span aria-hidden className="h-px min-w-3 flex-1 bg-zinc-300"><span className="block h-px bg-violet-500 transition-all duration-700" style={{ width: st === "done" ? "100%" : "0%" }} /></span>}
@@ -468,6 +486,9 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                 );
               })}
             </ol>
+            <button type="button" aria-label="Close" onClick={() => setFocusOpen(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
           </div>
           <StoryBars viewing={viewing} ready={viewing !== "report" && Boolean(results[viewing])} follow={follow} finished={viewing === "report"} />
 
@@ -479,6 +500,11 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                   <div className="demo-pop-in">
                     <p className="flex items-center gap-2"><Logo name={brandName} icon={brandIcon} size="h-5 w-5" /><span className="font-semibold">{brandName}</span><span className="truncate text-xs text-zinc-500">{results.research.domain}</span></p>
                     <p className="mt-1.5 line-clamp-4 text-xs leading-relaxed text-zinc-700">{results.research.summary}</p>
+                    {results.crawler && (
+                      <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-zinc-600">
+                        {[results.crawler.facts.founded, results.crawler.facts.location, results.crawler.facts.employees && `${results.crawler.facts.employees} people`].filter(Boolean).map((f) => <span key={String(f)} className="rounded-md border border-zinc-200 px-1.5 py-0.5">{f}</span>)}
+                      </div>
+                    )}
                   </div>
                 )}
               </RailStep>
@@ -488,12 +514,13 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
               <RailStep n={3} step="competitors" status={status.competitors}>
                 {competitorsShown.length > 0 && (
                   <div className="grid grid-cols-2 gap-1.5">
-                    {competitorsShown.slice(0, 8).map((c) => (
+                    {competitorsShown.slice(0, 6).map((c) => (
                       <a key={c.domain} href={`https://${c.domain}`} target="_blank" rel="noopener noreferrer" className="demo-pop-in flex min-w-0 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs hover:border-zinc-400">
                         <Logo name={c.domain} icon={c.iconDataUrl} size="h-4 w-4" />
                         <span className="truncate">{c.domain}</span>
                       </a>
                     ))}
+                    {competitorsShown.length > 6 && <button type="button" onClick={() => goTo("competitors")} className="col-span-2 text-left text-xs text-zinc-500 hover:text-zinc-900">+{competitorsShown.length - 6} more</button>}
                   </div>
                 )}
               </RailStep>
@@ -539,9 +566,14 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
             {/* Stage */}
             <div key={viewing} className="demo-scroll min-h-0 min-w-0 overflow-y-auto px-4 py-5 sm:px-7">
               <div className="demo-story-in">
-                <StepHeader view={viewing} results={results} streamed={streamed} done={statusOf(viewing) === "done"} />
+                <StepHeader view={viewing} results={results} streamed={streamed} done={statusOf(viewing) === "done"} readAt={readAt} />
                 {viewing === "report" ? (
-                  <ResearchReport results={results} action={<ActionButton tone="green" label="Turn this into a pipeline" />} />
+                  <ResearchReport
+                    results={results}
+                    action={<ActionButton tone="green" label="Turn this into a pipeline" />}
+                    signals={results.social?.leads.length ? <SignalTable leads={results.social.leads} action={() => <ActionButton label="Post this reply" />} /> : null}
+                    emails={results.pitch?.length ? <PitchStage drafts={results.pitch} /> : null}
+                  />
                 ) : (
                   <Stage step={viewing} status={status[viewing]} results={results} streamed={streamed} logs={logs.filter((l) => l.step === viewing)} counters={counters} brandIcon={brandIcon} />
                 )}
@@ -565,6 +597,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
             </p>
             <ActionButton tone="green" label={phase === "done" ? "Get leads like these every week" : "Start with Threadly"} />
           </div>
+        </div>
         </div>
       )}
       <OnboardModal
@@ -650,7 +683,7 @@ function StoryBars({ viewing, ready, follow, finished }: { viewing: View; ready:
 }
 
 // Sits at the top of every step: where you are and what the step found.
-function StepHeader({ view, results, streamed, done }: { view: View; results: DemoResults; streamed: Streamed; done: boolean }) {
+function StepHeader({ view, results, streamed, done, readAt }: { view: View; results: DemoResults; streamed: Streamed; done: boolean; readAt: string }) {
   const social = results.social?.leads ?? streamed.social;
   const summary: Record<View, string> = {
     research: results.research ? `Read ${results.research.name} and pulled ${results.research.keywords.length} themes from its own words.` : "Reading the homepage.",
@@ -665,7 +698,10 @@ function StepHeader({ view, results, streamed, done }: { view: View; results: De
   };
   return (
     <header className="mb-4">
-      <p className="text-xs text-[#6B6A72]">Step {VIEWS.indexOf(view) + 1} of {VIEWS.length}{done ? "" : " · working"}</p>
+      <p className="flex items-center gap-1.5 text-xs text-[#6B6A72]">
+        {!done && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#5B3DF5]" aria-hidden />}
+        Step {VIEWS.indexOf(view) + 1} of {VIEWS.length}{done ? (readAt ? ` · read live at ${readAt}` : "") : " · working"}
+      </p>
       <h3 className="mt-0.5 text-2xl font-medium tracking-tight text-[#111114]">{VIEW_LABELS[view]}</h3>
       <p className="mt-0.5 text-sm text-[#6B6A72]">{summary[view]}</p>
     </header>
@@ -711,7 +747,7 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
   const { step, status, results, streamed, logs, counters, brandIcon } = props;
   // Steps with live items show them as they arrive, before the final result.
   if (step === "competitors" && !results.competitors && streamed.competitors.length) return <CompetitorStage list={streamed.competitors} live summary={results.research} />;
-  if (step === "companies" && !results.companies && streamed.companies.length) return <CompanyStage list={streamed.companies} live />;
+  if (step === "companies" && !results.companies && streamed.companies.length) return <CompanyTable list={streamed.companies} live />;
   if (step === "social" && !results.social && status !== "pending") return <SocialStage leads={streamed.social} topic={null} live logs={logs} />;
   const data = results[step];
   if (!data) return status === "pending" ? <p className="mt-20 text-center text-sm text-zinc-500">Waiting for the previous step.</p> : <LiveCard step={step} logs={logs} counters={counters} />;
@@ -762,10 +798,10 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
       );
     }
     case "companies":
-      return <CompanyStage list={data as DemoCompany[]} live={false} />;
+      return (data as DemoCompany[]).length ? <CompanyTable list={data as DemoCompany[]} /> : <p className="mt-16 text-center text-sm text-zinc-600">No matching companies were found for this site.</p>;
     case "social": {
       const s = data as DemoSocial;
-      return <SocialStage leads={s.leads} topic={s.topic} live={false} logs={[]} />;
+      return s.leads.length ? <SignalTable leads={s.leads} action={(reply) => <ActionButton label={reply ? "Post this reply" : "Draft a reply"} />} /> : <p className="mt-16 text-center text-sm text-zinc-600">No recent public posts on this topic.</p>;
     }
     case "contacts": {
       const c = data as DemoContacts;
@@ -863,29 +899,6 @@ function CompetitorStage({ list, live, summary }: { list: DemoCompany[]; live: b
           {live && <li className="flex items-center justify-center rounded-xl border border-dashed border-zinc-300 px-2 py-3 text-xs"><span className="demo-shimmer">checking more</span></li>}
         </ul>
       </div>
-    </div>
-  );
-}
-
-function CompanyStage({ list, live }: { list: DemoCompany[]; live: boolean }) {
-  if (!list.length) return <p className="mt-16 text-center text-sm text-zinc-600">No matching companies were found for this site.</p>;
-  return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-      <p className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3 text-sm font-semibold">
-        {live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />}
-        {list.length} potential customers {live ? "found so far" : "found"}
-      </p>
-      <ul className="divide-y divide-zinc-100">
-        {list.map((c, i) => (
-          <li key={c.domain} className="demo-pop-in flex items-start gap-3 px-4 py-3" style={{ animationDelay: live ? "0ms" : `${i * 70}ms` }}>
-            <Logo name={c.name} icon={c.iconDataUrl} size="h-8 w-8" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">{c.name} <a href={`https://${c.domain}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs font-normal text-zinc-500 hover:underline">{c.domain}</a></p>
-              <p className="line-clamp-2 text-sm text-zinc-600">{c.description ?? "No description on the homepage."}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

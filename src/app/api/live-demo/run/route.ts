@@ -8,7 +8,7 @@ import { runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } 
 import { draftCompanyEmail, draftSocialReply, findSocialLeads, socialTopic, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
 import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, searchAvailable } from "@/lib/prospecting/web";
-import { auditSite } from "@/lib/geo/site-audit";
+import { auditSite, organizationFacts } from "@/lib/geo/site-audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,6 +110,7 @@ export async function POST(request: Request) {
             categories: site.categories.map((c) => ({ name: c.name, score: c.score, max: c.max, checks: c.checks.map((k) => ({ label: k.label, passed: k.passed, detail: k.detail, weight: k.weight })) })),
             bots: audit.crawlerStatuses.map((b) => ({ name: b.userAgent, engine: b.engine, status: b.status })),
             issues: audit.criticalIssues,
+            facts: organizationFacts(home.html),
           },
         });
         if (stopped()) return;
@@ -149,6 +150,17 @@ export async function POST(request: Request) {
 
         begin("companies");
         state = await runCompanies(state, ctx);
+        // A narrow audience can find nothing. Widen once: the next campaign, or
+        // companies that already buy from the top competitor.
+        if (!state.companies!.items.length) {
+          const rival = state.competitors!.items[0]?.name;
+          const next = campaigns[1];
+          if (next || rival) {
+            log("no matches for that audience; widening the search");
+            const items = campaigns.map((c, i) => (next ? { ...c, selected: i === 1 } : { ...c, searchQuery: `companies that use ${rival}` }));
+            state = await runCompanies({ ...state, campaigns: { ...state.campaigns!, items } }, ctx);
+          }
+        }
         const companies = state.companies!.items.slice(0, 8);
         const companyList = await mapLimit(companies, 6, async (c) => {
           const item = { domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms, iconDataUrl: await fetchSiteIcon(c.domain) };
@@ -164,7 +176,7 @@ export async function POST(request: Request) {
         const topic = socialTopic(brand.category, r.keywords, brand.name);
         const competitorNames = state.competitors!.items.slice(0, 2).map((c) => c.name);
         const leads = await findSocialLeads(topic, competitorNames, log, 9, (lead) =>
-          send({ type: "item", step: "social", data: { platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, community: lead.community, intent: lead.intent, reply: null } }),
+          send({ type: "item", step: "social", data: { platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, community: lead.community, intent: lead.intent, reply: null, postedAt: lead.postedAt } }),
         );
         log(`ranked ${leads.length} posts by buying intent; drafting replies to the top ${Math.min(3, leads.length)}`);
         const withReplies = await Promise.all(leads.map(async (lead, i) => ({
@@ -175,6 +187,7 @@ export async function POST(request: Request) {
           author: lead.author,
           community: lead.community,
           intent: lead.intent,
+          postedAt: lead.postedAt,
           reply: i < 3 ? (await draftSocialReply(sender, lead)).body : null,
         })));
         send({ type: "result", step: "social", data: { topic, leads: withReplies } });

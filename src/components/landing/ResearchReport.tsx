@@ -1,6 +1,9 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 import type { DemoCompany, DemoResults } from "@/lib/live-demo/types";
 import CountUp from "./CountUp";
+import { CompanyTable, postedLabel } from "./demo-tables";
 
 const delay = (i: number) => ({ animationDelay: `${i * 70}ms` });
 
@@ -39,7 +42,8 @@ function Mini({ company }: { company: DemoCompany }) {
 
 // Step 9: the finished run as one report. Everything is computed from this
 // run's results; nothing here is sample data.
-export default function ResearchReport({ results, action }: { results: DemoResults; action: ReactNode }) {
+export default function ResearchReport({ results, action, signals: signalView, emails }: { results: DemoResults; action: ReactNode; signals: ReactNode; emails: ReactNode }) {
+  const [tab, setTab] = useState("Overview");
   const r = results.research;
   if (!r) return null;
   const audit = results.crawler;
@@ -60,8 +64,33 @@ export default function ResearchReport({ results, action }: { results: DemoResul
   ].filter((m): m is string => Boolean(m));
   const kpis: Array<[string, number]> = [["AI readiness", audit?.score ?? 0], ["Competitors", competitors.length], ["Potential customers", companies.length], ["Public posts", signals.length], ["Active buyers", buyers.length]];
 
+  const tabs: Array<[string, number | null]> = [["Overview", null], ["Companies", companies.length], ["Competitors", competitors.length], ["Signals", signals.length], ["Emails", drafts.length]];
+  const bar = (
+    <div role="tablist" aria-label="Report sections" className="mb-3 inline-flex max-w-full gap-0.5 overflow-x-auto rounded-full bg-[#EFEEEA] p-1">
+      {tabs.map(([name, n]) => (
+        <button key={name} type="button" role="tab" aria-selected={tab === name} onClick={() => setTab(name)} className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${tab === name ? "bg-[#111114] text-white" : "text-[#4A4950] hover:text-[#111114]"}`}>
+          {name}{n !== null && <span className={`ml-1 tabular-nums ${tab === name ? "text-white/70" : "text-[#6B6A72]"}`}>{n}</span>}
+        </button>
+      ))}
+    </div>
+  );
+  if (tab !== "Overview") {
+    return (
+      <div className="pb-2">
+        {bar}
+        <div key={tab} className="fade-in">
+          {tab === "Companies" && <CompanyTable list={companies} />}
+          {tab === "Competitors" && <CompanyTable list={competitors} showTerms={false} />}
+          {tab === "Signals" && (signalView ?? <p className="text-sm text-[#6B6A72]">No recent public posts in this run.</p>)}
+          {tab === "Emails" && (emails ?? <p className="text-sm text-[#6B6A72]">No emails in this run.</p>)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3 pb-2">
+      {bar}
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {kpis.map(([label, value], i) => (
           <div key={label} className={`demo-pop-in rounded-2xl border border-black/[0.08] bg-white p-4 ${i === 0 ? "col-span-2 sm:col-span-1" : ""}`} style={delay(i)}>
@@ -103,7 +132,7 @@ export default function ResearchReport({ results, action }: { results: DemoResul
               {buyers.slice(0, 4).map((s) => (
                 <li key={s.url} className="py-2 first:pt-0 last:pb-0">
                   <a href={s.url} target="_blank" rel="noopener noreferrer" className="line-clamp-1 hover:text-[#5B3DF5]">{s.title}</a>
-                  <span className="text-xs text-[#6B6A72]">{s.platform} · {s.intent}</span>
+                  <span className="text-xs text-[#6B6A72]">{s.platform} · {s.intent} · {postedLabel(s.postedAt)}</span>
                 </li>
               ))}
             </ul>

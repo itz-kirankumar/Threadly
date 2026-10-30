@@ -25,6 +25,7 @@ export interface SocialLead {
   intent: "asking for a recommendation" | "looking for an alternative" | "asking for help" | "discussing the topic";
   intentScore: number;
   query: string;
+  postedAt: string | null;
 }
 
 const PLATFORMS: Array<{ platform: Platform; domains: string[] }> = [
@@ -85,6 +86,24 @@ export function socialTopic(category: string, keywords: string[], name: string):
   return keywords.find((k) => k.includes(" ") && !/\d/.test(k) && !sentence.test(k)) ?? keywords[0] ?? name;
 }
 
+const MAX_POST_AGE_DAYS = 365;
+
+// When a post was made. X and LinkedIn ids embed their creation time (the top
+// bits are milliseconds), which is exact; otherwise the search's published
+// date. Null when neither says.
+export function postDate(url: string, published: string | null = null): string | null {
+  const x = url.match(/\/status\/(\d{15,})/);
+  if (x) return new Date(Number(BigInt(x[1]) >> 22n) + 1288834974657).toISOString();
+  const li = url.match(/activity[-:](\d{15,})/);
+  if (li) return new Date(Number(BigInt(li[1]) >> 22n)).toISOString();
+  const parsed = published ? Date.parse(published) : NaN;
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+}
+
+export function isRecentPost(postedAt: string | null, now = Date.now()): boolean {
+  return !postedAt || now - Date.parse(postedAt) <= MAX_POST_AGE_DAYS * 86_400_000;
+}
+
 export function socialQueries(topic: string, competitors: string[]): string[] {
   const qs = [`looking for ${topic} recommendations`, `best ${topic} tool`];
   if (competitors[0]) qs.push(`alternative to ${competitors[0]}`);
@@ -108,7 +127,7 @@ export async function findSocialLeads(
       log(`searching public ${platform} posts: "${q}"`);
       let hits: SearchHit[] = [];
       try {
-        hits = await search(q, 6, { includeDomains: domains });
+        hits = await search(q, 6, { includeDomains: domains, timeRange: "year" });
       } catch {
         log("  search failed; continuing");
         continue;
@@ -125,6 +144,8 @@ export async function findSocialLeads(
           : /^\/(posts|feed\/update|pulse)\//.test(path);
         if (!isPost || seen.has(h.url)) continue;
         seen.add(h.url);
+        const postedAt = postDate(h.url, h.published);
+        if (!isRecentPost(postedAt)) continue;
         // The post's own headline: snippets carry page text that is not the ask.
         const { intent, score } = classifyIntent(h.title);
         const { author, community } = postAuthor(h.url);
@@ -138,6 +159,7 @@ export async function findSocialLeads(
           intent,
           intentScore: score + (author ? 0.5 : 0),
           query: q,
+          postedAt,
         };
         leads.push(lead);
         onLead?.(lead);

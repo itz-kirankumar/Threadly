@@ -62,3 +62,14 @@ test("an imperative tagline reads as what the sender lets you do", async () => {
   assert.match(d.body, /With Explee, you can enter your domain and let AI find ideal customers\./);
   assert.doesNotMatch(d.body, /we build enter/);
 });
+
+test("post dates come from X and LinkedIn ids, and old posts are dropped", () => {
+  assert.equal(social.postDate("https://x.com/a/status/1800000000000000000").slice(0, 7), "2024-06");
+  assert.equal(social.postDate("https://www.linkedin.com/posts/jo_topic-activity-7200000000000000000-abcd").slice(0, 7), "2024-05");
+  assert.equal(social.postDate("https://reddit.com/r/x/comments/1/", "Tue, 01 Oct 2026 00:00:00 GMT").slice(0, 10), "2026-10-01");
+  assert.equal(social.postDate("https://reddit.com/r/x/comments/1/"), null);
+  const now = Date.parse("2026-10-30T00:00:00Z");
+  assert.equal(social.isRecentPost("2024-06-01T00:00:00Z", now), false);
+  assert.equal(social.isRecentPost("2026-06-01T00:00:00Z", now), true);
+  assert.equal(social.isRecentPost(null, now), true);
+});

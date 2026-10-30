@@ -38,3 +38,11 @@ test("slow responses, missing schema and two h1 tags each fail their own check",
   const failed = a.categories.flatMap((c) => c.checks).filter((c) => !c.passed).map((c) => c.id).sort();
   assert.deepEqual(failed, ["h1", "jsonld", "org", "speed"]);
 });
+
+test("company facts come only from the homepage's own schema.org data", async () => {
+  const { organizationFacts } = await import("../src/lib/geo/site-audit.ts");
+  const html = `<script type="application/ld+json">{"@graph":[{"@type":"Organization","foundingDate":"2013-05-01","address":{"addressLocality":"Ann Arbor","addressCountry":"US"},"numberOfEmployees":{"value":120}}]}</script>`;
+  assert.deepEqual(organizationFacts(html), { founded: "2013", location: "Ann Arbor, US", employees: "120" });
+  assert.deepEqual(organizationFacts("<html></html>"), { founded: null, location: null, employees: null });
+  assert.deepEqual(organizationFacts('<script type="application/ld+json">{bad</script>'), { founded: null, location: null, employees: null });
+});

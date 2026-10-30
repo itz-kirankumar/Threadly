@@ -4,7 +4,9 @@ import { useEffect, useRef } from "react";
 
 // Thin threads with small squares running along them. `sides` draws threads
 // from both page edges into the `target` element; `fan` spreads them below
-// it. Animation stops offscreen, and draws one still frame for reduced motion.
+// it. Dots speed up as the cursor nears the target, on focus and typing, and
+// fastest while a search runs (data-running on the target). Animation stops
+// offscreen, and draws one still frame for reduced motion.
 
 interface Curve { p0: [number, number]; c1: [number, number]; c2: [number, number]; p3: [number, number] }
 interface Dot { curve: number; t: number; speed: number; accent: boolean }
@@ -58,6 +60,26 @@ export default function ThreadLines({ mode, target, className = "" }: { mode: "s
     let frame = 0;
     let visible = true;
     let last = 0;
+    let boost = 1;
+    let pointer: { x: number; y: number } | null = null;
+    const onPointer = (e: PointerEvent) => { pointer = { x: e.clientX, y: e.clientY }; };
+    const onInput = () => { boost = Math.max(boost, 6); };
+    const element = document.querySelector<HTMLElement>(target);
+    window.addEventListener("pointermove", onPointer, { passive: true });
+    element?.addEventListener("input", onInput);
+
+    const desiredBoost = () => {
+      if (!element) return 1;
+      if (element.dataset.running === "true") return 8;
+      let want = 1;
+      if (pointer) {
+        const box = element.getBoundingClientRect();
+        const dx = Math.max(box.left - pointer.x, 0, pointer.x - box.right);
+        const dy = Math.max(box.top - pointer.y, 0, pointer.y - box.bottom);
+        want = 1 + 2.5 * Math.max(0, 1 - Math.hypot(dx, dy) / 420);
+      }
+      return element.matches(":focus-within") ? Math.max(want, 4) : want;
+    };
 
     const layout = () => {
       const box = document.querySelector(target)?.getBoundingClientRect();
@@ -80,8 +102,9 @@ export default function ThreadLines({ mode, target, className = "" }: { mode: "s
       const { width, height } = canvas.getBoundingClientRect();
       const dt = last ? Math.min((now - last) / 1000, 0.05) : 0;
       last = now;
+      boost += (desiredBoost() - boost) * 0.06;
       ctx.clearRect(0, 0, width, height);
-      ctx.strokeStyle = "rgba(17, 17, 20, 0.08)";
+      ctx.strokeStyle = `rgba(17, 17, 20, ${Math.min(0.2, 0.07 + boost * 0.012)})`;
       ctx.lineWidth = 1;
       for (const c of curves) {
         ctx.beginPath();
@@ -90,7 +113,7 @@ export default function ThreadLines({ mode, target, className = "" }: { mode: "s
         ctx.stroke();
       }
       for (const d of dots) {
-        if (!still) d.t = (d.t + d.speed * dt) % 1;
+        if (!still) d.t = (d.t + d.speed * boost * dt) % 1;
         const [x, y] = at(curves[d.curve], d.t);
         ctx.globalAlpha = Math.min(1, d.t * 8, (1 - d.t) * 8);
         ctx.fillStyle = d.accent ? "#5B3DF5" : "#B9B7BD";
@@ -112,6 +135,8 @@ export default function ThreadLines({ mode, target, className = "" }: { mode: "s
     frame = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onPointer);
+      element?.removeEventListener("input", onInput);
       resize.disconnect();
       seen.disconnect();
     };

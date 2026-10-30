@@ -33,6 +33,7 @@ export interface DemoCrawler {
   categories: Array<{ name: string; score: number; max: number; checks: Array<{ label: string; passed: boolean; detail: string; weight: number }> }>;
   bots: Array<{ name: string; engine: string; status: "allowed" | "blocked" | "not_specified" }>;
   issues: string[];
+  facts: { founded: string | null; location: string | null; employees: string | null };
 }
 export interface DemoCompany {
   domain: string;
@@ -57,6 +58,7 @@ export interface DemoSocialLead {
   community: string | null;
   intent: string;
   reply: string | null;
+  postedAt: string | null;
 }
 export interface DemoSocial {
   topic: string;

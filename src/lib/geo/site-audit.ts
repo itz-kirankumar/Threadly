@@ -152,3 +152,38 @@ export function auditSite(input: AuditInput): SiteAudit {
     total: all.length,
   };
 }
+
+export interface OrganizationFacts {
+  founded: string | null;
+  location: string | null;
+  employees: string | null;
+}
+
+// Founded year, location and size, only when the homepage's schema.org data
+// states them.
+export function organizationFacts(html: string): OrganizationFacts {
+  const facts: OrganizationFacts = { founded: null, location: null, employees: null };
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (!node || typeof node !== "object") return;
+    const o = node as Record<string, unknown>;
+    if (Array.isArray(o["@graph"])) visit(o["@graph"]);
+    if (!/Organization|Corporation|LocalBusiness/i.test(String(o["@type"] ?? ""))) return;
+    if (!facts.founded && o.foundingDate) facts.founded = String(o.foundingDate).slice(0, 4);
+    const raw = Array.isArray(o.address) ? o.address[0] : o.address;
+    const address = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const place = [address.addressLocality, address.addressCountry].filter((p) => typeof p === "string" && p).join(", ");
+    if (!facts.location && place) facts.location = place;
+    const staff = o.numberOfEmployees as { value?: unknown } | number | undefined;
+    const size = typeof staff === "object" && staff ? staff.value : staff;
+    if (!facts.employees && size) facts.employees = String(size);
+  };
+  for (const block of html.match(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) ?? []) {
+    try {
+      visit(JSON.parse(block.replace(/^<script\b[^>]*>/i, "").replace(/<\/script>$/i, "")));
+    } catch {
+      // Invalid JSON-LD says nothing.
+    }
+  }
+  return facts;
+}

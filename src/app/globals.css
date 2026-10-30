@@ -471,3 +471,7 @@ body:has(.site) .assistant-fab {
 .site [class*="text-emerald-200"]:not(pre) { color: #2B2A31; }
 .site .bg-violet-500 { background-color: #5B3DF5; }
 .demo-scroll { scrollbar-width: thin; scrollbar-color: rgba(17, 17, 20, 0.16) transparent; }
+
+@keyframes demo-row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.demo-row-in { animation: demo-row-in 320ms ease both; }
+@media (prefers-reduced-motion: reduce) { .demo-row-in { animation: none; } }

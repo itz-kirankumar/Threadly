@@ -244,13 +244,14 @@ export interface SearchHit {
   domain: string;
   title: string;
   content: string;
+  published: string | null;
 }
 
 export function searchAvailable(): boolean {
   return Boolean(process.env.TAVILY_API_KEY);
 }
 
-export async function search(query: string, maxResults = 8, options: { includeDomains?: string[] } = {}): Promise<SearchHit[]> {
+export async function search(query: string, maxResults = 8, options: { includeDomains?: string[]; timeRange?: "month" | "year" } = {}): Promise<SearchHit[]> {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) return [];
   const response = await fetch("https://api.tavily.com/search", {
@@ -263,13 +264,14 @@ export async function search(query: string, maxResults = 8, options: { includeDo
       search_depth: "basic",
       include_answer: false,
       ...(options.includeDomains?.length ? { include_domains: options.includeDomains } : {}),
+      ...(options.timeRange ? { time_range: options.timeRange } : {}),
     }),
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`search_failed:${response.status}`);
-  const payload = (await response.json()) as { results?: Array<{ url?: unknown; title?: unknown; content?: unknown }> };
+  const payload = (await response.json()) as { results?: Array<{ url?: unknown; title?: unknown; content?: unknown; published_date?: unknown }> };
   return (payload.results ?? [])
-    .filter((r): r is { url: string; title?: unknown; content?: unknown } => typeof r?.url === "string")
+    .filter((r): r is { url: string; title?: unknown; content?: unknown; published_date?: unknown } => typeof r?.url === "string")
     .map((r) => {
       let domain = "";
       try {
@@ -282,6 +284,7 @@ export async function search(query: string, maxResults = 8, options: { includeDo
         domain,
         title: typeof r.title === "string" ? r.title : domain,
         content: typeof r.content === "string" ? r.content.slice(0, 1200) : "",
+        published: typeof r.published_date === "string" ? r.published_date : null,
       };
     })
     .filter((r) => r.domain);
