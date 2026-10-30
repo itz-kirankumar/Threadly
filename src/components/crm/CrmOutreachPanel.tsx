@@ -22,6 +22,7 @@ const STAGES: Array<{ id: LeadStage; label: string }> = [
 
 const SOURCE_LABELS: Record<string, string> = {
   geo_gap_discovery: "Scan results",
+  prospecting: "Prospecting",
   crawler_audit: "Crawler audit",
   competitor_analysis: "Competitor analysis",
   inbound: "Inbound",

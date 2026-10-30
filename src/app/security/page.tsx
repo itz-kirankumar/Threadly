@@ -55,6 +55,19 @@ export default function SecurityPage() {
             ))}
           </div>
 
+          <div id="threadlybot" className="mb-6 p-8 sm:p-10 rounded-3xl bg-white border-2 border-gray-200 shadow-md space-y-4 text-sm text-gray-700">
+            <h2 className="text-xl font-black text-gray-900 mb-2">ThreadlyBot</h2>
+            <p>
+              When a Threadly customer researches a company, ThreadlyBot reads that company&apos;s public web pages. It identifies
+              itself as <code>ThreadlyBot/1.0</code>, follows robots.txt, reads only public pages without signing in, fetches a
+              small number of pages per site and never submits forms.
+            </p>
+            <p>
+              To opt out, add <code>User-agent: ThreadlyBot</code> with <code>Disallow: /</code> to your robots.txt, or write to
+              hello@gothreadly.live.
+            </p>
+          </div>
+
           <div className="p-8 sm:p-10 rounded-3xl bg-white border-2 border-gray-200 shadow-md space-y-4 text-sm text-gray-700">
             <h2 className="text-xl font-black text-gray-900 mb-2">Responsible Disclosure</h2>
             <p>

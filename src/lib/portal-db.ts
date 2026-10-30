@@ -9,7 +9,10 @@ const workspaceAuth = new AsyncLocalStorage<WorkspaceAuth>();
 // rules (null, empty arrays and empty objects are not stored), so demo
 // sessions exercise the same code paths and edge cases as real workspaces.
 type DemoTree = Record<string, unknown>;
-const demoTrees = new Map<string, DemoTree>();
+// Held on globalThis so every route in a dev server shares one store; route
+// bundles otherwise each get their own module instance.
+const demoGlobal = globalThis as typeof globalThis & { __threadlyDemoTrees?: Map<string, DemoTree> };
+const demoTrees = (demoGlobal.__threadlyDemoTrees ??= new Map<string, DemoTree>());
 
 function pathKeys(path: string) {
   return path.split("/").filter(Boolean);

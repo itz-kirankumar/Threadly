@@ -10,12 +10,12 @@ appearing as multiple competing products.
 | Canonical area | Existing surfaces consolidated | System of record |
 | --- | --- | --- |
 | Overview | Overview dashboard | Workspace health and queue summary |
-| Revenue | Leads, CRM, Outbound | Leads, companies, contacts, deals, activities, prospects, campaigns, conversations, meetings |
+| Revenue | Prospecting, Leads, CRM, Outbound | Leads, companies, contacts, deals, activities, prospects, campaigns, conversations, meetings |
 | Intelligence | Questions, Citations, Scans, Optimization, Social search | Questions, scans, citations, optimization and social evidence |
 | Workspace | Settings (profile, brand, keys, team) | Members, roles, integrations, credentials and security |
 
 The portal sidebar groups its tabs under the same areas: Overview; Revenue
-(Leads, CRM, Outbound); Intelligence (Questions, Citations, Optimization,
+(Prospecting, Leads, CRM, Outbound); Intelligence (Questions, Citations, Optimization,
 Scans, Social search); Workspace (Settings). Leads are the discovery entry
 point, while companies, contacts, deals and activities are the CRM system of
 record. Leads never send email: every send runs through Outbound, the single

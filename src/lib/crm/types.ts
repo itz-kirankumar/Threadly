@@ -10,6 +10,7 @@ export type LeadStage =
 
 export type LeadSource =
   | "geo_gap_discovery"
+  | "prospecting"
   | "crawler_audit"
   | "competitor_analysis"
   | "inbound"

@@ -18,6 +18,7 @@ import ActivityPanel from "./ActivityPanel";
 import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import CrmOutreachPanel from "@/components/crm/CrmOutreachPanel";
+import ProspectingFlow from "@/components/prospecting/ProspectingFlow";
 import CrmAccountsPanel from "@/components/crm/CrmAccountsPanel";
 import OutboundPanel from "@/components/outbound/OutboundPanel";
 import GeoFlowOptimizerPanel from "./GeoFlowOptimizerPanel";
@@ -40,7 +41,7 @@ function providerErrorTitle(run: ScanRun, id: string): string {
   return `Scan failed for this provider: ${label}`;
 }
 
-type Tab = "overview" | "queries" | "citations" | "runs" | "optimizer" | "outreach" | "crm" | "enterprise" | "social" | "settings";
+type Tab = "prospect" | "overview" | "queries" | "citations" | "runs" | "optimizer" | "outreach" | "crm" | "enterprise" | "social" | "settings";
 
 interface Props {
   user: User | null;
@@ -62,6 +63,7 @@ function initialsOf(user: User): string {
 }
 
 type NavGroup = "overview" | "revenue" | "intelligence" | "workspace";
+const INTELLIGENCE_TABS: Tab[] = ["overview", "queries", "citations", "optimizer", "runs"];
 const NAV_GROUPS: Array<{ id: NavGroup; label: string | null }> = [
   { id: "overview", label: null },
   { id: "revenue", label: "Revenue" },
@@ -92,10 +94,12 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   const [tab, setTab] = useState<Tab>(() => {
     // Deep links such as /portal?tab=enterprise (used by the OAuth consent
     // callback redirect) land directly on the requested tab.
-    if (typeof window === "undefined") return "overview";
+    // Signed-in workspaces open on Prospecting; the public demo on Overview.
+    const fallback: Tab = readOnly ? "overview" : "prospect";
+    if (typeof window === "undefined") return fallback;
     const requested = new URLSearchParams(window.location.search).get("tab");
-    const valid: Tab[] = ["overview", "queries", "citations", "runs", "optimizer", "outreach", "crm", "enterprise", "social", "settings"];
-    return valid.includes(requested as Tab) ? (requested as Tab) : "overview";
+    const valid: Tab[] = ["prospect", "overview", "queries", "citations", "runs", "optimizer", "outreach", "crm", "enterprise", "social", "settings"];
+    return valid.includes(requested as Tab) && (!readOnly || requested !== "prospect") ? (requested as Tab) : fallback;
   });
   const [loading, setLoading] = useState(!initialState);
   const [scanning, setScanning] = useState(false);
@@ -253,6 +257,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         { id: "tab-citations", label: "Go to Citations", hint: "Section", run: () => setTab("citations") },
         { id: "tab-optimizer", label: "Go to Optimization", hint: "Section", run: () => setTab("optimizer") },
         { id: "tab-runs", label: "Go to Scans", hint: "Section", run: () => setTab("runs") },
+        { id: "tab-prospect", label: "Go to Prospecting", hint: "Section", run: () => setTab("prospect") },
+        { id: "tour", label: "Take the Intelligence tour", hint: "Help", run: () => { setTab("overview"); setShowTour(true); } },
         { id: "tab-outreach", label: "Go to Leads", hint: "Section", run: () => setTab("outreach") },
         { id: "tab-crm", label: "Go to CRM", hint: "Section", run: () => setTab("crm") },
         { id: "tab-enterprise", label: "Go to Outbound", hint: "Section", run: () => setTab("enterprise") },
@@ -369,14 +375,16 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     return labels;
   }, [state]);
 
+  // The product tour explains the Intelligence (GEO) tabs, so it starts the
+  // first time one of them is opened rather than over the prospecting flow.
   useEffect(() => {
-    if (readOnly || !state?.brand) return;
+    if (readOnly || !state?.brand || !INTELLIGENCE_TABS.includes(tab)) return;
     try {
       if (!window.localStorage.getItem(TOUR_KEY)) setShowTour(true);
     } catch {
       // storage unavailable - skip the tour
     }
-  }, [readOnly, state?.brand]);
+  }, [readOnly, state?.brand, tab]);
 
   useEffect(() => {
     if (readOnly) return;
@@ -424,7 +432,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       const firstSave = !state?.brand;
       await authedFetch("/api/geo/brand", { method: "PUT", body: JSON.stringify(input) });
       await refresh();
-      setTab("queries");
+      setTab(firstSave ? "prospect" : "queries");
       if (firstSave) setJustOnboarded(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save.");
@@ -515,6 +523,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     { id: "overview", label: "Overview", group: "overview" },
     ...(!readOnly
       ? [
+          { id: "prospect" as Tab, label: "Prospecting", group: "revenue" as NavGroup },
           { id: "outreach" as Tab, label: "Leads", group: "revenue" as NavGroup },
           { id: "crm" as Tab, label: "CRM", group: "revenue" as NavGroup },
           { id: "enterprise" as Tab, label: "Outbound", group: "revenue" as NavGroup },
@@ -532,6 +541,10 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       : []),
   ];
 
+  // The brand header and scan action belong to the Intelligence (GEO) area;
+  // Revenue and Workspace tabs carry their own titles.
+  const geoContext = readOnly || INTELLIGENCE_TABS.includes(tab);
+
   const body = (
     <>
       {readOnly && (
@@ -540,7 +553,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className={`flex flex-wrap items-center gap-3 ${geoContext ? "justify-between" : "justify-end"}`}>
+        {geoContext && (
         <div>
           <h1 className="flex items-center gap-2.5 text-xl font-semibold text-white">
             {state.brand.logoDataUrl ? (
@@ -553,6 +567,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
             {state.brand.domain} · vs {state.brand.competitors.map((c) => c.name).join(", ") || "no competitors set"}
           </p>
         </div>
+        )}
         {!readOnly && (
           <div className="flex items-center gap-3">
             {state.plan === "trial" && (
@@ -561,6 +576,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
               </span>
             )}
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            {geoContext && (
             <button
               type="button"
               data-tour="run-scan"
@@ -570,6 +586,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
             >
               {scanning ? "Scanning AI providers…" : "Run scan now"}
             </button>
+            )}
           </div>
         )}
       </div>
@@ -900,6 +917,14 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           readOnly={readOnly}
         />
       )}
+      {tab === "prospect" && !readOnly && user && (
+        <ProspectingFlow
+          authedFetch={authedFetch}
+          getToken={() => user.getIdToken()}
+          brand={{ name: state.brand.name, domain: state.brand.domain, logoDataUrl: state.brand.logoDataUrl }}
+          onOpenTab={(next) => setTab(next)}
+        />
+      )}
       {tab === "outreach" && !readOnly && (
         <CrmOutreachPanel authedFetch={authedFetch} />
       )}
@@ -1180,6 +1205,11 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 }
 
 const TAB_ICONS: Record<Tab, React.ReactNode> = {
+  prospect: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 4h11M4.5 8h7M6.5 12h3" />
+    </svg>
+  ),
   crm: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <rect x="2" y="5" width="12" height="8.5" rx="1.5" /><path d="M5.5 5V3.8A1.3 1.3 0 0 1 6.8 2.5h2.4a1.3 1.3 0 0 1 1.3 1.3V5" /><path d="M2 8.5h12" />

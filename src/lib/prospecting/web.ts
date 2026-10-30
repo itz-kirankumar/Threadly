@@ -1,0 +1,206 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+import { parseAuditDomain, parseRobotsGroups, robotsAllowsPath } from "../geo/openseo-engine.ts";
+import { extractPage } from "./text.ts";
+import type { PageSnapshot } from "./types.ts";
+
+export const BOT_UA = "ThreadlyBot/1.0 (+https://www.gothreadly.live/security)";
+const MAX_BYTES = 1_500_000;
+const MAX_REDIRECTS = 3;
+
+export class FetchRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FetchRefused";
+  }
+}
+
+function privateAddress(ip: string): boolean {
+  if (isIP(ip) === 4) {
+    const [a, b] = ip.split(".").map(Number);
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const v = ip.toLowerCase();
+  return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80") || v.startsWith("::ffff:") && privateAddress(v.slice(7));
+}
+
+// Public DNS names only, and every resolved address must be public, so a
+// typed or redirected URL cannot reach private infrastructure.
+export async function assertPublicHost(host: string): Promise<string> {
+  const clean = parseAuditDomain(host);
+  if (!clean) throw new FetchRefused("not a public hostname");
+  const addresses = await lookup(clean, { all: true }).catch(() => []);
+  if (!addresses.length) throw new FetchRefused("domain does not resolve");
+  if (addresses.some((a) => privateAddress(a.address))) throw new FetchRefused("resolves to a private address");
+  return clean;
+}
+
+async function readCapped(res: Response): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done || !value) break;
+    total += value.byteLength;
+    chunks.push(value);
+    if (total >= MAX_BYTES) {
+      await reader.cancel().catch(() => {});
+      break;
+    }
+  }
+  return new TextDecoder("utf-8", { fatal: false }).decode(Buffer.concat(chunks.map((c) => Buffer.from(c))));
+}
+
+async function safeGet(url: string, timeoutMs: number): Promise<{ res: Response; finalUrl: string }> {
+  let current = new URL(url);
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (current.protocol !== "https:" && current.protocol !== "http:") throw new FetchRefused("unsupported scheme");
+    if (current.port && current.port !== "443" && current.port !== "80") throw new FetchRefused("non-standard port");
+    await assertPublicHost(current.hostname);
+    const res = await fetch(current, {
+      headers: { "User-Agent": BOT_UA, Accept: "text/html,text/plain;q=0.9,*/*;q=0.5" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      await res.body?.cancel().catch(() => {});
+      if (!location) throw new FetchRefused(`redirect without location (${res.status})`);
+      current = new URL(location, current);
+      continue;
+    }
+    return { res, finalUrl: current.toString() };
+  }
+  throw new FetchRefused("too many redirects");
+}
+
+const robotsCache = new Map<string, { at: number; allowed: (path: string) => boolean }>();
+
+export async function robotsAllows(host: string, path = "/"): Promise<boolean> {
+  const cached = robotsCache.get(host);
+  if (cached && Date.now() - cached.at < 10 * 60_000) return cached.allowed(path);
+  let allowed: (p: string) => boolean = () => true;
+  try {
+    const { res } = await safeGet(`https://${host}/robots.txt`, 5000);
+    if (res.ok) {
+      const groups = parseRobotsGroups((await readCapped(res)).slice(0, 256 * 1024));
+      allowed = (p) => robotsAllowsPath(groups, "ThreadlyBot", p) !== "blocked";
+    } else {
+      await res.body?.cancel().catch(() => {});
+    }
+  } catch {
+    // No reachable robots.txt: crawling is not restricted by it.
+  }
+  robotsCache.set(host, { at: Date.now(), allowed });
+  return allowed(path);
+}
+
+// Fetches one public HTML page and extracts its own text. Honors robots.txt
+// for ThreadlyBot, caps size and time, never sends cookies or credentials.
+export async function fetchPage(domainOrUrl: string, timeoutMs = 8000): Promise<PageSnapshot> {
+  const url = /^https?:\/\//i.test(domainOrUrl) ? domainOrUrl : `https://${domainOrUrl}/`;
+  const parsed = new URL(url);
+  const host = await assertPublicHost(parsed.hostname);
+  if (!(await robotsAllows(host, parsed.pathname || "/"))) throw new FetchRefused("robots.txt disallows ThreadlyBot");
+  const { res, finalUrl } = await safeGet(url, timeoutMs);
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    throw new FetchRefused(`site answered ${res.status}`);
+  }
+  const type = res.headers.get("content-type") ?? "";
+  if (type && !/html|text\/plain/i.test(type)) {
+    await res.body?.cancel().catch(() => {});
+    throw new FetchRefused("not an HTML page");
+  }
+  let page = extractPage(await readCapped(res));
+  // JavaScript-rendered sites ship almost no text in their HTML. When the
+  // owner has configured Firecrawl, its hosted renderer reads the page
+  // instead (robots.txt was already checked above).
+  if (!page.description && page.paragraphs.length < 2 && process.env.FIRECRAWL_API_KEY) {
+    const rendered = await firecrawlPage(finalUrl).catch(() => null);
+    if (rendered) page = rendered;
+  }
+  return {
+    url,
+    finalUrl,
+    domain: new URL(finalUrl).hostname.replace(/^www\./, ""),
+    ...page,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+async function firecrawlPage(url: string): Promise<ReturnType<typeof extractPage> | null> {
+  const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.FIRECRAWL_API_KEY}` },
+    body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { data?: { markdown?: string; metadata?: { title?: string; description?: string; ogSiteName?: string } } };
+  const md = (body.data?.markdown ?? "").slice(0, 200_000);
+  const lines = md.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const strip = (l: string) => l.replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`>#]/g, "").trim();
+  const headings = lines.filter((l) => /^#{1,3}\s/.test(l)).map(strip).filter((t) => t.length >= 3 && t.length <= 200).slice(0, 20);
+  const paragraphs = lines.filter((l) => !/^#/.test(l)).map(strip).filter((t) => t.length >= 40 && t.length <= 600).slice(0, 15);
+  const meta = body.data?.metadata ?? {};
+  const links = [...new Set([...md.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)].map((m) => m[1]))].slice(0, 400);
+  return { siteName: meta.ogSiteName ?? null, title: meta.title ?? null, description: meta.description ?? null, headings, paragraphs, links };
+}
+
+export interface SearchHit {
+  url: string;
+  domain: string;
+  title: string;
+  content: string;
+}
+
+export function searchAvailable(): boolean {
+  return Boolean(process.env.TAVILY_API_KEY);
+}
+
+export async function search(query: string, maxResults = 8): Promise<SearchHit[]> {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) return [];
+  const response = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults, search_depth: "basic", include_answer: false }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`search_failed:${response.status}`);
+  const payload = (await response.json()) as { results?: Array<{ url?: unknown; title?: unknown; content?: unknown }> };
+  return (payload.results ?? [])
+    .filter((r): r is { url: string; title?: unknown; content?: unknown } => typeof r?.url === "string")
+    .map((r) => {
+      let domain = "";
+      try {
+        domain = new URL(r.url).hostname.toLowerCase().replace(/^www\./, "");
+      } catch {
+        domain = "";
+      }
+      return {
+        url: r.url,
+        domain,
+        title: typeof r.title === "string" ? r.title : domain,
+        content: typeof r.content === "string" ? r.content.slice(0, 1200) : "",
+      };
+    })
+    .filter((r) => r.domain);
+}
+
+// Runs async work with bounded concurrency, preserving input order.
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
