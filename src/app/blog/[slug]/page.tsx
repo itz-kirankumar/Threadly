@@ -3,11 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { BLOG_POSTS, getBlogPost } from "@/lib/blog/content";
+import { getBlogPost, publishedPosts } from "@/lib/blog/content";
 import type { DocBlock } from "@/lib/docs/content";
 
 export function generateStaticParams() {
-  return BLOG_POSTS.filter((post) => post.published).map((post) => ({ slug: post.slug }));
+  return publishedPosts().map((post) => ({ slug: post.slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {

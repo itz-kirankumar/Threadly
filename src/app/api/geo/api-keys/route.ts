@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { errorResponse, readJsonBody, RequestError } from "@/lib/api-request";
 import { loadPlan, planAtLeast, planBlockResponse } from "@/lib/geo/plan";
+import { hasPurchasedCredits } from "@/lib/credits/ledger";
 import { inWorkspace, resolveWorkspaceAccess } from "@/lib/geo/team";
 import { appendAudit } from "@/lib/geo/store";
 import { adminDeleteApiKey, adminLoadApiKeys, adminSaveApiKey } from "@/lib/geo/admin-store";
@@ -18,8 +19,8 @@ export async function GET(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "manageKeys");
     const plan = await inWorkspace(access, () => loadPlan(access.identity.email));
-    if (!planAtLeast(plan, "growth")) {
-      return planBlockResponse("Public API access is part of Growth and above - upgrade to use it.", plan);
+    if (!planAtLeast(plan, "growth") && !(await hasPurchasedCredits(access.workspaceUid))) {
+      return planBlockResponse("API access opens after your first credit pack, or on Growth and above.", plan);
     }
     const keys = (await adminLoadApiKeys(access.workspaceUid)).map(({ hash: _hash, ...rest }) => rest);
     return Response.json({ keys });
@@ -32,8 +33,8 @@ export async function POST(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "manageKeys");
     const plan = await inWorkspace(access, () => loadPlan(access.identity.email));
-    if (!planAtLeast(plan, "growth")) {
-      return planBlockResponse("Public API access is part of Growth and above - upgrade to use it.", plan);
+    if (!planAtLeast(plan, "growth") && !(await hasPurchasedCredits(access.workspaceUid))) {
+      return planBlockResponse("API access opens after your first credit pack, or on Growth and above.", plan);
     }
     const body = (await readJsonBody(request, 2 * 1024)) as { name?: unknown };
     const name = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 40) : "Default key";
@@ -62,8 +63,8 @@ export async function DELETE(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "manageKeys");
     const plan = await inWorkspace(access, () => loadPlan(access.identity.email));
-    if (!planAtLeast(plan, "growth")) {
-      return planBlockResponse("Public API access is part of Growth and above - upgrade to use it.", plan);
+    if (!planAtLeast(plan, "growth") && !(await hasPurchasedCredits(access.workspaceUid))) {
+      return planBlockResponse("API access opens after your first credit pack, or on Growth and above.", plan);
     }
     const body = (await readJsonBody(request, 2 * 1024)) as { id?: unknown };
     if (typeof body.id !== "string" || !body.id) throw new RequestError("Missing key id.", 400);

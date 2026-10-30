@@ -216,9 +216,12 @@ export function categoryFromPage(page: Pick<ExtractedPage, "title" | "headings">
     const k = s.toLowerCase().replace(/[^a-z0-9]/g, "");
     return k === brand || k === "home" || k === "homepage" || (brand.length > 2 && k.startsWith(brand) && k.length - brand.length < 4);
   };
+  // A category is a noun phrase ("AI search monitoring"), not page copy
+  // that addresses the reader ("What our customers got out of it").
+  const sentence = /\b(our|we|you|your|i|my|us|got|get|what|how|why|who)\b/i;
   const usable = (s: string) => {
     const words = s.trim().split(/\s+/);
-    return words.length >= 2 && words.length <= 8 && s.length <= 70 && !/[?!]$/.test(s.trim());
+    return words.length >= 2 && words.length <= 8 && s.length <= 70 && !/[?!]$/.test(s.trim()) && !sentence.test(s);
   };
   const parts = (page.title ?? "").split(/\s+[|\-–—·]\s+|:\s+/).map((p) => p.trim()).filter(Boolean);
   const fromTitle = parts.find((p) => !isBrand(p) && usable(p));

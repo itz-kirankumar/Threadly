@@ -50,7 +50,7 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
     }
   }
 
-  const field = "w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 transition focus:border-zinc-900 focus:bg-white focus:outline-none";
+  const field = "w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 transition focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-100 focus:outline-none";
 
   if (state === "sending") {
     return (
@@ -90,7 +90,7 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
           </ul>
         )}
         {invited ? (
-          <Link href="/portal" className="mt-6 inline-block rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800">Sign in and start</Link>
+          <Link href="/portal" className="mt-6 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Sign in and start</Link>
         ) : (
           <button type="button" onClick={() => setOutcome(null)} className="mt-6 text-sm font-semibold text-zinc-900 underline underline-offset-4">Apply with different details</button>
         )}
@@ -133,7 +133,7 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
         <span>Threadly may read my company&apos;s public website to check eligibility, and I accept the <Link href="/terms" className="underline">Terms</Link> and <Link href="/privacy" className="underline">Privacy policy</Link>.</span>
       </label>
       {state === "error" && <p className="text-sm text-rose-700">{error}</p>}
-      <button type="submit" disabled={!agree} className="rounded-xl bg-zinc-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40">
+      <button type="submit" disabled={!agree} className="rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_-12px_rgba(124,58,237,0.7)] transition hover:bg-violet-500 disabled:opacity-40">
         Check my eligibility
       </button>
     </form>

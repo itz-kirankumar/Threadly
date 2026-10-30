@@ -37,8 +37,9 @@ export async function PUT(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "manageKeys");
     const plan = await inWorkspace(access, () => loadPlan(access.identity.email));
-    if (!planAtLeast(plan, "pro")) {
-      return planBlockResponse("Custom providers and your own API keys are part of Pro and above - upgrade to use them.", plan);
+    // Plans from Pro, or any workspace paying per use with credits.
+    if (!planAtLeast(plan, "pro") && plan !== "none") {
+      return planBlockResponse("Custom providers and your own API keys are not included in this plan.", plan);
     }
     if (access.identity.idToken === "demo-token") {
       return Response.json({ error: "The demo identity cannot store keys. Sign in with Google." }, { status: 403 });
@@ -96,8 +97,9 @@ export async function DELETE(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "manageKeys");
     const plan = await inWorkspace(access, () => loadPlan(access.identity.email));
-    if (!planAtLeast(plan, "pro")) {
-      return planBlockResponse("Custom providers and your own API keys are part of Pro and above.", plan);
+    // Plans from Pro, or any workspace paying per use with credits.
+    if (!planAtLeast(plan, "pro") && plan !== "none") {
+      return planBlockResponse("Custom providers and your own API keys are not included in this plan.", plan);
     }
     const body = (await readJsonBody(request, 4 * 1024)) as { provider?: unknown; customId?: unknown };
     return await inWorkspace(access, async () => {

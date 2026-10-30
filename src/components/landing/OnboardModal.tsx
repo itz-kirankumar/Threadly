@@ -44,7 +44,7 @@ export default function OnboardModal({ open, onClose, stats, bonus }: { open: bo
 
         <div className="grid content-start gap-4">
           <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-            <p className="flex items-center gap-2 font-semibold"><span className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-emerald-600"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600" /></span>
+            <p className="flex items-center gap-2 font-semibold"><span className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-violet-600"><span className="h-1.5 w-1.5 rounded-full bg-violet-600" /></span>
               {bonus.percent > 0 ? `First pack: ${bonus.percent === 100 ? "double your credits" : `+${bonus.percent}% credits`}` : "Pay per result"}
             </p>
             <p className="mt-1 text-sm text-zinc-500">No seats or subscription. Credits are spent only on results.</p>
@@ -52,8 +52,8 @@ export default function OnboardModal({ open, onClose, stats, bonus }: { open: bo
               {PACKS.map((p) => {
                 const total = p.credits + extra(p.credits);
                 return (
-                  <button key={p.id} type="button" onClick={() => setPack(p.id)} className={`rounded-xl border-2 px-2 py-3 text-center transition ${pack === p.id ? "border-emerald-600 bg-emerald-50/40" : "border-zinc-200 hover:border-zinc-400"}`}>
-                    <p className="font-semibold">${p.price}{bonus.percent > 0 && <span className="text-emerald-600"> → {total.toLocaleString()}</span>}</p>
+                  <button key={p.id} type="button" onClick={() => setPack(p.id)} className={`rounded-xl border-2 px-2 py-3 text-center transition ${pack === p.id ? "border-violet-600 bg-violet-50/60" : "border-zinc-200 hover:border-zinc-400"}`}>
+                    <p className="font-semibold">${p.price}{bonus.percent > 0 && <span className="text-violet-600"> → {total.toLocaleString()}</span>}</p>
                     <p className="mt-1 text-xs text-zinc-600">{(bonus.percent > 0 ? total : p.credits).toLocaleString()} credits</p>
                     <p className="text-xs text-zinc-500">~{Math.floor((bonus.percent > 0 ? total : p.credits) / COMPANY_WITH_EMAIL).toLocaleString()} companies + emails</p>
                   </button>
@@ -85,7 +85,7 @@ export default function OnboardModal({ open, onClose, stats, bonus }: { open: bo
         </div>
 
         <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-          <p className="flex items-center gap-2 font-semibold"><span className="grid grid-cols-2 gap-0.5" aria-hidden><span className="h-1.5 w-1.5 bg-emerald-600" /><span className="h-1.5 w-1.5 bg-emerald-300" /><span className="h-1.5 w-1.5 bg-emerald-300" /><span className="h-1.5 w-1.5 bg-emerald-600" /></span>Check your eligibility</p>
+          <p className="flex items-center gap-2 font-semibold"><span className="grid grid-cols-2 gap-0.5" aria-hidden><span className="h-1.5 w-1.5 bg-violet-600" /><span className="h-1.5 w-1.5 bg-violet-300" /><span className="h-1.5 w-1.5 bg-violet-300" /><span className="h-1.5 w-1.5 bg-violet-600" /></span>Check your eligibility</p>
           <p className="mt-1 text-sm text-zinc-500">Threadly is invite-only. We run a few checks on your business; teams that pass are onboarded now, and you buy the {chosen.name} pack (${chosen.price}) inside your workspace.</p>
           <div className="mt-4">
             <QualifyForm defaultDomain={stats.domain} pack={chosen.name} compact />

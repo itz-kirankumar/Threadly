@@ -34,10 +34,10 @@ export async function POST(request: Request) {
 
   const quota = await reserveDemoRun(visitorKey(request));
   if (!quota.allowed) {
-    const message = quota.reason === "visitor"
-      ? "This network has run the live demo many times today. Try again tomorrow, or request early access below."
-      : "The live demo is at capacity for today. Try again tomorrow, or request early access below.";
-    return Response.json({ error: message, code: `quota_${quota.reason}` }, { status: 429, headers: { "Cache-Control": "no-store" } });
+    // Visitors see what to do next, not the mechanics of the limit.
+    return quota.reason === "visitor"
+      ? Response.json({ error: "You've used your free runs.", code: "free_runs_used" }, { status: 429, headers: { "Cache-Control": "no-store" } })
+      : Response.json({ error: "The live demo is busy right now. Try again in a little while.", code: "busy" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 
   const target = domain;

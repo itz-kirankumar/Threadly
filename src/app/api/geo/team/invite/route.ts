@@ -10,10 +10,11 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const access = await resolveWorkspaceAccess(request, "manageTeam");
-    // Roles and invite links are a Pro+ feature, capped by the plan's seats.
+    // Roles and invite links, capped by the plan's seats where it has a cap.
     const planCheck = await inWorkspace(access, async () => {
       const plan = await loadPlan(access.identity.email);
-      if (!planAtLeast(plan, "pro")) return { blocked: planBlockResponse("Roles and invite links are part of Pro and above - upgrade to invite your team.", plan) };
+      // Pro and above, or credit workspaces (no seat fees).
+      if (!planAtLeast(plan, "pro") && plan !== "none") return { blocked: planBlockResponse("Roles and invite links are not included in the trial.", plan) };
       const seats = PLAN_LIMITS[plan].seats;
       if (seats != null) {
         const team = await loadTeam(access.workspaceUid);

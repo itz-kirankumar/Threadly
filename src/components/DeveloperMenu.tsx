@@ -12,6 +12,7 @@ const GROUPS: DevGroup[] = [
     tint: "bg-blue-500/15 text-blue-400",
     icon: "code",
     links: [
+      { label: "Developer overview", href: "/developers", note: "API, npm package and CLI" },
       { label: "Documentation", href: "/docs" },
       { label: "Quickstart", href: "/docs/quickstart" },
       { label: "Public API", href: "/docs/public-api", note: "GET /api/v1/summary" },
@@ -61,7 +62,8 @@ function GroupIcon({ icon }: { icon: DevGroup["icon"] }) {
   );
 }
 
-export default function DeveloperMenu() {
+export default function DeveloperMenu({ tone = "dark" }: { tone?: "dark" | "light" }) {
+  const light = tone === "light";
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -89,9 +91,13 @@ export default function DeveloperMenu() {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
-          open
-            ? "border-white/25 bg-white/10 text-white"
-            : "border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/20 hover:text-white"
+          light
+            ? open
+              ? "border-violet-300 bg-violet-50 text-violet-900"
+              : "border-zinc-200 bg-white text-zinc-700 hover:border-violet-300 hover:text-zinc-900"
+            : open
+              ? "border-white/25 bg-white/10 text-white"
+              : "border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/20 hover:text-white"
         }`}
       >
         Developer

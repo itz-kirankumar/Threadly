@@ -15,10 +15,11 @@ export default function Navbar({ tone = "dark" }: { tone?: "dark" | "light" }) {
           <nav className="flex items-center gap-6 text-sm">
             <Link href="/#how-it-works" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">How it works</Link>
             <Link href="/pricing" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">Pricing</Link>
-            <Link href="/docs" className="hidden text-zinc-600 transition hover:text-zinc-900 md:inline">Docs</Link>
+            <Link href="/blog" className="hidden text-zinc-600 transition hover:text-zinc-900 md:inline">Blog</Link>
+            <DeveloperMenu tone="light" />
             <Link href="/portal" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">Sign in</Link>
-            <Link href="/#early-access" className="whitespace-nowrap rounded-full bg-zinc-900 px-4 py-1.5 text-[13px] font-semibold text-white transition hover:bg-zinc-800">
-              Request access
+            <Link href="/#early-access" className="whitespace-nowrap rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-1.5 text-[13px] font-semibold text-white shadow-[0_6px_18px_-8px_rgba(124,58,237,0.8)] transition hover:brightness-110">
+              Check eligibility
             </Link>
           </nav>
         </div>

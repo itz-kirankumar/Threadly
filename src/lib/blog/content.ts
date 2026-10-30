@@ -3,6 +3,7 @@
 // to ship it.
 
 import type { DocBlock } from "@/lib/docs/content";
+import { MORE_POSTS } from "./more-posts";
 
 export interface BlogPost {
   slug: string;
@@ -181,10 +182,15 @@ export const BLOG_POSTS: BlogPost[] = [
   },
 ];
 
-export function getBlogPost(slug: string): BlogPost | undefined {
-  return BLOG_POSTS.find((post) => post.slug === slug && post.published);
+function allPosts(): BlogPost[] {
+  return [...BLOG_POSTS, ...MORE_POSTS];
 }
 
+export function getBlogPost(slug: string): BlogPost | undefined {
+  return allPosts().find((post) => post.slug === slug && post.published);
+}
+
+// Newest first.
 export function publishedPosts(): BlogPost[] {
-  return BLOG_POSTS.filter((post) => post.published);
+  return allPosts().filter((post) => post.published).sort((a, b) => b.date.localeCompare(a.date));
 }

@@ -58,7 +58,7 @@ const OnboardContext = createContext<() => void>(() => {});
 function ActionButton({ label, tone = "dark" }: { label: string; tone?: "dark" | "green" }) {
   const open = useContext(OnboardContext);
   return (
-    <button type="button" onClick={open} className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-px ${tone === "green" ? "bg-emerald-600 hover:bg-emerald-500" : "bg-zinc-900 hover:bg-zinc-800"}`}>
+    <button type="button" onClick={open} className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-px ${tone === "green" ? "bg-violet-600 hover:bg-violet-500" : "bg-zinc-900 hover:bg-violet-700"}`}>
       {label}
     </button>
   );
@@ -113,6 +113,8 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   const [follow, setFollow] = useState(true);
   const [error, setError] = useState("");
   const [runDomain, setRunDomain] = useState("");
+  // Set when the run cannot start: free runs used, or the demo is busy.
+  const [blocked, setBlocked] = useState<null | "free" | "busy">(null);
   const lastSwitch = useRef(0);
   const resultAt = useRef<Partial<Record<DemoStep, number>>>({});
   const abortRef = useRef<AbortController | null>(null);
@@ -187,6 +189,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     const controller = new AbortController();
     abortRef.current = controller;
     setRunDomain(domain);
+    setBlocked(null);
     setPhase("running");
     setError("");
     setResults({});
@@ -207,8 +210,13 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? "The live demo could not start.");
+        const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+        if (body.code === "free_runs_used" || body.code === "busy") {
+          setBlocked(body.code === "free_runs_used" ? "free" : "busy");
+          setPhase("idle");
+          return;
+        }
+        throw new Error(body.error ?? "The live demo could not start.");
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -315,7 +323,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
         }}
         className="relative mx-auto max-w-3xl"
       >
-        <div className="flex items-center gap-2 rounded-2xl border-2 border-zinc-900 bg-white p-1.5 shadow-[0_10px_40px_-18px_rgba(30,27,75,0.45)]">
+        <div className="flex items-center gap-2 rounded-2xl border-2 border-violet-500 bg-white p-1.5 shadow-[0_18px_50px_-20px_rgba(124,58,237,0.6)] ring-4 ring-violet-100 transition focus-within:ring-violet-200">
           {previewState === "ready" && preview ? <span className="pl-1.5"><Logo name={preview.name} icon={preview.iconDataUrl} size="h-7 w-7" /></span> : null}
           <label htmlFor="demo-domain" className="sr-only">Your website</label>
           <input
@@ -327,7 +335,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
             onChange={(e) => setInput(e.target.value)}
             className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-base text-zinc-900 placeholder-zinc-400 focus:outline-none"
           />
-          <button type="submit" disabled={phase === "running"} className="shrink-0 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60">
+          <button type="submit" disabled={phase === "running"} className="shrink-0 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(124,58,237,0.8)] transition hover:brightness-110 disabled:opacity-60">
             {phase === "running" ? "Running..." : "Find my leads"}
           </button>
         </div>
@@ -349,6 +357,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
           </div>
         )}
         <p className="mt-2 text-center text-xs text-zinc-500">Free, no sign-up. Uses real public web data.</p>
+        {blocked && <OutOfRuns kind={blocked} onEligibility={openOnboard} />}
       </form>
 
       {phase !== "idle" && (
@@ -368,13 +377,13 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                       onClick={() => goTo(s)}
                       aria-current={active ? "step" : undefined}
                       aria-label={`Step ${i + 1}: ${DEMO_STEP_LABELS[s]}`}
-                      className={`flex shrink-0 items-center gap-2 rounded-full text-sm font-semibold transition ${active ? "border border-zinc-900 bg-white px-3 py-1" : ""}`}
+                      className={`flex shrink-0 items-center gap-2 rounded-full text-sm font-semibold transition ${active ? "border border-violet-300 bg-violet-50 px-3 py-1 text-violet-900" : ""}`}
                     >
                       {active && st === "running" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />}
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs transition-colors duration-500 ${st === "done" || active ? "bg-zinc-900 text-white" : "border border-zinc-300 text-zinc-500"}`}>{i + 1}</span>
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs transition-colors duration-500 ${st === "done" || active ? "bg-violet-600 text-white" : "border border-zinc-300 text-zinc-500"}`}>{i + 1}</span>
                       {active && <span className="whitespace-nowrap">{DEMO_STEP_LABELS[s]}</span>}
                     </button>
-                    {i < DEMO_STEPS.length - 1 && <span aria-hidden className="h-px min-w-3 flex-1 bg-zinc-300"><span className="block h-px bg-zinc-900 transition-all duration-700" style={{ width: st === "done" ? "100%" : "0%" }} /></span>}
+                    {i < DEMO_STEPS.length - 1 && <span aria-hidden className="h-px min-w-3 flex-1 bg-zinc-300"><span className="block h-px bg-violet-500 transition-all duration-700" style={{ width: st === "done" ? "100%" : "0%" }} /></span>}
                   </li>
                 );
               })}
@@ -465,7 +474,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
               {!follow ? (
                 <button type="button" onClick={() => { setFollow(true); setViewing(liveStep); }} className="font-semibold text-zinc-900 underline underline-offset-4">Back to the live step</button>
               ) : (
-                "Free run: real public data, 3 drafts, nothing sent. Full runs and sending need a workspace."
+                "Real public web data. Nothing is stored and nothing is sent."
               )}
             </p>
             <ActionButton tone="green" label={phase === "done" ? "Get leads like these every week" : "Start with Threadly"} />
@@ -491,6 +500,46 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   );
 }
 
+// Shown instead of the workspace when a run cannot start: what the visitor
+// can do next, without the mechanics of the limit.
+function OutOfRuns({ kind, onEligibility }: { kind: "free" | "busy"; onEligibility: () => void }) {
+  if (kind === "busy") {
+    return (
+      <div className="demo-pop-in mx-auto mt-5 max-w-xl rounded-2xl border border-violet-200 bg-white p-5 text-left shadow-sm">
+        <p className="font-semibold">The live demo is busy right now</p>
+        <p className="mt-1 text-sm text-zinc-600">Give it a few minutes and try again, or check whether your team qualifies for full runs.</p>
+        <button type="button" onClick={onEligibility} className="mt-4 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500">Check eligibility</button>
+      </div>
+    );
+  }
+  return (
+    <div className="demo-modal-in mx-auto mt-6 max-w-3xl overflow-hidden rounded-3xl border border-violet-200 bg-white text-left shadow-[0_30px_80px_-40px_rgba(91,33,182,0.55)]">
+      <div className="bg-gradient-to-br from-violet-600 via-violet-600 to-fuchsia-600 px-6 py-5 text-white">
+        <p className="text-xs font-semibold uppercase tracking-widest text-violet-100">Free runs used</p>
+        <p className="mt-1 text-2xl font-semibold tracking-tight">You&apos;ve seen what Threadly finds. Keep going with full runs.</p>
+        <p className="mt-1 text-sm text-violet-100">Full runs find every matching company, look up decision makers and send from your own domain.</p>
+      </div>
+      <div className="grid gap-px bg-zinc-100 sm:grid-cols-3">
+        <button type="button" onClick={onEligibility} className="group bg-white p-5 text-left transition hover:bg-violet-50">
+          <p className="text-sm font-semibold">New here?</p>
+          <p className="mt-1 text-xs text-zinc-600">Check your eligibility. Qualified teams are onboarded on the spot.</p>
+          <span className="mt-3 inline-block rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white group-hover:bg-violet-500">Check eligibility</span>
+        </button>
+        <a href="/portal" className="group bg-white p-5 transition hover:bg-violet-50">
+          <p className="text-sm font-semibold">Already onboarded?</p>
+          <p className="mt-1 text-xs text-zinc-600">Sign in and run it from your workspace with the credits you have left.</p>
+          <span className="mt-3 inline-block rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-900 group-hover:border-violet-400">Sign in</span>
+        </a>
+        <a href="/portal" className="group bg-white p-5 transition hover:bg-violet-50">
+          <p className="text-sm font-semibold">Out of credits?</p>
+          <p className="mt-1 text-xs text-zinc-600">Top up with a credit pack. Your first pack earns bonus credits.</p>
+          <span className="mt-3 inline-block rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-900 group-hover:border-violet-400">Upgrade now</span>
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // Story-style progress: one bar per step. The bar of the step on screen
 // fills while its results are shown, then the story moves on.
 function StoryBars({ viewing, status, ready, follow }: { viewing: DemoStep; status: Record<DemoStep, StepStatus>; ready: boolean; follow: boolean }) {
@@ -500,12 +549,12 @@ function StoryBars({ viewing, status, ready, follow }: { viewing: DemoStep; stat
       {DEMO_STEPS.map((s, i) => (
         <span key={s} className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200">
           {i < at || (i !== at && status[s] === "done" && i < at) ? (
-            <span className="block h-full w-full bg-zinc-900" />
+            <span className="block h-full w-full bg-violet-600" />
           ) : i === at ? (
             ready ? (
-              <span key={`${s}-${follow}`} className={`block h-full bg-zinc-900 ${follow ? "demo-story-fill" : "w-full opacity-40"}`} />
+              <span key={`${s}-${follow}`} className={`block h-full bg-gradient-to-r from-violet-600 to-fuchsia-500 ${follow ? "demo-story-fill" : "w-full opacity-40"}`} />
             ) : (
-              <span className="demo-story-wait block h-full w-1/3 bg-zinc-900/60" />
+              <span className="demo-story-wait block h-full w-1/3 bg-violet-500/70" />
             )
           ) : null}
         </span>
@@ -651,7 +700,7 @@ function CrawlerStage({ audit }: { audit: DemoCrawler }) {
             <div className="flex items-center gap-3">
               <p className="w-36 shrink-0 text-xs font-semibold">{cat.name}</p>
               <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                <span className="demo-bar block h-full rounded-full bg-zinc-900" style={{ ["--bar-to" as string]: `${(cat.score / cat.max) * 100}%`, animationDelay: `${200 + ci * 140}ms` }} />
+                <span className="demo-bar block h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500" style={{ ["--bar-to" as string]: `${(cat.score / cat.max) * 100}%`, animationDelay: `${200 + ci * 140}ms` }} />
               </span>
               <span className="w-12 text-right text-xs tabular-nums text-zinc-500">{cat.score}/{cat.max}</span>
             </div>
@@ -822,7 +871,7 @@ function PitchStage({ drafts }: { drafts: DemoDraft[] }) {
           <span className="truncate">Sources: {d.sources.map((s) => s.replace(/^https?:\/\//, "").replace(/\/$/, "")).join(", ")}</span>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-5 py-3">
-          <span className="text-xs text-zinc-500">The free run drafts 3 emails. A full run writes one for every company.</span>
+          <span className="text-xs text-zinc-500">A full run writes one for every company it finds.</span>
           <ActionButton tone="green" label="Find the decision maker and send" />
         </div>
       </div>

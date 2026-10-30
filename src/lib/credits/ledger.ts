@@ -152,6 +152,11 @@ export async function charge(workspaceUid: string, action: CreditAction, units: 
 // Pack purchases are granted under provider-prefixed references.
 const isPackRef = (key: string) => key.startsWith("razorpay_") || key.startsWith("dodo_");
 
+// True once the workspace has bought any credit pack (it unlocks API access).
+export async function hasPurchasedCredits(workspaceUid: string): Promise<boolean> {
+  return Object.keys((await getAccount(workspaceUid)).grants).some(isPackRef);
+}
+
 // Adds a purchased pack once per payment; the workspace's first pack also
 // earns the first-pack bonus, decided inside the same transaction.
 export async function grantPack(workspaceUid: string, credits: number, reason: string, ref: string): Promise<{ granted: boolean; bonus: number; balance: number }> {

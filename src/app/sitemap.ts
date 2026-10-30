@@ -6,7 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.gothreadly.live";
   const now = new Date();
 
-  const routes = ["", "/pricing", "/docs", "/blog", "/security", "/privacy", "/terms"];
+  const routes = ["", "/pricing", "/developers", "/docs", "/blog", "/security", "/privacy", "/terms"];
 
   const staticEntries: MetadataRoute.Sitemap = routes.map((route) => ({
     url: `${baseUrl}${route}`,
