@@ -33,20 +33,7 @@ The canonical navigation and workflow are documented in
 - **Social search** of public Reddit, X, LinkedIn and web pages indexed by
   search (not complete or real-time platform data).
 
-**Revenue**
 
-- **Leads**: candidate accounts from manual entry or observed scan results.
-  Leads never send email; drafts are for review and copying.
-- **CRM**: companies, contacts, deals and activities; saving a lead creates
-  or updates the matching account and contact without duplicates.
-- **Outbound** (gated): versioned targeting profiles, licensed sources and
-  CSV import with rights records, fit scoring, campaign approval, a durable
-  send ledger, suppression and one-click unsubscribe, sender OAuth consent,
-  reply handling, meeting booking, kill switches and an append-only audit log
-  with export. This is the single policy gate for every send.
-
-**Workspace**: team roles and invites, bring-your-own provider keys, API
-access keys, billing, light and dark dashboard themes, and a help assistant.
 
 ## Stack
 
@@ -86,16 +73,7 @@ development with an in-memory store that never calls paid APIs. Outbound
 stays dark unless `OUTBOUND_ENABLED=true` and an explicit
 `OUTBOUND_DATA_ROOT` are both set.
 
-## Deployment (Vercel)
 
-1. Import the repository and set the variables from `.env.example` that you use.
-2. Pushes to `main` deploy to production automatically. Batch changes: the
-   project has hit the daily deployment limit before.
-3. Scheduled scans need the `FIREBASE_ADMIN_*` service account and a random
-   `CRON_SECRET`. `vercel.json` registers a daily 03:00 UTC call to
-   `/api/geo/cron`.
-4. The scan route allows 120 seconds and the cron route 300. On a plan with a
-   60 second limit, keep the number of tracked questions small.
 
 ## Security model
 
