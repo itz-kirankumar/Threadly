@@ -24,8 +24,8 @@ export class StepBlocked extends Error {
 const NON_COMPANY = [
   "g2.com", "capterra.com", "getapp.com", "softwareadvice.com", "trustradius.com", "producthunt.com", "crunchbase.com", "linkedin.com",
   "reddit.com", "quora.com", "medium.com", "substack.com", "youtube.com", "x.com", "twitter.com", "facebook.com", "instagram.com",
-  "tiktok.com", "wikipedia.org", "github.com", "forbes.com", "techcrunch.com", "businessinsider.com", "hubspot.com", "semrush.com",
-  "ahrefs.com", "moz.com", "searchengineland.com", "searchenginejournal.com", "zapier.com", "gartner.com", "clutch.co", "upwork.com",
+  "tiktok.com", "wikipedia.org", "github.com", "forbes.com", "techcrunch.com", "businessinsider.com",
+  "searchengineland.com", "searchenginejournal.com", "gartner.com", "clutch.co", "upwork.com",
   "fiverr.com", "indeed.com", "glassdoor.com", "apple.com", "google.com", "microsoft.com", "amazon.com", "wordpress.com", "wix.com",
   "shopify.com", "news.ycombinator.com", "ycombinator.com", "slashdot.org", "alternativeto.net", "saashub.com", "stackshare.io",
   "builtwith.com", "similarweb.com", "statista.com", "nytimes.com", "theverge.com", "wired.com", "venturebeat.com", "inc.com",
@@ -42,12 +42,46 @@ function now(): string {
   return new Date().toISOString();
 }
 
+// The registrable domain a company is known by: academy.intercom.com and
+// developers.intercom.com are both intercom.com; example.co.uk keeps three
+// labels.
 export function rootDomain(domain: string): string {
-  return domain.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[/?#].*$/, "");
+  const host = domain.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[/:?#].*$/, "");
+  const labels = host.split(".").filter(Boolean);
+  if (labels.length <= 2) return labels.join(".");
+  const sld = labels[labels.length - 2];
+  const tld = labels[labels.length - 1];
+  const keep = tld.length === 2 && /^(co|com|org|net|ac|gov|edu|ltd|plc)$/.test(sld) ? 3 : 2;
+  return labels.slice(-keep).join(".");
 }
 
+// CDNs, ad and tracking hosts appear as links on article pages.
+const INFRASTRUCTURE = /(^|\.)(yimg\.com|oath\.com|yahoo\.com|aol\.com|gstatic\.com|googleusercontent\.com|googleapis\.com|googletagmanager\.com|doubleclick\.net|cloudfront\.net|akamaihd\.net|akamaized\.net|fastly\.net|jsdelivr\.net|unpkg\.com|gravatar\.com|wp\.com|bit\.ly|t\.co|lnkd\.in|apple\.co|amzn\.to|feedburner\.com|disqus\.com|typekit\.net|hotjar\.com|hs-scripts\.com|hubspotusercontent[a-z0-9-]*\.net)$|(^|\.)(cdn|static|assets|img|images|media)\d*\./;
+
+// Free hosting and publisher-style names are not prospects.
+const HOSTED = /(^|\.)(github\.io|gitlab\.io|vercel\.app|netlify\.app|herokuapp\.com|pages\.dev|web\.app|firebaseapp\.com|blogspot\.com|notion\.site|webflow\.io|framer\.website|carrd\.co|wixsite\.com|squarespace\.com)$/;
+const PUBLISHER = /^(?:[a-z0-9-]*-)?(news|magazine|journal|media|times|post|daily|weekly|insider|tribune|gazette|herald|wire|digest|review|today|world|report|blog|wiki|marketcap)(?:-[a-z0-9-]*)?$|(news|magazine|journal|insider|tribune|gazette|digest|marketcap|wiki)/;
+
 function isNonCompany(domain: string): boolean {
-  return NON_COMPANY.some((d) => domain === d || domain.endsWith(`.${d}`)) || /(^|\.)(gov|edu|mil)(\.[a-z]{2})?$/.test(domain);
+  const label = domain.split(".")[0];
+  return NON_COMPANY.some((d) => domain === d || domain.endsWith(`.${d}`))
+    || /(^|\.)(gov|edu|mil)(\.[a-z]{2})?$/.test(domain)
+    || HOSTED.test(domain)
+    || PUBLISHER.test(label)
+    || /.(media|world|hub|list|lists|topics|ranking|rankings|directory|startups|companies)$/.test(label)
+    || INFRASTRUCTURE.test(domain);
+}
+
+// Titles of interstitial pages (redirects, bot checks, errors) are not names.
+const INTERSTITIAL = /^(redirecting|just a moment|attention required|access denied|forbidden|not found|404|403|error|page not found|loading|please wait|one moment|security check|captcha|are you a robot)/i;
+
+// A homepage is on topic when it mentions a whole topic phrase, or at least
+// two distinct topic words; one generic word ("revenue") is not enough.
+export function onTopic(text: string, terms: string[]): string[] {
+  const hits = matchedTerms(text, terms);
+  const phrases = hits.filter((h) => h.includes(" "));
+  const words = new Set(hits.filter((h) => !h.includes(" ")));
+  return phrases.length || words.size >= 2 ? hits : [];
 }
 
 function isHomepage(url: string): boolean {
@@ -145,10 +179,17 @@ export function competitorQueries(domain: string, keywords: string[], category: 
 }
 
 // Topic terms a competitor's own homepage must mention to be kept.
+const TOPIC_FILLER = new Set(["the", "and", "for", "with", "your", "our", "you", "that", "from", "into", "built", "purpose", "system", "platform", "software", "tool", "tools", "around", "grow", "growth", "build", "building"]);
+
 export function topicTerms(keywords: string[], category: string): string[] {
   const words = new Set<string>();
-  for (const k of [...keywords, category]) for (const w of k.toLowerCase().split(/\s+/)) if (w.length >= 4) words.add(w);
-  return [...new Set([...keywords.map((k) => k.toLowerCase()), ...words])];
+  for (const k of [...keywords, category]) {
+    for (const w of k.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/\s+/)) {
+      if (w.length >= 3 && !TOPIC_FILLER.has(w)) words.add(w);
+    }
+  }
+  const phrases = [...keywords, category].map((k) => k.toLowerCase().trim()).filter((k) => k.includes(" "));
+  return [...new Set([...phrases, ...words])];
 }
 
 const DOMAIN_MENTION = /\b([a-z0-9][a-z0-9-]{1,40}\.(?:ai|io|com|co|app|dev|so|tech|net|org|xyz|cloud|tools))\b/gi;
@@ -181,7 +222,16 @@ export function rankCompetitorCandidates(
   for (const article of articleLinks) {
     for (const d of article.domains) touch(d, 2, { kind: "page", url: article.url, quote: "linked from this article", at });
   }
-  return [...byDomain.values()]
+  // One brand on several TLDs (creatio.ai, creatio.com) is one competitor.
+  const byLabel = new Map<string, Competitor & { score: number }>();
+  for (const c of byDomain.values()) {
+    const label = c.domain.split(".")[0];
+    const prev = byLabel.get(label);
+    if (!prev) byLabel.set(label, c);
+    else if (c.score > prev.score) byLabel.set(label, { ...c, score: c.score + prev.score, appearances: c.appearances + prev.appearances });
+    else prev.score += c.score;
+  }
+  return [...byLabel.values()]
     .filter((c) => c.tracked || c.score >= 2)
     .sort((a, b) => Number(b.tracked) - Number(a.tracked) || b.score - a.score || a.domain.localeCompare(b.domain))
     .map(({ score: _score, ...c }) => c);
@@ -248,8 +298,11 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
     try {
       const page = await fetchPage(c.domain, 6000);
       const description = page.description ?? firstSentence(page.paragraphs[0]);
-      const hits = matchedTerms([page.title, description, ...page.headings].filter(Boolean).join(" "), terms);
-      if (!c.tracked && hits.length === 0) {
+      const hits = onTopic([page.title, description, ...page.headings].filter(Boolean).join(" "), terms);
+      // On topic, or one topic word plus independent sources agreeing.
+      const loose = matchedTerms([page.title, description, ...page.headings].filter(Boolean).join(" "), terms);
+      const relevant = hits.length > 0 || (loose.length > 0 && c.appearances >= 2);
+      if (!c.tracked && (!relevant || INTERSTITIAL.test(page.title ?? ""))) {
         offTopic.push(c.domain);
         return null;
       }
@@ -257,7 +310,7 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
         ...c,
         name: c.tracked ? c.name : companyName(page, c.domain),
         description,
-        evidence: [...c.evidence, { kind: "page" as const, url: page.finalUrl, quote: hits.length ? `mentions ${hits.slice(0, 3).join(", ")}` : undefined, at: page.fetchedAt }],
+        evidence: [...c.evidence, { kind: "page" as const, url: page.finalUrl, quote: (hits.length ? hits : loose).length ? `mentions ${(hits.length ? hits : loose).slice(0, 3).join(", ")}` : undefined, at: page.fetchedAt }],
       };
     } catch (error) {
       if (c.tracked) ctx.log(`  ${c.domain}: homepage ${describeError(error)}; kept because you track it`);
@@ -326,6 +379,22 @@ export async function runCampaigns(state: ProspectingState, ctx: StepContext): P
       });
     }
   }
+  // No audience named on the site: propose one campaign from the site's own
+  // top keyword phrase, labelled as such, so the run can continue.
+  const phrase = ctx.brand.category.trim() || research.keywords.find((k) => k.includes(" ")) || research.keywords[0];
+  if (!items.length && phrase) {
+    items.push({
+      id: `cmp_${randomUUID().slice(0, 8)}`,
+      name: titleCase(`Companies that need ${phrase}`),
+      description: `Suggested from "${phrase}" on your homepage. Edit it to describe who you sell to.`,
+      searchQuery: `companies investing in ${phrase}`,
+      roles: DEFAULT_ROLES,
+      source: "homepage",
+      evidence: [{ kind: "page", url: page?.finalUrl, quote: `keyword: ${phrase}`, at }],
+      selected: true,
+    });
+    ctx.log(`no audience named on the homepage; suggested one campaign from "${phrase}"`);
+  }
   items = items.slice(0, 6);
   if (!items.length) ctx.log("no audience statements found; add a campaign describing who you sell to");
   else ctx.log(`prepared ${items.length} campaign${items.length === 1 ? "" : "s"}; edit, remove or add your own before continuing`);
@@ -363,13 +432,30 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
       try {
         const results = await search(q, 10);
         let added = 0;
-        for (const r of results) {
-          const d = rootDomain(r.domain);
-          if (exclude.has(d) || isNonCompany(d) || candidates.some((c) => c.domain === d)) continue;
-          candidates.push({ domain: d, campaignId: campaign.id, ev: { kind: "search", query: q, url: r.url, at } });
+        const add = (domain: string, ev: Evidence) => {
+          const d = rootDomain(domain);
+          if (!d || exclude.has(d) || isNonCompany(d) || candidates.some((c) => c.domain === d)) return;
+          candidates.push({ domain: d, campaignId: campaign.id, ev });
           added++;
+        };
+        // A company homepage in the results is a candidate itself; a list or
+        // article ("top B2B SaaS startups") is read for the companies it
+        // links to, and is never treated as a company.
+        const lists: SearchHit[] = [];
+        for (const r of results) {
+          if (isHomepage(r.url)) add(r.domain, { kind: "search", query: q, url: r.url, at });
+          else if (lists.length < 3 && !exclude.has(rootDomain(r.domain))) lists.push(r);
         }
-        ctx.log(`  ${results.length} results, ${added} new company domains`);
+        const linked = await mapLimit(lists, 3, async (list) => {
+          try {
+            const page = await fetchPage(list.url, 8000);
+            return { url: page.finalUrl, domains: outboundDomains(page.links, page.domain).slice(0, 40) };
+          } catch {
+            return { url: list.url, domains: [] as string[] };
+          }
+        });
+        for (const l of linked) for (const d of l.domains) add(d, { kind: "page", url: l.url, quote: "linked from this list", at });
+        ctx.log(`  ${results.length} results, read ${lists.length} list page${lists.length === 1 ? "" : "s"}, ${added} new company domains`);
       } catch {
         ctx.log("  search failed for this query; continuing");
       }
@@ -389,6 +475,10 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
   const read = await mapLimit(limited, 4, async (c): Promise<ProspectCompany | null> => {
     try {
       const page = await fetchPage(c.domain, 6000);
+      if (INTERSTITIAL.test(page.title ?? "") || isNonCompany(rootDomain(page.domain))) {
+        skipped.push({ domain: c.domain, reason: "not a company homepage" });
+        return null;
+      }
       const description = page.description ?? firstSentence(page.paragraphs[0]);
       const text = [page.title, description, ...page.headings].filter(Boolean).join(" ");
       return {
@@ -457,7 +547,16 @@ export function templateDraft(input: {
   const theirFact = firstSentence(company.description, 180);
   if (!theirFact) missing.push("a fact about the company");
   if (!contact) missing.push("a named contact");
-  const ourLine = firstSentence(input.ourSummary, 220) ?? `${input.ourName} may be relevant to your team.`;
+  // Introduce the sender's company: "The system for revenue teams..." from a
+  // homepage becomes "Attio is the system for revenue teams...".
+  const summaryLine = firstSentence(input.ourSummary, 220);
+  const ourLine = !summaryLine
+    ? `${input.ourName} may be relevant to your team.`
+    : summaryLine.toLowerCase().includes(input.ourName.toLowerCase())
+      ? summaryLine
+      : /^(the|a|an)\s/i.test(summaryLine)
+        ? `${input.ourName} is ${summaryLine.charAt(0).toLowerCase()}${summaryLine.slice(1)}`
+        : `${input.ourName}: ${summaryLine}`;
   const greeting = contact?.firstName ? `Hi ${contact.firstName},` : "Hi,";
   const opener = theirFact ? `${company.domain} describes ${company.name} as: "${theirFact.replace(/\.$/, "")}."` : `I came across ${company.name} at ${company.domain}.`;
   const body = [
@@ -528,6 +627,45 @@ export async function runEmails(state: ProspectingState, ctx: StepContext): Prom
     ctx.log(`  drafted for ${company.name}${contact ? ` (${contact.name})` : ""}`);
   }
   return { ...clearAfter(state, "emails"), emails: { items, ranAt: at } };
+}
+
+// ---- Public conversations ---------------------------------------------------
+export interface SocialSignal {
+  platform: "Reddit" | "LinkedIn" | "X";
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+const SIGNAL_SOURCES: Array<{ platform: SocialSignal["platform"]; domains: string[] }> = [
+  { platform: "Reddit", domains: ["reddit.com"] },
+  { platform: "LinkedIn", domains: ["linkedin.com"] },
+  { platform: "X", domains: ["x.com", "twitter.com"] },
+];
+
+// Public posts that search engines have indexed, where people discuss the
+// topic. Search results only: nothing behind a login is read, and no
+// profiles are collected.
+export async function findSocialSignals(topic: string, log: (t: string) => void, perPlatform = 3): Promise<SocialSignal[]> {
+  if (!searchAvailable() || !topic.trim()) return [];
+  const out: SocialSignal[] = [];
+  for (const source of SIGNAL_SOURCES) {
+    const q = `${topic} recommendations`;
+    log(`searching public ${source.platform} posts: "${q}"`);
+    try {
+      const hits = await search(q, perPlatform + 2, { includeDomains: source.domains });
+      const posts = hits
+        .filter((h) => source.domains.some((d) => h.domain === d || h.domain.endsWith(`.${d}`)))
+        .filter((h) => !/\/(in|pub)\//.test(new URL(h.url).pathname))
+        .slice(0, perPlatform)
+        .map((h) => ({ platform: source.platform, title: h.title.slice(0, 160), url: h.url, snippet: h.content.replace(/\s+/g, " ").slice(0, 240) }));
+      out.push(...posts);
+      log(`  ${posts.length} public posts`);
+    } catch {
+      log("  search failed for this platform; continuing");
+    }
+  }
+  return out;
 }
 
 export const STEP_RUNNERS: Record<StepId, (state: ProspectingState, ctx: StepContext) => Promise<ProspectingState>> = {

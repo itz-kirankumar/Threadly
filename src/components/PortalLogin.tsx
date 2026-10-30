@@ -367,7 +367,7 @@ export default function PortalLogin() {
           )}
           <p className="mt-6 text-center text-sm text-zinc-500">
             Just looking?{" "}
-            <Link href="/demo" className="text-violet-300 hover:text-violet-200">
+            <Link href="/#live-demo" className="text-violet-300 hover:text-violet-200">
               Open the live demo
             </Link>
           </p>

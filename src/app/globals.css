@@ -279,6 +279,34 @@ body:has(.portal) .assistant-fab {
   .portal { --blur: none; }
 }
 
+/* Landing live demo: story-style transitions between steps. */
+@keyframes demo-card-in {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes demo-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes demo-type-in {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.demo-card-in { animation: demo-card-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.demo-pop-in { animation: demo-pop-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.demo-line-in { animation: demo-pop-in 260ms ease-out both; }
+.demo-type-in { animation: demo-type-in 1200ms steps(24, end) both; }
+.landing-network {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(79, 70, 229, 0.18) 1px, transparent 0);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-card-in, .demo-pop-in, .demo-line-in, .demo-type-in { animation: none !important; }
+}
+
 /* Help assistant animations */
 @keyframes assistant-fab-idle {
   0%, 100% { transform: translateY(0); }

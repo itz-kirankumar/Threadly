@@ -83,7 +83,7 @@ export const KNOWLEDGE_BASE: KnowledgeEntry[] = [
     keywords: ["demo", "try", "sample", "example"],
     question: "Can I try it without an account?",
     answer:
-      "Yes, the [live demo](/demo) runs on sample data, no account needed.",
+      "Yes. Paste your website into the [live demo](/#live-demo) on the home page: it runs the prospecting steps on real public web data, with no account needed and nothing stored.",
   },
 ];
 

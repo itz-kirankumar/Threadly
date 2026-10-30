@@ -1,7 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { parseAuditDomain, parseRobotsGroups, robotsAllowsPath } from "../geo/openseo-engine.ts";
-import { extractPage } from "./text.ts";
+import { categoryFromPage, companyName as companyNameFrom, decodeEntities, extractPage } from "./text.ts";
 import type { PageSnapshot } from "./types.ts";
 
 export const BOT_UA = "ThreadlyBot/1.0 (+https://www.gothreadly.live/security)";
@@ -150,6 +150,80 @@ async function firecrawlPage(url: string): Promise<ReturnType<typeof extractPage
   return { siteName: meta.ogSiteName ?? null, title: meta.title ?? null, description: meta.description ?? null, headings, paragraphs, links };
 }
 
+export interface SitePreview {
+  domain: string;
+  finalUrl: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  // Small favicon inlined as a data URL, so the visitor's browser never
+  // contacts the previewed site.
+  iconDataUrl: string | null;
+}
+
+const ICON_TYPES = /^image\/(png|x-icon|vnd\.microsoft\.icon|svg\+xml|jpeg|gif|webp)/i;
+
+async function fetchIcon(url: string): Promise<string | null> {
+  try {
+    const { res } = await safeGet(url, 4000);
+    const type = (res.headers.get("content-type") ?? "").split(";")[0].trim();
+    if (!res.ok || !ICON_TYPES.test(type)) {
+      await res.body?.cancel().catch(() => {});
+      return null;
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > 64 * 1024) return null;
+    // SVG can carry script; only raster icons are inlined.
+    if (/svg/i.test(type)) return null;
+    return `data:${type};base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+// Name, description and icon for the type-ahead preview. One page read plus
+// at most one small image, with the same public-host and robots.txt rules.
+export async function fetchPreview(domain: string): Promise<SitePreview> {
+  const url = `https://${domain}/`;
+  const host = await assertPublicHost(domain);
+  if (!(await robotsAllows(host, "/"))) throw new FetchRefused("robots.txt disallows ThreadlyBot");
+  const { res, finalUrl } = await safeGet(url, 6000);
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    throw new FetchRefused(`site answered ${res.status}`);
+  }
+  const html = (await readCapped(res)).slice(0, 300_000);
+  const page = extractPage(html);
+  const declared = [...html.matchAll(/<link\b[^>]*>/gi)]
+    .map((m) => m[0])
+    .filter((tag) => /\brel\s*=\s*["'][^"']*\bicon\b/i.test(tag))
+    .map((tag) => tag.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1])
+    .filter((h): h is string => Boolean(h))
+    .map((h) => decodeEntities(h))
+    .filter((h) => !/\.svg(\?|$)/i.test(h));
+  const candidates = [...new Set([...declared, "/favicon.ico"].map((h) => {
+    try {
+      return new URL(h, finalUrl).toString();
+    } catch {
+      return "";
+    }
+  }))].filter((u) => /^https?:/i.test(u)).slice(0, 3);
+  let iconDataUrl: string | null = null;
+  for (const candidate of candidates) {
+    iconDataUrl = await fetchIcon(candidate);
+    if (iconDataUrl) break;
+  }
+  const finalDomain = new URL(finalUrl).hostname.replace(/^www\./, "");
+  return {
+    domain: finalDomain,
+    finalUrl,
+    name: companyNameFrom(page, finalDomain),
+    description: page.description,
+    category: categoryFromPage(page, companyNameFrom(page, finalDomain)),
+    iconDataUrl,
+  };
+}
+
 export interface SearchHit {
   url: string;
   domain: string;
@@ -161,13 +235,20 @@ export function searchAvailable(): boolean {
   return Boolean(process.env.TAVILY_API_KEY);
 }
 
-export async function search(query: string, maxResults = 8): Promise<SearchHit[]> {
+export async function search(query: string, maxResults = 8, options: { includeDomains?: string[] } = {}): Promise<SearchHit[]> {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) return [];
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults, search_depth: "basic", include_answer: false }),
+    body: JSON.stringify({
+      api_key: apiKey,
+      query,
+      max_results: maxResults,
+      search_depth: "basic",
+      include_answer: false,
+      ...(options.includeDomains?.length ? { include_domains: options.includeDomains } : {}),
+    }),
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`search_failed:${response.status}`);

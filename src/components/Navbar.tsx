@@ -2,7 +2,29 @@ import Link from "next/link";
 import Image from "next/image";
 import DeveloperMenu from "@/components/DeveloperMenu";
 
-export default function Navbar() {
+// tone="light" is the landing page; other public pages use the dark bar.
+export default function Navbar({ tone = "dark" }: { tone?: "dark" | "light" }) {
+  if (tone === "light") {
+    return (
+      <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-[#f7f6f3]/80 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image src="/threadly-mark.svg" alt="Threadly" width={26} height={26} />
+            <span className="text-[17px] font-semibold tracking-tight text-zinc-900">Threadly</span>
+          </Link>
+          <nav className="flex items-center gap-6 text-sm">
+            <Link href="/#how-it-works" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">How it works</Link>
+            <Link href="/pricing" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">Pricing</Link>
+            <Link href="/docs" className="hidden text-zinc-600 transition hover:text-zinc-900 md:inline">Docs</Link>
+            <Link href="/portal" className="hidden text-zinc-600 transition hover:text-zinc-900 sm:inline">Sign in</Link>
+            <Link href="/portal" className="whitespace-nowrap rounded-full bg-zinc-900 px-4 py-1.5 text-[13px] font-semibold text-white transition hover:bg-zinc-800">
+              Get started
+            </Link>
+          </nav>
+        </div>
+      </header>
+    );
+  }
   return (
     <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-zinc-950/70 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
@@ -11,7 +33,7 @@ export default function Navbar() {
           <span className="text-[17px] font-semibold tracking-tight text-white">Threadly</span>
         </Link>
         <nav className="flex items-center gap-6 text-sm">
-          <Link href="/demo" className="hidden text-zinc-400 transition hover:text-white sm:inline">
+          <Link href="/#live-demo" className="hidden text-zinc-400 transition hover:text-white sm:inline">
             Live demo
           </Link>
           <Link href="/pricing" className="hidden text-zinc-400 transition hover:text-white sm:inline">

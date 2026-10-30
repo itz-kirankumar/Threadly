@@ -111,9 +111,13 @@ export function outboundDomains(links: string[], ownDomain: string): string[] {
 // A readable company name: og:site_name, else the title's leading or trailing
 // segment that matches the domain, else the title's first segment.
 export function companyName(page: Pick<ExtractedPage, "siteName" | "title">, domain: string): string {
-  if (page.siteName && page.siteName.length <= 60) return page.siteName;
+  const split = (t: string) => t.split(/\s+[|\-–—·]\s+|:\s+/).map((p) => p.trim()).filter(Boolean);
+  // og:site_name is the best source, but some sites put a tagline in it too
+  // ("Wayfront® – Agency Client Portal Software"); keep only the name part.
+  const site = page.siteName ? split(page.siteName)[0]?.replace(/[®™]/g, "").trim() : "";
+  if (site && site.length <= 40) return site;
   const label = domain.split(".")[0].toLowerCase();
-  const parts = (page.title ?? "").split(/\s+[|\-–—·]\s+|:\s+/).map((p) => p.trim()).filter(Boolean);
+  const parts = split(page.title ?? "").map((p) => p.replace(/[®™]/g, "").trim());
   const byDomain = parts.find((p) => p.toLowerCase().replace(/[^a-z0-9]/g, "").includes(label.replace(/[^a-z0-9]/g, "")));
   const pick = byDomain ?? parts[0];
   if (pick && pick.length <= 60) return pick;
@@ -201,6 +205,26 @@ export function extractAudiencePhrases(page: ExtractedPage, limit = 6): Array<{ 
     }
   }
   return out;
+}
+
+// What the company does, in its own words: the page-title segment that is not
+// the brand name ("Threadly — Enterprise GEO Intelligence" gives "Enterprise
+// GEO Intelligence"), else the first heading of reasonable length.
+export function categoryFromPage(page: Pick<ExtractedPage, "title" | "headings">, brandName: string): string | null {
+  const brand = brandName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const isBrand = (s: string) => {
+    const k = s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return k === brand || k === "home" || k === "homepage" || (brand.length > 2 && k.startsWith(brand) && k.length - brand.length < 4);
+  };
+  const usable = (s: string) => {
+    const words = s.trim().split(/\s+/);
+    return words.length >= 2 && words.length <= 8 && s.length <= 70 && !/[?!]$/.test(s.trim());
+  };
+  const parts = (page.title ?? "").split(/\s+[|\-–—·]\s+|:\s+/).map((p) => p.trim()).filter(Boolean);
+  const fromTitle = parts.find((p) => !isBrand(p) && usable(p));
+  if (fromTitle) return fromTitle.replace(/^the\s+/i, "");
+  const heading = page.headings.find((h) => !isBrand(h) && usable(h));
+  return heading ?? null;
 }
 
 export function firstSentence(text: string | null | undefined, max = 220): string | null {

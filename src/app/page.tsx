@@ -2,39 +2,32 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import PromoBanner from "@/components/PromoBanner";
 import Footer from "@/components/Footer";
-import ScanSimulation from "@/components/landing/ScanSimulation";
-import LenisProvider from "@/components/landing/LenisProvider";
 import Reveal from "@/components/landing/Reveal";
-import HeroGlow from "@/components/landing/HeroGlow";
+import LiveDemo from "@/components/landing/LiveDemo";
 import Pricing from "@/components/landing/Pricing";
 import Faq, { FAQ_ITEMS } from "@/components/landing/Faq";
 
-const PROVIDERS = [
-  { name: "ChatGPT", note: "Responses API with live web search" },
-  { name: "Claude", note: "Anthropic answers with web search" },
-  { name: "Gemini", note: "Google AI with Search grounding" },
-];
-
 const STEPS = [
-  {
-    title: "Set up your brand",
-    body: "Your name, domain and the competitors you want to be measured against. Two minutes, no integrations.",
-  },
-  {
-    title: "Track the questions buyers ask",
-    body: "Add the questions your buyers type into AI assistants, or let Threadly suggest them from your category.",
-  },
-  {
-    title: "See what AI says about you",
-    body: "Every scan asks every provider each question and measures whether answers mention you, cite your site, and where you rank.",
-  },
+  { title: "Research your company", body: "Reads your homepage for what you sell, the words you use and the audiences you name." },
+  { title: "Map competitors", body: "Web searches and comparison articles, each candidate checked against its own homepage." },
+  { title: "Define campaigns", body: "Audiences your site names, or the one you describe, each turned into a search for companies." },
+  { title: "Find potential customers", body: "Company homepages read one by one, with publishers, directories and competitors left out." },
+  { title: "Read public conversations", body: "Public Reddit, LinkedIn and X posts about your topic, as search engines index them." },
+  { title: "Decision makers", body: "People in the roles you target, from a licensed contact data provider, with their source recorded." },
+  { title: "Write the first email", body: "One draft per company that quotes the company's own words and lists every source." },
 ];
 
-const METRICS = [
-  { name: "Mention rate", body: "The share of AI answers that name your brand when buyers ask about your category." },
-  { name: "Citation share", body: "How often your domain appears in the sources AI answers cite, versus every other source." },
-  { name: "Share of voice", body: "Your mentions versus your competitors' mentions, across every tracked question." },
-  { name: "Position", body: "When brands are named in an answer, where yours appears in the order." },
+const PRINCIPLES = [
+  { title: "Every fact has a source", body: "Each company, competitor and email line links to the page or search it came from. Nothing is invented to fill a gap." },
+  { title: "Licensed contact data only", body: "Decision makers come from licensed providers with a record of where each contact came from. No profile scraping, no guessed addresses." },
+  { title: "You approve every send", body: "Sending runs through approved campaigns that check suppression, unsubscribe, verification and daily caps before each email." },
+  { title: "An audit trail you can export", body: "Owners and admins can export an append-only record of every outbound action: who, what, when and the outcome." },
+];
+
+const INTELLIGENCE = [
+  { name: "Mention rate", body: "How often ChatGPT, Claude and Gemini name your brand for the questions your buyers ask." },
+  { name: "Citation share", body: "How often your site is among the sources those answers cite." },
+  { name: "Share of voice", body: "Your mentions against your competitors' across every tracked question." },
 ];
 
 export default function LandingPage() {
@@ -48,184 +41,151 @@ export default function LandingPage() {
     })),
   };
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
-      <LenisProvider />
-      <PromoBanner />
-      <Navbar />
+    <div className="flex min-h-screen flex-col bg-[#f7f6f3] text-zinc-900">
+      <div className="bg-zinc-950">
+        <PromoBanner />
+      </div>
+      <Navbar tone="light" />
       <main className="flex-grow">
-        {/* hero */}
+        {/* Hero with the live demo */}
         <section className="relative overflow-hidden">
-          <div className="hero-grid absolute inset-0" />
-          <HeroGlow />
-          <div className="pointer-events-none absolute -top-40 right-[-10%] h-[480px] w-[480px] rounded-full bg-violet-600/20 blur-[140px]" />
-          <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-16 sm:pt-24">
-            <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_1fr]">
-              <div>
-                <Link
-                  href="/demo"
-                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-violet-400/40 hover:text-white"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                  Enterprise GEO Intelligence
-                  <span className="text-zinc-500">→</span>
-                </Link>
-                <h1 className="mt-7 font-display text-6xl leading-[1.02] tracking-tight text-white sm:text-7xl">
-                  When buyers ask AI, does it{" "}
-                  <span className="bg-gradient-to-r from-violet-300 via-fuchsia-300 to-orange-200 bg-clip-text pr-2 italic text-transparent">
-                    mention you?
-                  </span>
-                </h1>
-                <p className="mt-6 max-w-xl text-lg leading-relaxed text-zinc-400">
-                  Threadly monitors how ChatGPT, Claude and Gemini answer the questions your buyers ask -
-                  tracking mentions, citation share and share of voice against your competitors, scan after scan.
-                </p>
-                <div className="mt-9 flex flex-wrap items-center gap-4">
-                  <Link
-                    href="/portal"
-                    className="rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
-                  >
-                    Start tracking your brand
-                  </Link>
-                  <Link href="/demo" className="text-sm font-semibold text-zinc-300 transition hover:text-white">
-                    See the live demo →
-                  </Link>
-                </div>
-                <p className="mt-5 font-mono text-xs text-zinc-600">no credit card · google sign-in · demo uses sample data</p>
-              </div>
-              <ScanSimulation />
+          <div className="landing-network pointer-events-none absolute inset-0" aria-hidden />
+          <div className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-indigo-300/25 blur-[120px]" aria-hidden />
+          <div className="relative mx-auto max-w-6xl px-6 pb-20 pt-14 text-center sm:pt-20">
+            <p className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-xs font-medium text-zinc-700 shadow-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+              Live demo on real web data. Nothing is stored.
+            </p>
+            <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
+              Find the companies worth contacting,{" "}
+              <span className="text-indigo-600">starting from your website.</span>
+            </h1>
+            <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-zinc-600">
+              Paste your website and watch Threadly research your market, map competitors, find matching companies and draft first emails from facts it can cite.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-600">
+              <span className="rounded-full border border-zinc-200 bg-white px-3 py-1">Public pages only</span>
+              <span className="rounded-full border border-zinc-200 bg-white px-3 py-1">Respects robots.txt</span>
+              <span className="rounded-full border border-zinc-200 bg-white px-3 py-1">No card needed</span>
+            </div>
+            <div className="mt-8">
+              <LiveDemo />
             </div>
           </div>
         </section>
 
-        {/* providers */}
-        <section className="border-t border-white/[0.06]">
-          <div className="mx-auto max-w-6xl px-6 py-16">
+        {/* How it works */}
+        <section id="how-it-works" className="scroll-mt-20 border-t border-zinc-200/80">
+          <div className="mx-auto max-w-6xl px-6 py-20">
             <Reveal>
-            <h2 className="mb-10 text-center font-mono text-xs uppercase tracking-[0.25em] text-zinc-500">
-              Measured across the AI assistants your buyers use
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {PROVIDERS.map((provider, index) => (
-                <Reveal key={provider.name} delay={index * 90}>
-                  <div className="h-full rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 transition hover:border-violet-400/40 hover:bg-violet-500/[0.06]">
-                    <p className="font-semibold text-white">{provider.name}</p>
-                    <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{provider.note}</p>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
+              <p className="text-center text-xs font-semibold uppercase tracking-widest text-indigo-600">How it works</p>
+              <h2 className="mt-3 text-center text-4xl font-semibold tracking-tight sm:text-5xl">Seven steps, one run</h2>
+              <p className="mx-auto mt-4 max-w-2xl text-center text-zinc-600">
+                The live demo above runs these steps on your site. In your workspace you edit each one, save companies to your CRM and approve what gets sent.
+              </p>
             </Reveal>
-          </div>
-        </section>
-
-        {/* how it works */}
-        <section className="border-t border-white/[0.06]">
-          <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-center font-display text-4xl tracking-tight text-white sm:text-5xl">
-              Live in an afternoon
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-center text-zinc-400">
-              No crawlers to configure, no integrations to maintain. Three steps and your first scan is running.
-            </p>
-            <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.06] md:grid-cols-3">
+            <ol className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {STEPS.map((step, index) => (
-                <Reveal key={step.title} delay={index * 110} className="bg-zinc-950">
-                  <div className="p-8">
-                    <p className="font-mono text-sm text-violet-400">0{index + 1}</p>
-                    <h3 className="mt-4 text-lg font-semibold text-white">{step.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-400">{step.body}</p>
-                  </div>
+                <Reveal key={step.title} delay={index * 60}>
+                  <li className="h-full rounded-2xl border border-zinc-200 bg-white/80 p-5 shadow-sm backdrop-blur">
+                    <p className="font-mono text-xs font-semibold text-indigo-600">{String(index + 1).padStart(2, "0")}</p>
+                    <h3 className="mt-2 font-semibold">{step.title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-zinc-600">{step.body}</p>
+                  </li>
                 </Reveal>
               ))}
-            </div>
+            </ol>
           </div>
         </section>
 
-        {/* metrics */}
-        <section className="border-t border-white/[0.06]">
+        {/* Principles */}
+        <section className="border-t border-zinc-200/80 bg-white/60">
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-center font-display text-4xl tracking-tight text-white sm:text-5xl">
-              Know your{" "}
-              <span className="bg-gradient-to-r from-violet-300 to-fuchsia-300 bg-clip-text pr-2 italic text-transparent">
-                share of the answer
-              </span>
-            </h2>
+            <Reveal>
+              <h2 className="text-center text-4xl font-semibold tracking-tight sm:text-5xl">Built for teams that answer for their outreach</h2>
+              <p className="mx-auto mt-4 max-w-2xl text-center text-zinc-600">
+                Revenue, security and legal teams can see where every lead came from and what was sent.
+              </p>
+            </Reveal>
             <div className="mt-12 grid gap-3 sm:grid-cols-2">
-              {METRICS.map((metric, index) => (
-                <Reveal key={metric.name} delay={index * 80}>
-                  <div className="h-full rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 transition hover:border-fuchsia-400/30">
-                    <h3 className="font-semibold text-violet-300">{metric.name}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-400">{metric.body}</p>
+              {PRINCIPLES.map((item, index) => (
+                <Reveal key={item.title} delay={index * 70}>
+                  <div className="h-full rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                    <h3 className="font-semibold">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-zinc-600">{item.body}</p>
                   </div>
                 </Reveal>
               ))}
             </div>
-            <p className="mt-8 text-center font-mono text-xs text-zinc-600">
-              every number in your workspace comes from your own scans - no illustrative dashboards
-            </p>
           </div>
         </section>
 
-        {/* pricing */}
-        <section className="border-t border-white/[0.06]">
+        {/* Intelligence */}
+        <section className="border-t border-zinc-200/80">
+          <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-20 lg:grid-cols-2">
+            <Reveal>
+              <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">Also included</p>
+              <h2 className="mt-3 text-4xl font-semibold tracking-tight">See how AI assistants describe you</h2>
+              <p className="mt-4 text-zinc-600">
+                Buyers ask ChatGPT, Claude and Gemini before they open a browser. Threadly asks them the questions your buyers ask and tracks whether the answers name and cite you.
+              </p>
+              <Link href="/portal" className="mt-6 inline-block text-sm font-semibold text-indigo-700 hover:text-indigo-600">Track your AI visibility</Link>
+            </Reveal>
+            <div className="grid gap-3">
+              {INTELLIGENCE.map((m, index) => (
+                <Reveal key={m.name} delay={index * 80}>
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                    <h3 className="font-semibold">{m.name}</h3>
+                    <p className="mt-1 text-sm text-zinc-600">{m.body}</p>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Pricing and FAQ */}
+        <section className="bg-zinc-950 text-zinc-100">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <Reveal>
-            <div className="text-center">
-              <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">Pricing</p>
-              <h2 className="mt-3 font-display text-4xl tracking-tight text-white sm:text-5xl">
-                Simple, honest pricing
-              </h2>
-              <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-                Start with a 7-day trial for $7 - one-time, no auto-renewal. Upgrade to Pro or Growth when your coverage grows.
-              </p>
-            </div>
+              <div className="text-center">
+                <p className="text-xs font-semibold uppercase tracking-widest text-indigo-300">Pricing</p>
+                <h2 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">Simple, honest pricing</h2>
+                <p className="mx-auto mt-4 max-w-xl text-zinc-400">
+                  Start with a 7-day trial for $7, one-time and with no auto-renewal. Upgrade when your coverage grows.
+                </p>
+              </div>
             </Reveal>
             <div className="mt-12">
               <Pricing />
             </div>
-          </div>
-        </section>
-
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
-        {/* FAQ */}
-        <section className="border-t border-white/[0.06]">
-          <div className="mx-auto max-w-6xl px-6 py-24">
-            <Reveal>
-            <div className="text-center">
-              <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">FAQ</p>
-              <h2 className="mt-3 font-display text-4xl tracking-tight text-white sm:text-5xl">
-                Questions, answered
-              </h2>
-            </div>
-            </Reveal>
-            <div className="mt-12">
-              <Faq />
+            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+            <div className="mx-auto mt-24 max-w-3xl">
+              <h2 className="text-center text-3xl font-semibold tracking-tight text-white">Questions, answered</h2>
+              <div className="mt-8">
+                <Faq />
+              </div>
             </div>
           </div>
         </section>
 
-        {/* final CTA */}
-        <section className="border-t border-white/[0.06]">
+        {/* Final CTA */}
+        <section className="border-t border-zinc-200/80">
           <div className="mx-auto max-w-4xl px-6 py-24 text-center">
             <Reveal>
-            <h2 className="font-display text-5xl tracking-tight text-white sm:text-6xl">
-              AI is the new first page of search.
-            </h2>
-            <p className="mx-auto mt-5 max-w-xl text-lg text-zinc-400">
-              Buyers ask an assistant before they ever open a browser. Threadly tells you what those assistants say -
-              and whether you're in the answer.
-            </p>
-            <Link
-              href="/portal"
-              className="mt-9 inline-block rounded-full bg-white px-7 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
-            >
-              Open your workspace
-            </Link>
+              <h2 className="text-4xl font-semibold tracking-tight sm:text-5xl">Run it on your own website</h2>
+              <p className="mx-auto mt-4 max-w-xl text-lg text-zinc-600">
+                Try the live demo above, then open a workspace to save companies, add licensed contact data and approve sending.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Link href="/#live-demo" className="rounded-full border border-zinc-300 bg-white px-6 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-50">Try the live demo</Link>
+                <Link href="/portal" className="rounded-full bg-zinc-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800">Open your workspace</Link>
+              </div>
             </Reveal>
           </div>
         </section>
       </main>
-      <Footer />
+      <Footer tone="light" />
     </div>
   );
 }

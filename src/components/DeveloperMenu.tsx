@@ -32,7 +32,7 @@ const GROUPS: DevGroup[] = [
     tint: "bg-emerald-500/15 text-emerald-400",
     icon: "book",
     links: [
-      { label: "Live demo", href: "/demo" },
+      { label: "Live demo", href: "/#live-demo" },
       { label: "Blog", href: "/blog" },
       { label: "llms.txt", href: "/llms.txt", note: "for AI assistants" },
     ],
