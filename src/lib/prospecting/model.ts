@@ -1,16 +1,19 @@
 // Optional model assistance for summaries, campaign drafts and email drafts.
-// Off unless PROSPECTING_MODEL_ENABLED=true and ANTHROPIC_API_KEY are set
-// (PRD D02/D04: model spend stays off until the owner sets a cap). Every call
+// On when ANTHROPIC_API_KEY is set, unless PROSPECTING_MODEL_ENABLED=false;
+// spend is held under PROSPECTING_MONTHLY_CAP_USD (default 10). Every call
 // reserves a pessimistic cost against a monthly cap first and is refused when
 // the cap is reached. Inputs are only evidence already collected; prospect
 // text is untrusted data and is passed as quoted material, never instructions.
 
 const MODEL = process.env.PROSPECTING_MODEL ?? "claude-haiku-5-5";
-const MONTHLY_CAP_USD = Number(process.env.PROSPECTING_MONTHLY_CAP_USD ?? "0");
+const MONTHLY_CAP_USD = Number(process.env.PROSPECTING_MONTHLY_CAP_USD ?? "10");
 const RESERVE_USD_PER_CALL = 0.02;
 
 export function modelEnabled(): boolean {
-  return process.env.PROSPECTING_MODEL_ENABLED === "true" && Boolean(process.env.ANTHROPIC_API_KEY) && MONTHLY_CAP_USD > 0;
+  // Owner direction (30 Oct 2026): custom drafts by default when a key is
+  // configured, inside a monthly cap; PROSPECTING_MODEL_ENABLED=false turns
+  // it off.
+  return process.env.PROSPECTING_MODEL_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY) && MONTHLY_CAP_USD > 0;
 }
 
 async function reserve(): Promise<boolean> {

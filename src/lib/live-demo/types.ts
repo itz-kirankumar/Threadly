@@ -1,6 +1,6 @@
 // Shared by the landing-page live demo route and its client.
 
-export const DEMO_STEPS = ["research", "competitors", "campaigns", "companies", "signals", "contacts", "pitch"] as const;
+export const DEMO_STEPS = ["research", "competitors", "campaigns", "companies", "social", "contacts", "pitch"] as const;
 export type DemoStep = (typeof DEMO_STEPS)[number];
 
 export const DEMO_STEP_LABELS: Record<DemoStep, string> = {
@@ -8,7 +8,7 @@ export const DEMO_STEP_LABELS: Record<DemoStep, string> = {
   competitors: "Map competitors",
   campaigns: "Define a campaign",
   companies: "Find potential customers",
-  signals: "Read public conversations",
+  social: "Find social leads",
   contacts: "Decision makers",
   pitch: "Write the first email",
 };
@@ -34,9 +34,19 @@ export interface DemoCampaign {
   roles: string[];
   selected: boolean;
 }
-export interface DemoSignals {
+export interface DemoSocialLead {
+  platform: "Reddit" | "X" | "LinkedIn";
+  url: string;
+  title: string;
+  snippet: string;
+  author: string | null;
+  community: string | null;
+  intent: string;
+  reply: string | null;
+}
+export interface DemoSocial {
   topic: string;
-  posts: Array<{ platform: string; title: string; url: string; snippet: string }>;
+  leads: DemoSocialLead[];
 }
 export interface DemoContacts {
   roles: string[];
@@ -48,6 +58,7 @@ export interface DemoDraft {
   subject: string;
   body: string;
   sources: string[];
+  engine: "model" | "composed";
 }
 
 export interface DemoResults {
@@ -55,7 +66,7 @@ export interface DemoResults {
   competitors?: DemoCompany[];
   campaigns?: DemoCampaign[];
   companies?: DemoCompany[];
-  signals?: DemoSignals;
+  social?: DemoSocial;
   contacts?: DemoContacts;
   pitch?: DemoDraft[];
 }

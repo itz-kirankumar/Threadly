@@ -4,7 +4,8 @@ import type { BrandProfile } from "@/lib/geo/types";
 import { reserveDemoRun, visitorKey } from "@/lib/live-demo/quota";
 import type { DemoEvent, DemoStep } from "@/lib/live-demo/types";
 import { contactProvider } from "@/lib/prospecting/contacts";
-import { findSocialSignals, runCampaigns, runCompanies, runCompetitors, runResearch, templateDraft, StepBlocked } from "@/lib/prospecting/steps";
+import { runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
+import { draftCompanyEmail, draftSocialReply, findSocialLeads, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
 import { fetchPreview, searchAvailable } from "@/lib/prospecting/web";
 
@@ -112,10 +113,24 @@ export async function POST(request: Request) {
         send({ type: "result", step: "companies", data: companies.map((c) => ({ domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms })) });
         if (stopped()) return;
 
-        begin("signals");
+        const sender: Sender = { name: r.name, domain: r.domain, summary: r.summary, category: brand.category, keywords: r.keywords };
+
+        begin("social");
         const topic = brand.category || (r.keywords.find((k) => k.includes(" ")) ?? r.keywords[0] ?? brand.name);
-        const signals = await findSocialSignals(topic, log, 2);
-        send({ type: "result", step: "signals", data: { topic, posts: signals } });
+        const competitorNames = state.competitors!.items.slice(0, 2).map((c) => c.name);
+        const leads = await findSocialLeads(topic, competitorNames, log, 9);
+        log(`ranked ${leads.length} posts by buying intent; drafting replies to the top ${Math.min(3, leads.length)}`);
+        const withReplies = await Promise.all(leads.map(async (lead, i) => ({
+          platform: lead.platform,
+          url: lead.url,
+          title: lead.title,
+          snippet: lead.snippet,
+          author: lead.author,
+          community: lead.community,
+          intent: lead.intent,
+          reply: i < 3 ? (await draftSocialReply(sender, lead)).body : null,
+        })));
+        send({ type: "result", step: "social", data: { topic, leads: withReplies } });
         if (stopped()) return;
 
         begin("contacts");
@@ -128,11 +143,12 @@ export async function POST(request: Request) {
         if (stopped()) return;
 
         begin("pitch");
-        const drafts = companies.slice(0, 3).map((company) => {
-          const d = templateDraft({ ourName: r.name, ourSummary: r.summary, ourUrl: r.page?.finalUrl ?? null, senderName: "[Your name]", company, contact: null });
-          log(`drafted a first email to ${company.name}`);
-          return { company: company.name, domain: company.domain, subject: d.subject, body: d.body, sources: d.sources.map((s) => s.url).filter(Boolean) };
-        });
+        const drafts = [];
+        for (const company of companies.slice(0, 3)) {
+          log(`writing a first email to ${company.name} from what its homepage says`);
+          const d = await draftCompanyEmail(sender, company);
+          drafts.push({ company: company.name, domain: company.domain, subject: d.subject, body: d.body, sources: d.sources, engine: d.engine });
+        }
         send({ type: "result", step: "pitch", data: drafts });
         send({ type: "end" });
       } catch (error) {

@@ -62,6 +62,8 @@ export interface Competitor {
 
 export interface CompetitorsStep {
   items: Competitor[];
+  // Audiences the competitors name on their own homepages, most common first.
+  audiences?: Array<{ phrase: string; count: number; quote: string; url: string }>;
   queries: string[];
   searchAvailable: boolean;
   ranAt: string;

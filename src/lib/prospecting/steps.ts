@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BrandProfile } from "../geo/types.ts";
 import { contactProvider } from "./contacts.ts";
 import { modelEnabled, modelJson } from "./model.ts";
+import { draftCompanyEmail } from "./social.ts";
 import { companyName, extractAudiencePhrases, extractKeywords, firstSentence, matchedTerms, outboundDomains } from "./text.ts";
 import type { Campaign, Competitor, Evidence, ProspectCompany, ProspectContact, ProspectingState, EmailDraft, StepId } from "./types.ts";
 import { FetchRefused, fetchPage, mapLimit, search, searchAvailable, type SearchHit } from "./web.ts";
@@ -57,6 +58,8 @@ export function rootDomain(domain: string): string {
 
 // CDNs, ad and tracking hosts appear as links on article pages.
 const INFRASTRUCTURE = /(^|\.)(yimg\.com|oath\.com|yahoo\.com|aol\.com|gstatic\.com|googleusercontent\.com|googleapis\.com|googletagmanager\.com|doubleclick\.net|cloudfront\.net|akamaihd\.net|akamaized\.net|fastly\.net|jsdelivr\.net|unpkg\.com|gravatar\.com|wp\.com|bit\.ly|t\.co|lnkd\.in|apple\.co|amzn\.to|feedburner\.com|disqus\.com|typekit\.net|hotjar\.com|hs-scripts\.com|hubspotusercontent[a-z0-9-]*\.net)$|(^|\.)(cdn|static|assets|img|images|media)\d*\./;
+
+const LIST_TITLE = /\b(top|best|\d+|list|lists|startups|companies|brands|agencies|vendors|directory|examples|leading)\b/i;
 
 // Free hosting and publisher-style names are not prospects.
 const HOSTED = /(^|\.)(github\.io|gitlab\.io|vercel\.app|netlify\.app|herokuapp\.com|pages\.dev|web\.app|firebaseapp\.com|blogspot\.com|notion\.site|webflow\.io|framer\.website|carrd\.co|wixsite\.com|squarespace\.com)$/;
@@ -294,10 +297,16 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
   const terms = topicTerms(research.keywords, ctx.brand.category);
   const offTopic: string[] = [];
   const unreachable: string[] = [];
+  const audienceTally = new Map<string, { phrase: string; count: number; quote: string; url: string }>();
   const checked = await mapLimit(items, 4, async (c): Promise<Competitor | null> => {
     try {
       const page = await fetchPage(c.domain, 6000);
       const description = page.description ?? firstSentence(page.paragraphs[0]);
+      for (const a of extractAudiencePhrases(page, 4)) {
+        const key = a.phrase.toLowerCase();
+        const prev = audienceTally.get(key);
+        audienceTally.set(key, prev ? { ...prev, count: prev.count + 1 } : { phrase: a.phrase, count: 1, quote: a.quote, url: page.finalUrl });
+      }
       const hits = onTopic([page.title, description, ...page.headings].filter(Boolean).join(" "), terms);
       // On topic, or one topic word plus independent sources agreeing.
       const loose = matchedTerms([page.title, description, ...page.headings].filter(Boolean).join(" "), terms);
@@ -326,7 +335,13 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
 
   return {
     ...clearAfter(state, "competitors"),
-    competitors: { items: read, queries: searchAvailable() ? queries : [], searchAvailable: searchAvailable(), ranAt: at },
+    competitors: {
+      items: read,
+      audiences: [...audienceTally.values()].sort((a, b) => b.count - a.count).slice(0, 5),
+      queries: searchAvailable() ? queries : [],
+      searchAvailable: searchAvailable(),
+      ranAt: at,
+    },
   };
 }
 
@@ -379,8 +394,24 @@ export async function runCampaigns(state: ProspectingState, ctx: StepContext): P
       });
     }
   }
-  // No audience named on the site: propose one campaign from the site's own
-  // top keyword phrase, labelled as such, so the run can continue.
+  // No audience named on the site: use the audience competitors name most on
+  // their own homepages (who the category sells to), with the quote.
+  const theirs = state.competitors.audiences?.[0];
+  if (!items.length && theirs) {
+    items.push({
+      id: `cmp_${randomUUID().slice(0, 8)}`,
+      name: titleCase(theirs.phrase),
+      description: `Named by ${theirs.count} competitor homepage${theirs.count === 1 ? "" : "s"}: "${theirs.quote.length > 140 ? `${theirs.quote.slice(0, 137)}...` : theirs.quote}"`,
+      searchQuery: /compan|startup|firm|agenc|business|brand/i.test(theirs.phrase) ? theirs.phrase : `${theirs.phrase} companies`,
+      roles: DEFAULT_ROLES,
+      source: "homepage",
+      evidence: [{ kind: "page", url: theirs.url, quote: theirs.quote, at }],
+      selected: true,
+    });
+    ctx.log(`your homepage names no audience; using "${theirs.phrase}", which your competitors name`);
+  }
+  // Still nothing: propose one campaign from the site's own top keyword
+  // phrase, labelled as such, so the run can continue.
   const phrase = ctx.brand.category.trim() || research.keywords.find((k) => k.includes(" ")) || research.keywords[0];
   if (!items.length && phrase) {
     items.push({
@@ -444,7 +475,9 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
         const lists: SearchHit[] = [];
         for (const r of results) {
           if (isHomepage(r.url)) add(r.domain, { kind: "search", query: q, url: r.url, at });
-          else if (lists.length < 3 && !exclude.has(rootDomain(r.domain))) lists.push(r);
+          // Only pages that look like company lists are mined for links;
+          // news and opinion articles link to everything.
+          else if (lists.length < 3 && !exclude.has(rootDomain(r.domain)) && LIST_TITLE.test(r.title)) lists.push(r);
         }
         const linked = await mapLimit(lists, 3, async (list) => {
           try {
@@ -597,21 +630,13 @@ export async function runEmails(state: ProspectingState, ctx: StepContext): Prom
       company,
       contact,
     });
-    let subject = draft.subject;
-    let body = draft.body;
-    let engine: EmailDraft["engine"] = "template";
-    if (modelEnabled()) {
-      const out = await modelJson<{ subject?: string; body?: string }>(
-        `Write a short, plain first email (under 120 words) from ${ctx.senderName} at ${research.name} to ${contact?.name ?? "the right person"} at ${company.name}. Reference one fact from THEIRS and one from OURS. End with one low-pressure question. Shape: {"subject":string,"body":string}`,
-        { THEIRS: [company.name, company.description ?? ""].join("\n"), OURS: research.summary },
-        500,
-      );
-      if (out?.subject && out.body) {
-        subject = out.subject.slice(0, 120);
-        body = out.body.slice(0, 2000);
-        engine = "model";
-      }
-    }
+    const custom = await draftCompanyEmail(
+      { name: research.name, domain: research.domain, summary: research.summary, category: ctx.brand.category, keywords: research.keywords },
+      company,
+    );
+    const subject = custom.subject;
+    const body = contact?.firstName ? custom.body.replace(/^Hi,/, `Hi ${contact.firstName},`) : custom.body;
+    const engine: EmailDraft["engine"] = custom.engine === "model" ? "model" : "template";
     items.push({
       id: `drf_${randomUUID().slice(0, 8)}`,
       companyDomain: company.domain,
