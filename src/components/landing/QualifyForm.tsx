@@ -33,8 +33,8 @@ const GROUPS = ["Identity", "Business", "Capacity", "Intent"];
 
 // Onboarding eligibility: the server runs the business-capability tests and
 // either onboards the applicant or says, plainly, that it cannot yet.
-export default function QualifyForm({ defaultDomain = "", pack, compact = false }: { defaultDomain?: string; pack?: string; compact?: boolean }) {
-  const [form, setForm] = useState({ email: "", domain: defaultDomain, role: "", teamSize: "", monthlyOutreach: "", monthlyBudget: "", crm: "", useCase: "" });
+export default function QualifyForm({ defaultDomain = "", defaultEmail = "", pack, compact = false, onQualified }: { defaultDomain?: string; defaultEmail?: string; pack?: string; compact?: boolean; onQualified?: () => void }) {
+  const [form, setForm] = useState({ email: defaultEmail, domain: defaultDomain, role: "", teamSize: "", monthlyOutreach: "", monthlyBudget: "", crm: "", useCase: "" });
   const [agree, setAgree] = useState(false);
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const [error, setError] = useState("");
@@ -83,7 +83,7 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
         <h3 className="mt-3 text-2xl font-semibold tracking-tight">{invited ? "You qualify. Welcome to Threadly." : "Sorry, we are unable to onboard you right now."}</h3>
         <p className="mt-2 text-sm leading-relaxed text-zinc-600">
           {invited
-            ? `${outcome.already ? "This email is already approved." : "Your invite is in your inbox."} Sign in with Google as ${form.email || "the email you applied with"}${pack ? ` and pick the ${pack} pack` : ""} to start.`
+            ? onQualified ? "Your account is approved and ready." : `${outcome.already ? "This email is already approved." : "Your invite is in your inbox."} Sign in with Google as ${form.email || "the email you applied with"}${pack ? ` and pick the ${pack} pack` : ""} to start.`
             : outcome.locked ? "You have used all your applications for this email. We keep your application on file." : "Threadly is invite-only and onboards teams that pass our lead-generation checks. Your application is kept on file."}
         </p>
         {outcome.blockers && outcome.blockers.length > 0 && (
@@ -113,7 +113,11 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
           );
         })}
         {invited ? (
-          <Link href="/portal" className="mt-6 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Sign in and start</Link>
+          onQualified ? (
+            <button type="button" onClick={onQualified} className="mt-6 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Open your workspace</button>
+          ) : (
+            <Link href="/portal" className="mt-6 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Sign in and start</Link>
+          )
         ) : (
           outcome.locked || !outcome.attemptsLeft ? null : <button type="button" onClick={() => setOutcome(null)} className="mt-6 text-sm font-semibold text-zinc-900 underline underline-offset-4">Update my details ({outcome.attemptsLeft} {outcome.attemptsLeft === 1 ? "try" : "tries"} left)</button>
         )}
@@ -125,7 +129,7 @@ export default function QualifyForm({ defaultDomain = "", pack, compact = false 
     <form onSubmit={submit} className="grid gap-3">
       <div className={`grid gap-3 ${compact ? "" : "sm:grid-cols-2"}`}>
         <label className="grid gap-1 text-xs font-medium text-zinc-600">Work email
-          <input required type="email" autoComplete="email" value={form.email} onChange={set("email")} placeholder="you@company.com" className={field} />
+          <input required type="email" autoComplete="email" readOnly={Boolean(defaultEmail)} value={form.email} onChange={set("email")} placeholder="you@company.com" className={field} />
         </label>
         <label className="grid gap-1 text-xs font-medium text-zinc-600">Company website
           <input required autoComplete="url" value={form.domain} onChange={set("domain")} placeholder="company.com" className={field} />
