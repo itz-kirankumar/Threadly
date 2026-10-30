@@ -617,9 +617,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
               data-tour={`tab-${item.id}`}
               onClick={() => setTab(item.id)}
               title={item.label}
-              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition ${
-                tab === item.id ? "bg-violet-500/15 text-white" : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
-              }`}
+              aria-current={tab === item.id ? "page" : undefined}
+              className="nav-item flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition"
             >
               <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
               <span className={`whitespace-nowrap ${sidebarCollapsed ? "hidden" : "hidden md:inline"}`}>{item.label}</span>
@@ -1006,13 +1005,13 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 
   if (readOnly) {
     return (
-      <div className="space-y-6 pb-20 md:pb-0">
+      <div className="portal portal-embedded space-y-6 pb-20 md:pb-0">
         {commandPalette}
         {body}
         {/* Mobile tab bar for the demo: the section rail is hidden below md. */}
         <nav
           aria-label="Demo sections"
-          className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around gap-0.5 border-t border-white/[0.08] bg-zinc-950/95 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden"
+          className="fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 overflow-x-auto border-t border-white/[0.08] bg-zinc-950/95 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden"
         >
           {tabs.map((item) => (
             <button
@@ -1021,12 +1020,10 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
               onClick={() => setTab(item.id)}
               aria-label={item.label}
               aria-current={tab === item.id ? "page" : undefined}
-              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1 text-[9px] font-medium transition ${
-                tab === item.id ? "bg-violet-500/15 text-violet-200" : "text-zinc-500 hover:text-zinc-300"
-              }`}
+              className="nav-item nav-item-compact flex min-w-[68px] flex-none flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition"
             >
               <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
-              <span className="max-w-full truncate">{item.label}</span>
+              <span className="whitespace-nowrap">{item.label}</span>
             </button>
           ))}
         </nav>
@@ -1044,9 +1041,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       data-tour={`tab-${item.id}`}
       onClick={() => setTab(item.id)}
       title={item.label}
-      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition ${
-        tab === item.id ? "bg-violet-500/15 text-white" : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
-      }`}
+      aria-current={tab === item.id ? "page" : undefined}
+      className="nav-item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition"
     >
       <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
       <span className={`whitespace-nowrap ${railName}`}>{item.label}</span>
@@ -1054,10 +1050,10 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   );
 
   return (
-    <div className="flex min-h-screen bg-zinc-950">
+    <div className="portal flex min-h-screen">
       <aside
         aria-label="Workspace navigation"
-        className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-white/[0.06] transition-all md:flex ${sidebarCollapsed ? "md:w-14" : "md:w-60"}`}
+        className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-white/[0.08] bg-zinc-950/60 transition-all md:flex ${sidebarCollapsed ? "md:w-14" : "md:w-60"}`}
       >
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-3">
           <button
@@ -1103,7 +1099,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
             return (
               <div key={group.id} className={group.label ? "pt-4 first:pt-0" : ""}>
                 {group.label && (
-                  <p className={`px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 ${railLabel}`}>{group.label}</p>
+                  <p className={`nav-label px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest ${railLabel}`}>{group.label}</p>
                 )}
                 <div className="space-y-0.5">{items.map(navButton)}</div>
               </div>
@@ -1180,7 +1176,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           moves to a fixed bottom bar (same tabs, same icons). */}
       <nav
         aria-label="Workspace navigation"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around gap-0.5 border-t border-white/[0.08] bg-zinc-950/95 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 overflow-x-auto border-t border-white/[0.08] bg-zinc-950/95 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden"
       >
         {tabs.map((item) => (
           <button
@@ -1189,12 +1185,10 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
             onClick={() => setTab(item.id)}
             aria-label={item.label}
             aria-current={tab === item.id ? "page" : undefined}
-            className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1 text-[9px] font-medium transition ${
-              tab === item.id ? "bg-violet-500/15 text-violet-200" : "text-zinc-500 hover:text-zinc-300"
-            }`}
+            className="nav-item nav-item-compact flex min-w-[68px] flex-none flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition"
           >
             <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
-            <span className="max-w-full truncate">{item.label}</span>
+            <span className="whitespace-nowrap">{item.label}</span>
           </button>
         ))}
       </nav>

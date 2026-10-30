@@ -76,8 +76,8 @@ export default function SocialPanel({ authedFetch }: { authedFetch: (path: strin
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-white">Social search</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h2 className="ui-page-title">Social search</h2>
+          <p className="ui-page-subtitle">
             Search public conversations across Reddit, X and LinkedIn, or the wider web. Social results are public
             posts indexed by search - not complete, native or logged-in platform data. Web is a general web search,
             not Google-specific.

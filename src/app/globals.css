@@ -35,67 +35,249 @@ body {
   -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 75%);
 }
 
-/* Dashboard light theme (portal only - the .light class is applied on
-   documentElement by the dashboard and removed on unmount, so public pages
-   always stay dark). Overrides map the dark palette utilities to light
-   equivalents; accents stay on the violet family. */
+/* Dashboard light theme switch: the dashboard adds .light to <html> while
+   mounted (removed on unmount, so public pages always stay dark). Colours
+   come from the portal design system below. */
 :root.light {
-  --background: #fafafa;
-  --foreground: #18181b;
+  --background: #eef0f6;
+  --foreground: #0d1424;
 }
-.light .bg-zinc-950 { background-color: #ffffff; }
-.light .bg-zinc-950\/95 { background-color: rgb(255 255 255 / 0.95); }
-.light .bg-zinc-950\/90 { background-color: rgb(255 255 255 / 0.92); }
-.light .bg-zinc-950\/60 { background-color: rgb(255 255 255 / 0.6); }
-.light .bg-zinc-900 { background-color: #f4f4f5; }
-.light .bg-zinc-800 { background-color: #e4e4e7; }
-.light .bg-zinc-700 { background-color: #d4d4d8; }
-.light .bg-zinc-600 { background-color: #a1a1aa; }
-.light .bg-zinc-500\/10 { background-color: rgb(113 113 122 / 0.12); }
-.light .bg-zinc-200 { background-color: #3f3f46; }
-.light .bg-zinc-100 { background-color: #27272a; }
-.light .bg-white { background-color: #18181b; }
-.light .bg-white\/5 { background-color: rgb(24 24 27 / 0.05); }
-.light .bg-white\/10 { background-color: rgb(24 24 27 / 0.08); }
-.light .bg-white\/\[0\.02\] { background-color: rgb(24 24 27 / 0.03); }
-.light .bg-white\/\[0\.03\] { background-color: rgb(24 24 27 / 0.04); }
-.light .bg-white\/\[0\.04\] { background-color: rgb(24 24 27 / 0.05); }
-.light .bg-white\/\[0\.06\] { background-color: rgb(24 24 27 / 0.06); }
-.light .hover\:bg-white\/5:hover { background-color: rgb(24 24 27 / 0.06); }
-.light .hover\:bg-white\/10:hover { background-color: rgb(24 24 27 / 0.1); }
-.light .hover\:bg-white\/\[0\.06\]:hover { background-color: rgb(24 24 27 / 0.07); }
-.light .text-white { color: #18181b; }
-.light .text-zinc-100 { color: #27272a; }
-.light .text-zinc-200 { color: #3f3f46; }
-.light .text-zinc-300 { color: #3f3f46; }
-.light .text-zinc-400 { color: #52525b; }
-.light .text-zinc-500 { color: #71717a; }
-.light .text-zinc-600 { color: #a1a1aa; }
-.light .text-zinc-900 { color: #fafafa; }
-.light .text-zinc-950 { color: #fafafa; }
-.light .border-white\/5 { border-color: rgb(24 24 27 / 0.06); }
-.light .border-white\/10 { border-color: rgb(24 24 27 / 0.1); }
-.light .border-white\/15 { border-color: rgb(24 24 27 / 0.14); }
-.light .border-white\/\[0\.08\] { border-color: rgb(24 24 27 / 0.08); }
-.light .border-zinc-700 { border-color: #d4d4d8; }
-.light .border-zinc-600 { border-color: #d4d4d8; }
-.light .border-zinc-500\/20 { border-color: rgb(113 113 122 / 0.3); }
-.light .border-zinc-400\/30 { border-color: rgb(161 161 170 / 0.4); }
-.light .text-violet-200 { color: #5b21b6; }
-.light .text-violet-300 { color: #6d28d9; }
-.light .text-violet-400 { color: #7c3aed; }
-.light .text-emerald-300 { color: #047857; }
-.light .text-emerald-400 { color: #059669; }
-.light .text-red-200 { color: #991b1b; }
-.light .text-red-300 { color: #b91c1c; }
-.light .text-red-400 { color: #dc2626; }
-.light .text-amber-300 { color: #b45309; }
-.light .text-amber-400 { color: #d97706; }
-.light .text-blue-400 { color: #2563eb; }
-.light .text-blue-300 { color: #1d4ed8; }
-.light .text-purple-300 { color: #9333ea; }
-.light .text-purple-400 { color: #7e22ce; }
-.light .shadow-2xl { box-shadow: 0 12px 32px -12px rgb(24 24 27 / 0.18); }
+
+/* ==========================================================================
+   Portal design system ("glass")
+   --------------------------------------------------------------------------
+   One set of semantic tokens drives every portal screen in both themes. The
+   portal root carries the .portal class; the dashboard toggles .light on
+   <html>. Panels keep their existing utility classes: the mappings below
+   route each colour utility used in the portal through the tokens, so a
+   token change restyles every screen at once and light and dark stay in
+   sync. Text tokens are chosen to meet WCAG AA (4.5:1) on their surfaces.
+   ========================================================================== */
+.portal {
+  --bg: #0a0b10;
+  --glow-1: rgba(99, 102, 241, 0.16);
+  --glow-2: rgba(139, 92, 246, 0.11);
+  --glow-3: rgba(14, 165, 233, 0.07);
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-2: rgba(255, 255, 255, 0.065);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --surface-solid: rgba(16, 18, 26, 0.78);
+  --surface-sunken: rgba(0, 0, 0, 0.28);
+  --input: rgba(255, 255, 255, 0.05);
+  --overlay: rgba(4, 5, 9, 0.62);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --highlight: rgba(255, 255, 255, 0.07);
+  --fg: #f5f6f8;
+  --fg-2: #d7d9df;
+  --fg-muted: #aeb2bd;
+  --fg-subtle: #9297a4;
+  --on-fg: #0a0b10;
+  --accent: #b1a8ff;
+  --accent-solid: #6655ee;
+  --accent-solid-hover: #7565f3;
+  --accent-soft: rgba(124, 108, 255, 0.17);
+  --accent-border: rgba(150, 138, 255, 0.5);
+  --success: #4ade9a;
+  --success-soft: rgba(52, 211, 153, 0.13);
+  --success-border: rgba(52, 211, 153, 0.38);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.13);
+  --warning-border: rgba(251, 191, 36, 0.38);
+  --danger: #fb8a8a;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --danger-border: rgba(248, 113, 113, 0.4);
+  --info: #7dd3fc;
+  --info-soft: rgba(56, 189, 248, 0.13);
+  --shadow: inset 0 1px 0 var(--highlight), 0 10px 30px -18px rgba(0, 0, 0, 0.85);
+  --shadow-lg: inset 0 1px 0 var(--highlight), 0 30px 80px -24px rgba(0, 0, 0, 0.9);
+  --blur: blur(18px) saturate(150%);
+
+  color: var(--fg);
+  background:
+    radial-gradient(1100px 620px at 8% -12%, var(--glow-1), transparent 62%),
+    radial-gradient(900px 520px at 100% -6%, var(--glow-2), transparent 60%),
+    radial-gradient(800px 600px at 60% 110%, var(--glow-3), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  color-scheme: dark;
+}
+
+:root.light .portal {
+  --bg: #eef0f6;
+  --glow-1: rgba(99, 102, 241, 0.13);
+  --glow-2: rgba(168, 85, 247, 0.09);
+  --glow-3: rgba(14, 165, 233, 0.08);
+  --surface: rgba(255, 255, 255, 0.66);
+  --surface-2: rgba(255, 255, 255, 0.82);
+  --surface-hover: rgba(15, 23, 42, 0.045);
+  --surface-solid: rgba(255, 255, 255, 0.86);
+  --surface-sunken: rgba(15, 23, 42, 0.045);
+  --input: rgba(255, 255, 255, 0.92);
+  --overlay: rgba(15, 23, 42, 0.32);
+  --border: rgba(15, 23, 42, 0.11);
+  --border-strong: rgba(15, 23, 42, 0.2);
+  --highlight: rgba(255, 255, 255, 0.85);
+  --fg: #0d1424;
+  --fg-2: #1e293b;
+  --fg-muted: #3f4a5c;
+  --fg-subtle: #4a5467;
+  --on-fg: #ffffff;
+  --accent: #4034c8;
+  --accent-solid: #4f46e5;
+  --accent-solid-hover: #4338ca;
+  --accent-soft: rgba(79, 70, 229, 0.1);
+  --accent-border: rgba(79, 70, 229, 0.36);
+  --success: #03664a;
+  --success-soft: rgba(5, 150, 105, 0.1);
+  --success-border: rgba(5, 150, 105, 0.32);
+  --warning: #8a3f05;
+  --warning-soft: rgba(217, 119, 6, 0.11);
+  --warning-border: rgba(217, 119, 6, 0.34);
+  --danger: #9f1d16;
+  --danger-soft: rgba(220, 38, 38, 0.09);
+  --danger-border: rgba(220, 38, 38, 0.32);
+  --info: #035079;
+  --info-soft: rgba(2, 132, 199, 0.1);
+  --shadow: inset 0 1px 0 var(--highlight), 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 32px -20px rgba(15, 23, 42, 0.3);
+  --shadow-lg: inset 0 1px 0 var(--highlight), 0 30px 70px -28px rgba(15, 23, 42, 0.38);
+  color-scheme: light;
+}
+
+/* ---- Text ---------------------------------------------------------------- */
+.portal :is(.text-white, .text-zinc-100, .text-zinc-200, .hover\:text-white:hover, .hover\:text-zinc-200:hover, .hover\:text-zinc-300:hover) { color: var(--fg); }
+.portal .text-zinc-300 { color: var(--fg-2); }
+.portal :is(.text-zinc-400, .hover\:text-zinc-600:hover) { color: var(--fg-muted); }
+.portal :is(.text-zinc-500, .text-zinc-600) { color: var(--fg-subtle); }
+.portal :is(.text-zinc-900, .text-zinc-950) { color: var(--on-fg); }
+.portal :is(.text-violet-200, .text-violet-300, .text-violet-400, .hover\:text-violet-200:hover, .text-purple-300, .text-purple-400, .text-fuchsia-300, .text-teal-300, .text-teal-400, .text-teal-700, .text-blue-300, .text-blue-400, .text-indigo-300) { color: var(--accent); }
+.portal :is(.text-emerald-100, .text-emerald-200, .text-emerald-200\/70, .text-emerald-300, .text-emerald-400, .text-emerald-500, .text-lime-300, .deals-won-label, .deals-won-value) { color: var(--success); }
+.portal :is(.text-amber-200, .text-amber-200\/90, .text-amber-300, .text-amber-300\/80, .text-amber-400, .text-amber-700, .text-orange-300) { color: var(--warning); }
+.portal :is(.text-rose-200, .text-rose-300, .text-rose-400, .text-rose-600, .text-rose-700, .text-red-200, .text-red-300, .text-red-400, .hover\:text-rose-300:hover, .hover\:text-rose-400:hover) { color: var(--danger); }
+.portal :is(.text-cyan-300, .text-sky-300) { color: var(--info); }
+.portal :is(.placeholder-zinc-500, .placeholder-zinc-600)::placeholder { color: var(--fg-subtle); opacity: 1; }
+.portal :is(input, textarea)::placeholder { color: var(--fg-subtle); }
+
+/* ---- Surfaces ------------------------------------------------------------ */
+.portal :is(.bg-white\/\[0\.02\], .bg-white\/\[0\.03\]) { background-color: var(--surface); }
+.portal :is(.bg-white\/\[0\.04\], .bg-white\/\[0\.05\], .bg-white\/\[0\.06\], .bg-white\/5, .bg-zinc-500\/20) { background-color: var(--surface-2); }
+.portal :is(.bg-white\/\[0\.08\], .bg-white\/10, .bg-white\/15, .bg-zinc-800, .bg-zinc-700, .bg-zinc-600) { background-color: var(--surface-hover); }
+.portal :is(.hover\:bg-white\/5, .hover\:bg-white\/10, .hover\:bg-white\/20, .hover\:bg-white\/\[0\.03\], .hover\:bg-white\/\[0\.04\], .hover\:bg-white\/\[0\.05\], .hover\:bg-white\/\[0\.06\], .hover\:bg-white\/\[0\.08\], .hover\:bg-zinc-200):hover { background-color: var(--surface-hover); }
+.portal :is(.bg-zinc-950, .bg-zinc-950\/95, .bg-zinc-950\/90, .bg-zinc-950\/70, .bg-zinc-950\/60) { background-color: var(--surface-solid); }
+.portal .bg-zinc-900 { background-color: var(--input); }
+.portal :is(.bg-black\/20, .bg-black\/30, .bg-black\/40) { background-color: var(--surface-sunken); }
+.portal :is(.bg-black\/60, .bg-black\/80) { background-color: var(--overlay); }
+.portal :is(.bg-white, .bg-zinc-100, .bg-zinc-400) { background-color: var(--fg); }
+
+/* Glass: cards, panels, sidebars and dialogs blur what is behind them. */
+.portal :is(.bg-white\/\[0\.02\], .bg-white\/\[0\.03\], .bg-white\/\[0\.04\]):is(.rounded-xl, .rounded-2xl),
+.portal :is(.bg-zinc-950, .bg-zinc-950\/95, .bg-zinc-950\/90, .bg-zinc-950\/70, .bg-zinc-950\/60):is(.rounded-xl, .rounded-2xl, aside, nav),
+.portal .portal-glass {
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+}
+.portal :is(.bg-zinc-950, .bg-zinc-950\/95):is(.rounded-2xl) { box-shadow: var(--shadow-lg); }
+.portal :is(.backdrop-blur, .backdrop-blur-sm) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+
+/* ---- Status fills -------------------------------------------------------- */
+.portal :is(.bg-violet-500\/10, .bg-violet-500\/15, .bg-violet-500\/20, .bg-violet-500\/25, .bg-violet-400\/10, .bg-violet-500\/\[0\.06\], .bg-blue-500\/10, .bg-teal-500\/10, .bg-fuchsia-500\/15, .bg-lime-500\/15, .hover\:bg-violet-500\/10:hover, .hover\:bg-violet-500\/25:hover, .hover\:bg-teal-600\/10:hover) { background-color: var(--accent-soft); }
+.portal :is(.bg-emerald-500\/10, .bg-emerald-500\/15, .bg-emerald-500\/20, .hover\:bg-emerald-500\/30:hover) { background-color: var(--success-soft); }
+.portal :is(.bg-amber-500\/10, .bg-amber-500\/15, .bg-amber-500\/20, .bg-amber-400\/10, .bg-orange-500\/10, .bg-orange-500\/15) { background-color: var(--warning-soft); }
+.portal :is(.bg-rose-500\/10, .bg-rose-500\/15, .bg-red-500\/10, .hover\:bg-rose-500\/10:hover) { background-color: var(--danger-soft); }
+.portal :is(.bg-sky-500\/10, .bg-sky-500\/15, .bg-cyan-500\/15) { background-color: var(--info-soft); }
+.portal :is(.bg-emerald-400) { background-color: var(--success); }
+.portal :is(.bg-violet-400) { background-color: var(--accent); }
+
+/* ---- Borders ------------------------------------------------------------- */
+.portal :is(.border-white\/5, .border-white\/\[0\.06\], .border-white\/\[0\.08\], .border-white\/10) { border-color: var(--border); }
+.portal :is(.border-white\/15, .border-white\/20, .border-zinc-700, .border-zinc-600, .border-zinc-400\/30, .hover\:border-white\/25:hover, .border-sky-500\/30, .border-sky-400\/30, .border-cyan-500\/30, .border-blue-400\/30, .border-lime-500\/30, .border-fuchsia-500\/30, .border-orange-500\/30, .border-orange-400\/30) { border-color: var(--border-strong); }
+.portal :is(.divide-white\/5, .divide-white\/\[0\.06\]) > :not(:last-child) { border-color: var(--border); }
+.portal :is(.border-violet-400, .border-violet-400\/30, .border-violet-400\/40, .border-violet-400\/50, .border-violet-400\/60, .border-violet-500\/30, .border-teal-600, .border-teal-500\/50, .hover\:border-violet-400\/40:hover, .hover\:border-violet-400\/50:hover, .hover\:border-blue-500\/50:hover) { border-color: var(--accent-border); }
+.portal :is(.border-emerald-500\/30, .border-emerald-400\/30) { border-color: var(--success-border); }
+.portal :is(.border-amber-400\/20, .border-amber-400\/30, .border-amber-400\/40, .border-amber-500\/30) { border-color: var(--warning-border); }
+.portal :is(.border-rose-500\/20, .border-rose-500\/30, .border-rose-500\/40, .border-rose-400\/20, .border-rose-400\/30, .border-rose-400\/40, .border-red-400\/30, .hover\:border-rose-400\/40:hover) { border-color: var(--danger-border); }
+
+/* ---- Primary actions: one accent, white text, in every panel ------------ */
+.portal :is(.bg-violet-500, .bg-violet-600, .bg-blue-600, .bg-teal-600) { background-color: var(--accent-solid); }
+.portal :is(.hover\:bg-violet-400, .hover\:bg-violet-500, .hover\:bg-blue-500, .hover\:bg-teal-500):hover { background-color: var(--accent-solid-hover); }
+.portal :is(.bg-violet-500, .bg-violet-600, .bg-blue-600, .bg-teal-600):is(button, a, .text-white) { color: #ffffff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 6px 18px -8px rgba(79, 70, 229, 0.7); }
+.portal :is(.bg-rose-500\/90, .hover\:bg-rose-400:hover) { background-color: #dc2626; color: #ffffff; }
+
+/* ---- Focus and form controls --------------------------------------------- */
+.portal :is(.focus\:ring-blue-500, .focus\:ring-violet-500, .focus\:ring-1):focus { --tw-ring-color: var(--accent-solid); }
+.portal :is(.focus\:border-violet-400, .focus\:border-violet-400\/50, .focus\:border-violet-400\/60, .focus\:border-teal-500\/50):focus { border-color: var(--accent-border); }
+.portal :is(input, select, textarea) { color: var(--fg); }
+.portal select option { background: var(--bg); color: var(--fg); }
+.portal :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--accent-solid); }
+.portal :is(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 2px; }
+.portal .ring-violet-300 { --tw-ring-color: var(--accent-border); }
+
+/* ---- Details ------------------------------------------------------------- */
+.portal ::selection { background: var(--accent-solid); color: #ffffff; }
+.portal :is(.shadow-2xl, .shadow-xl) { box-shadow: var(--shadow-lg); }
+.portal ::-webkit-scrollbar { width: 10px; height: 10px; }
+.portal ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+.portal ::-webkit-scrollbar-track { background: transparent; }
+.portal code { color: var(--fg-2); }
+
+/* ---- Shared components ---------------------------------------------------
+   Every panel builds its buttons, inputs, cards and headings from these, so
+   controls look and behave the same on every screen. */
+.portal .ui-card {
+  border-radius: 14px; border: 1px solid var(--border); background-color: var(--surface);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); box-shadow: var(--shadow);
+}
+.portal .ui-btn,
+.portal .ui-btn-primary,
+.portal .ui-btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  min-height: 2.25rem; padding: 0.45rem 0.95rem; border-radius: 0.6rem;
+  font-size: 0.8125rem; font-weight: 600; line-height: 1.2; white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+.portal .ui-btn-primary {
+  background-color: var(--accent-solid); color: #ffffff; border: 1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 6px 18px -8px rgba(79, 70, 229, 0.7);
+}
+.portal .ui-btn-primary:hover:not(:disabled) { background-color: var(--accent-solid-hover); }
+.portal .ui-btn-secondary { background-color: var(--surface-2); color: var(--fg); border: 1px solid var(--border); }
+.portal .ui-btn-secondary:hover:not(:disabled) { background-color: var(--surface-hover); border-color: var(--border-strong); }
+.portal :is(.ui-btn, .ui-btn-primary, .ui-btn-secondary):disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.portal .ui-input {
+  min-height: 2.25rem; padding: 0.45rem 0.75rem; border-radius: 0.6rem; border: 1px solid var(--border);
+  background-color: var(--input); color: var(--fg); font-size: 0.875rem; line-height: 1.4;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.portal .ui-input:focus { outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-soft); }
+.portal .ui-page-title { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); }
+.portal .ui-page-subtitle { margin-top: 0.25rem; font-size: 0.875rem; color: var(--fg-muted); max-width: 72ch; }
+.portal .ui-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-subtle); }
+
+/* Navigation item states used by the portal shell. */
+.portal .nav-item { position: relative; color: var(--fg-muted); }
+.portal .nav-item:hover { color: var(--fg); background-color: var(--surface-hover); }
+.portal .nav-item[aria-current="page"] { color: var(--fg); background-color: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-border); }
+.portal .nav-item[aria-current="page"]::before {
+  content: ""; position: absolute; left: -8px; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--accent-solid);
+}
+.portal .nav-label { color: var(--fg-subtle); }
+.portal .nav-item-compact[aria-current="page"]::before { display: none; }
+/* The public demo embeds the dashboard in the marketing page: same tokens,
+   no page background of its own. */
+.portal.portal-embedded { background: transparent; }
+
+/* The help assistant is mounted site-wide, outside the portal tree; inside
+   the portal it takes the portal accent instead of the marketing gradient. */
+body:has(.portal) .assistant-fab {
+  background-image: linear-gradient(135deg, #7565f3, #4f46e5);
+  border-color: rgba(150, 138, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 12px 30px -10px rgba(79, 70, 229, 0.65);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .portal { --blur: none; }
+}
 
 /* Help assistant animations */
 @keyframes assistant-fab-idle {
@@ -136,5 +318,3 @@ body {
     animation: none !important;
   }
 }
-.light .deals-won-label { color: #0f766e; }
-.light .deals-won-value { color: #0f766e; }

@@ -5,8 +5,8 @@ import type { Company, CrmContact, Deal, WorkspaceActivity, CrmAccountsState, De
 
 const STAGES: DealStage[] = ["qualification", "discovery", "proposal", "negotiation", "won", "lost"];
 
-const inputCls = "rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-violet-400/50 focus:outline-none";
-const btnCls = "rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors disabled:opacity-40";
+const inputCls = "ui-input";
+const btnCls = "ui-btn-primary";
 
 export default function CrmAccountsPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
   const [state, setState] = useState<CrmAccountsState>({ companies: [], contacts: [], deals: [], activities: [] });
@@ -54,8 +54,8 @@ export default function CrmAccountsPanel({ authedFetch }: { authedFetch: (path: 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight text-white">Relationship CRM</h2>
-        <p className="mt-1 text-sm text-zinc-400">Companies, people, deals and next actions connected to every saved lead.</p>
+        <h2 className="ui-page-title">Relationship CRM</h2>
+        <p className="ui-page-subtitle">Companies, people, deals and next actions connected to every saved lead.</p>
       </div>
 
       {notice && <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-300">{notice}</p>}

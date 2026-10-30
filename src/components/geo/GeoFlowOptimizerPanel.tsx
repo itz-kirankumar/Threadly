@@ -19,9 +19,9 @@ const RELATION_LABELS = { yours: "Your site", competitor: "Competitor", third_pa
 
 const tabBtn = (active: boolean) =>
   `rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${active ? "bg-white/15 text-white" : "text-zinc-400 hover:text-white"}`;
-const primaryBtn = "rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors disabled:opacity-40";
-const secondaryBtn = "rounded-lg border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-40";
-const card = "rounded-xl border border-white/10 bg-white/[0.03] p-4";
+const primaryBtn = "ui-btn-primary";
+const secondaryBtn = "ui-btn-secondary";
+const card = "ui-card p-4";
 
 function pct(n: number, d: number): string {
   return d ? `${Math.round((n / d) * 100)}%` : "No data";
@@ -81,7 +81,7 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch, rea
   if (readOnly) {
     return (
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight text-white">Optimization</h2>
+        <h2 className="ui-page-title">Optimization</h2>
         <div className={`${card} space-y-2 text-sm text-zinc-300`}>
           <p>In a signed-in workspace, this tab shows:</p>
           <ul className="list-disc space-y-1 pl-5 text-zinc-400">
@@ -157,8 +157,8 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch, rea
     <div className="space-y-6">
       <div className="flex flex-col gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-white">Optimization</h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h2 className="ui-page-title">Optimization</h2>
+          <p className="ui-page-subtitle">
             Brand facts to publish, what your scans show for a question, the sources AI answers cite, and crawler access for your site.
           </p>
         </div>

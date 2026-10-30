@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, updateProfile, type User } from "firebase/auth";
@@ -80,6 +80,18 @@ export default function AccountSettings({ user }: { user: User }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // Same theme as the dashboard (saved per user there).
+  useEffect(() => {
+    let light = false;
+    try {
+      light = window.localStorage.getItem("threadly-theme") === "light";
+    } catch {
+      // storage unavailable - stay dark
+    }
+    document.documentElement.classList.toggle("light", light);
+    return () => document.documentElement.classList.remove("light");
+  }, []);
+
   async function saveDisplayName(name: string) {
     setBusy(true);
     setError("");
@@ -97,7 +109,7 @@ export default function AccountSettings({ user }: { user: User }) {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="portal min-h-screen">
       <header className="border-b border-white/[0.06]">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link href="/portal" className="text-sm text-zinc-400 transition hover:text-white">

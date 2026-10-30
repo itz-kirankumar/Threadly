@@ -29,9 +29,9 @@ const SOURCE_LABELS: Record<string, string> = {
   manual: "Added manually",
 };
 
-const inputCls = "w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
-const primaryBtn = "rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors disabled:opacity-40";
-const secondaryBtn = "rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-white/10 transition-colors disabled:opacity-40";
+const inputCls = "ui-input w-full";
+const primaryBtn = "ui-btn-primary";
+const secondaryBtn = "ui-btn-secondary";
 
 function stageLabel(stage: LeadStage): string {
   return STAGES.find((s) => s.id === stage)?.label ?? stage;
@@ -260,8 +260,8 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-white">Leads</h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h2 className="ui-page-title">Leads</h2>
+          <p className="ui-page-subtitle">
             Candidate accounts and their history. Drafts here are for review; sending runs through approved Outbound campaigns.
           </p>
         </div>

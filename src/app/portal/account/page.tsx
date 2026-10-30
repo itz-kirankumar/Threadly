@@ -22,7 +22,7 @@ export default function AccountPage() {
   }, [router]);
 
   if (!ready || !user) {
-    return <div className="min-h-screen bg-zinc-950 py-24 text-center text-sm text-zinc-500">Loading…</div>;
+    return <div className="portal min-h-screen py-24 text-center text-sm text-zinc-500">Loading…</div>;
   }
   if (!user.phoneNumber) {
     return <PhoneGate user={user} />;

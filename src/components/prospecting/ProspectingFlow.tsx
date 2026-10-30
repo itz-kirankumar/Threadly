@@ -17,11 +17,11 @@ interface Props {
   onOpenTab?: (tab: "outreach" | "enterprise") => void;
 }
 
-const card = "rounded-xl border border-white/10 bg-white/[0.03]";
-const primaryBtn = "rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-40";
-const secondaryBtn = "rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-zinc-200 transition hover:bg-white/10 disabled:opacity-40";
-const inputCls = "w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-violet-500";
-const label = "text-[11px] font-semibold uppercase tracking-wider text-zinc-500";
+const card = "ui-card";
+const primaryBtn = "ui-btn-primary";
+const secondaryBtn = "ui-btn-secondary";
+const inputCls = "ui-input w-full";
+const label = "ui-label";
 
 function done(state: ProspectingState | null, step: StepId): boolean {
   return Boolean(state?.[step]);
@@ -194,8 +194,8 @@ export default function ProspectingFlow({ authedFetch, getToken, brand, onOpenTa
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-white">Prospecting</h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h2 className="ui-page-title">Prospecting</h2>
+          <p className="ui-page-subtitle">
             From your website to researched prospects and draft emails. Every result links to the page or search it came from. Nothing is sent from here.
           </p>
         </div>
@@ -248,7 +248,7 @@ function Stepper({ state, view, running, onView }: { state: ProspectingState; vi
         const active = s === view;
         const reachable = isDone || s === firstOpenStep(state);
         return (
-          <li key={s} className="flex min-w-0 flex-1 items-center gap-2 last:flex-none">
+          <li key={s} className={`flex items-center gap-2 ${active ? "shrink-0" : "flex-1"} last:flex-none`}>
             <button
               type="button"
               disabled={!reachable}

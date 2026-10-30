@@ -71,8 +71,8 @@ export default function RedditPanel({ authedFetch }: { authedFetch: (path: strin
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-white">Reddit monitor</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h2 className="ui-page-title">Reddit monitor</h2>
+          <p className="ui-page-subtitle">
             Buyer conversations, brand and competitor mentions from the last 30 days. AI assistants frequently cite
             public Reddit threads when answering product questions - being in the right thread is how you get cited.
           </p>

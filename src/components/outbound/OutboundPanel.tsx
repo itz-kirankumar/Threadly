@@ -125,16 +125,16 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
     finally { setBusy(false); }
   };
 
-  const input = "w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none focus:border-teal-500/50";
-  const btn = "rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-40";
-  const card = "rounded-xl border border-white/10 bg-white/[0.03] p-4";
+  const input = "ui-input w-full";
+  const btn = "ui-btn-primary";
+  const card = "ui-card p-4";
 
   return (
     <div className="grid gap-4">
-      <div className={card}>
-        <h2 className="text-sm font-semibold text-zinc-200">Outbound (preview)</h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Approval-gated campaign workflow. Nothing is sent from this surface: planning creates drafted intents only.
+      <div>
+        <h2 className="ui-page-title">Outbound</h2>
+        <p className="ui-page-subtitle">
+          Approval-gated campaign workflow, in preview. Nothing is sent from this surface: planning creates drafted intents only.
         </p>
       </div>
       {error && <p className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
