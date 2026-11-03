@@ -4,6 +4,8 @@ import { useState, type ReactNode } from "react";
 import type { DemoCompany, DemoResults } from "@/lib/live-demo/types";
 import CountUp from "./CountUp";
 import { CompanyTable, postLabel } from "./demo-tables";
+import LeadBoard from "./LeadBoard";
+import { buildLeads } from "@/lib/live-demo/leads";
 
 const delay = (i: number) => ({ animationDelay: `${i * 70}ms` });
 
@@ -43,7 +45,8 @@ function Mini({ company }: { company: DemoCompany }) {
 // Step 9: the finished run as one report. Everything is computed from this
 // run's results; nothing here is sample data.
 export default function ResearchReport({ results, action, signals: signalView, emails }: { results: DemoResults; action: ReactNode; signals: ReactNode; emails: ReactNode }) {
-  const [tab, setTab] = useState("Overview");
+  // Leads first: every lead in the run, scored, is what the run is for.
+  const [tab, setTab] = useState("Leads");
   const r = results.research;
   if (!r) return null;
   const audit = results.crawler;
@@ -57,7 +60,10 @@ export default function ResearchReport({ results, action, signals: signalView, e
   const fixes = (audit?.categories ?? []).flatMap((c) => c.checks).filter((c) => !c.passed).sort((a, b) => b.weight - a.weight).slice(0, 3);
   const people = results.contacts?.people ?? [];
   const sources = [...new Set([`https://${r.domain}/`, ...competitors.map((c) => `https://${c.domain}/`), ...companies.map((c) => `https://${c.domain}/`), ...people.map((p) => p.source).filter((u): u is string => Boolean(u)), ...signals.map((s) => s.url)])];
+  const leads = buildLeads(results);
+  const hot = leads.filter((l) => l.priority === "Hot").length;
   const moves = [
+    hot ? `Start with the ${hot} hot lead${hot === 1 ? "" : "s"} on the Leads tab: high fit and asking now.` : null,
     buyers.length ? `Reply to the ${buyers.length} ${buyers.length === 1 ? "person" : "people"} publicly asking about this topic.` : null,
     people[0] ? `Reach ${people[0].name}, ${people[0].title} at ${people[0].company}${people.length > 1 ? `, and ${people.length - 1} more decision makers` : ""}.` : null,
     drafts[0] ? `Review the first email to ${drafts[0].company}${drafts[1] ? ` and ${drafts.length - 1} more` : ""}.` : null,
@@ -66,7 +72,7 @@ export default function ResearchReport({ results, action, signals: signalView, e
   ].filter((m): m is string => Boolean(m));
   const kpis: Array<[string, number]> = [["AI readiness", audit?.score ?? 0], ["Competitors", competitors.length], ["Potential customers", companies.length], ["People asking", buyers.length], ["Decision makers", people.length]];
 
-  const tabs: Array<[string, number | null]> = [["Overview", null], ["Companies", companies.length], ["Competitors", competitors.length], ["Signals", signals.length], ["Emails", drafts.length]];
+  const tabs: Array<[string, number | null]> = [["Leads", leads.length], ["Overview", null], ["Companies", companies.length], ["Competitors", competitors.length], ["Signals", signals.length], ["Emails", drafts.length]];
   const bar = (
     <div role="tablist" aria-label="Report sections" className="mb-3 inline-flex max-w-full gap-0.5 overflow-x-auto rounded-full bg-[#EFEEEA] p-1">
       {tabs.map(([name, n]) => (
@@ -81,6 +87,7 @@ export default function ResearchReport({ results, action, signals: signalView, e
       <div className="pb-2">
         {bar}
         <div key={tab} className="fade-in">
+          {tab === "Leads" && <LeadBoard results={results} action={action} />}
           {tab === "Companies" && <CompanyTable list={companies} />}
           {tab === "Competitors" && <CompanyTable list={competitors} showTerms={false} />}
           {tab === "Signals" && (signalView ?? <p className="text-sm text-[#6B6A72]">No recent public posts in this run.</p>)}
