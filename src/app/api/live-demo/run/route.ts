@@ -4,11 +4,11 @@ import type { BrandProfile } from "@/lib/geo/types";
 import { reserveDemoRun } from "@/lib/live-demo/quota";
 import type { DemoEvent, DemoStep } from "@/lib/live-demo/types";
 import { contactProvider } from "@/lib/prospecting/contacts";
-import { findDecisionMakers } from "@/lib/prospecting/people";
+import { findDecisionMakers, withProfiles } from "@/lib/prospecting/people";
 import { researchTerms, runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
-import { draftCompanyEmail, draftSocialReply, findSocialLeads, leadTopics, socialTopic, type Sender } from "@/lib/prospecting/social";
+import { draftCompanyEmail, draftMessageSequence, draftSocialReply, findSocialLeads, leadTopics, socialTopic, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
-import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, searchAvailable } from "@/lib/prospecting/web";
+import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, search, searchAvailable } from "@/lib/prospecting/web";
 import { auditSite, organizationFacts } from "@/lib/geo/site-audit";
 
 export const runtime = "nodejs";
@@ -189,11 +189,16 @@ export async function POST(request: Request) {
         const { primary, related } = researchTerms(r, brand.category);
         const [topic, ...also] = leadTopics(phrases, related, socialTopic(brand.category, r.keywords, brand.name), r.categoryAreas ?? []);
         const rivals = state.competitors!.items.slice(0, 8).map((c) => c.name);
-        const toLead = (lead: Awaited<ReturnType<typeof findSocialLeads>>[number], reply: string | null) => ({ platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, community: lead.community, intent: lead.intent, matched: lead.matched, reply, postedAt: lead.postedAt, window: lead.window });
+        const toLead = (lead: Awaited<ReturnType<typeof findSocialLeads>>[number], reply: string | null, sequence: ReturnType<typeof draftMessageSequence> | null = null) => ({ platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, authorName: lead.authorName, profileUrl: lead.profileUrl, community: lead.community, intent: lead.intent, matched: lead.matched, reply, sequence, postedAt: lead.postedAt, window: lead.window });
         const leads = await findSocialLeads({ topic, also, competitors: rivals, primary, related, brand: r.name }, log, 60, (lead) => send({ type: "item", step: "social", data: toLead(lead, null) }));
         const asking = leads.filter((l) => l.intentScore > 0).length;
         log(`kept ${leads.length} posts about your market, ${asking} of them people asking; drafting replies to the top ${Math.min(5, asking)}`);
-        const withReplies = await Promise.all(leads.map(async (lead, i) => toLead(lead, i < 5 && lead.intentScore > 0 ? (await draftSocialReply(sender, lead)).body : null)));
+        // The top asks get a public reply and a direct message with two
+        // follow-ups: drafts for a person to send, nothing is sent here.
+        const withReplies = await Promise.all(leads.map(async (lead, i) => {
+          const top = i < 5 && lead.intentScore > 0;
+          return toLead(lead, top ? (await draftSocialReply(sender, lead)).body : null, top ? draftMessageSequence(sender, lead) : null);
+        }));
         send({ type: "result", step: "social", data: { topic, leads: withReplies } });
         if (stopped()) return;
 
@@ -204,13 +209,17 @@ export async function POST(request: Request) {
         // provider adds them in a workspace.
         log(`reading each company's own team or leadership page for ${roles.slice(0, 3).join(", ")}`);
         const contactsBy = started + STEP_BUDGET_MS.contacts;
+        // Then each person's public profile from a profile search, kept only
+        // when its headline names the company; a company with no team page
+        // is searched by role.
         const found = await mapLimit(companies.slice(0, 12), 6, async (c) => {
           if (Date.now() > contactsBy) return null;
           const team = await findDecisionMakers(c, roles);
-          log(team.people.length ? `  ${c.name}: ${team.people.map((p) => `${p.name} (${p.title})`).join(", ")}` : `  ${c.name}: no public team page found`);
-          return team;
+          const linked = Date.now() > contactsBy ? team : await withProfiles(team, roles, search);
+          log(linked.people.length ? `  ${c.name}: ${linked.people.map((p) => `${p.name} (${p.title})${p.profileUrl ? " with profile" : ""}`).join(", ")}` : `  ${c.name}: no team page or matching public profile`);
+          return linked;
         });
-        const people = found.filter((f): f is NonNullable<typeof f> => f !== null).flatMap((f) => f.people.map((p) => ({ company: f.company, domain: f.domain, name: p.name, title: p.title, source: f.source })));
+        const people = found.filter((f): f is NonNullable<typeof f> => f !== null).flatMap((f) => f.people.map((p) => ({ company: f.company, domain: f.domain, name: p.name, title: p.title, source: p.via === "public search" ? null : f.source, profileUrl: p.profileUrl ?? null, via: p.via ?? "team page" })));
         const provider = contactProvider();
         log(provider
           ? `verified emails come from ${provider.label}, a licensed provider, inside a workspace`

@@ -33,6 +33,10 @@ export interface SocialLead {
   // the search engine filters by post date, so "month" means posted in the
   // last 30 days.
   window: "month" | "year" | null;
+  // The author's display name and public profile, from the post URL and its
+  // title; null when the post does not show them (Reddit threads).
+  authorName: string | null;
+  profileUrl: string | null;
 }
 
 const PLATFORMS: Array<{ platform: Platform; domains: string[] }> = [
@@ -139,6 +143,36 @@ export function postAuthor(url: string): { author: string | null; community: str
     // ignore malformed URLs
   }
   return { author: null, community: null };
+}
+
+// The author's public profile, from the post itself: an X handle in the
+// status URL, a LinkedIn member's public name in the post URL, a Reddit
+// user when the URL carries one. The display name comes from the title
+// ("Tom Dörr on X: ...", "... | M Bilal Manzoor posted on the topic").
+const DISPLAY_NAME = /^(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'’-]+)(?:\s+(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'’-]+))*$/u;
+
+export function authorProfile(platform: Platform, url: string, rawTitle: string): { name: string | null; profileUrl: string | null } {
+  let p: string[] = [];
+  try {
+    p = new URL(url).pathname.split("/").filter(Boolean);
+  } catch {
+    return { name: null, profileUrl: null };
+  }
+  const title = rawTitle.replace(/[\u200e\u200f]/g, "").trim();
+  if (platform === "X") {
+    const handle = p[0] && !["i", "search", "hashtag", "home"].includes(p[0]) ? p[0] : null;
+    const name = title.match(/^(.{2,50}?) on X\b/)?.[1]?.replace(/["“”]/g, "").trim() ?? null;
+    return { name: name && DISPLAY_NAME.test(name) ? name : handle ? `@${handle}` : null, profileUrl: handle ? `https://x.com/${handle}` : null };
+  }
+  if (platform === "LinkedIn") {
+    const vanity = p[0] === "posts" && p[1] ? p[1].split("_")[0] : null;
+    const name = title.match(/\|\s*([^|]{3,50}?)\s+posted on the topic/i)?.[1]?.trim()
+      ?? title.split(/\s+\|\s+/).map((s) => s.trim()).filter((s) => !/^linkedin$/i.test(s)).slice(1).find((s) => DISPLAY_NAME.test(s) && s.split(/\s+/).length <= 4)
+      ?? null;
+    return { name, profileUrl: vanity ? `https://www.linkedin.com/in/${vanity}` : null };
+  }
+  const user = (p[0] === "user" || p[0] === "u") && p[1] ? p[1] : null;
+  return { name: user ? `u/${user}` : null, profileUrl: user ? `https://www.reddit.com/user/${user}` : null };
 }
 
 // The phrase searched on Reddit, X and LinkedIn: a short category when the
@@ -297,7 +331,8 @@ export async function findSocialLeads(
         offTopic++;
         continue;
       }
-      const lead: SocialLead = { platform, url: h.url, title, snippet, author, community, intent, intentScore: score, matched: rel.matched, relevance: rel.score, query: q, postedAt, window: postedAt ? null : window };
+      const profile = authorProfile(platform, h.url, h.title);
+      const lead: SocialLead = { platform, url: h.url, title, snippet, author, community, intent, intentScore: score, matched: rel.matched, relevance: rel.score, query: q, postedAt, window: postedAt ? null : window, authorName: profile.name, profileUrl: profile.profileUrl };
       leads.push(lead);
       onLead?.(lead);
       kept++;
@@ -376,6 +411,34 @@ export async function draftCompanyEmail(sender: Sender, company: { name: string;
   const ask = `Would a two-line note on how this could apply to ${company.name} be useful?`;
   const subject = shared ? `${company.name} and ${shared}` : `A question for ${company.name}`;
   return { subject: subject.slice(0, 90), body: ["Hi,", "", opener, "", bridge, "", ask, "", `The ${sender.name} team`].join("\n"), engine: "composed", sources };
+}
+
+// A first direct message and two follow-ups to one post's author, written
+// from what they asked. Drafts for a person to send from their own account:
+// the demo sends nothing.
+export interface MessageSequence {
+  dm: string;
+  followUps: Array<{ day: number; body: string }>;
+}
+
+export function draftMessageSequence(sender: Sender, lead: Pick<SocialLead, "title" | "authorName" | "matched" | "platform">): MessageSequence {
+  const first = lead.authorName && !lead.authorName.startsWith("@") && !lead.authorName.startsWith("u/") ? lead.authorName.split(/\s+/)[0] : null;
+  const hi = first ? `Hi ${first},` : "Hi,";
+  const about = lead.title.replace(/\s+/g, " ").replace(/[?.!…]+$/, "").trim();
+  const short = about.length > 70 ? `${about.slice(0, 67).trimEnd()}...` : about;
+  const rival = lead.matched.find((m) => /[A-Z]/.test(m));
+  const dm = [
+    `${hi} I saw your post: "${short}".`,
+    `I work at ${sender.name}. ${whatWeDo(sender)}`,
+    rival ? `If it helps, I can share how it compares with ${rival} for a case like yours.` : "If it helps, I can share a short comparison for a case like yours.",
+  ].join(" ");
+  return {
+    dm,
+    followUps: [
+      { day: 3, body: `${hi} following up on "${short}". Did you find what you needed? If not, ${sender.domain} has a two-minute overview.` },
+      { day: 7, body: `${hi} last note from me. If the search is still open, I can send a one-page comparison; otherwise, good luck with it.` },
+    ],
+  };
 }
 
 // A reply to one public post, answering what the author asked.

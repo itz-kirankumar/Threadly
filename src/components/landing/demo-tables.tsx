@@ -74,6 +74,18 @@ export function CompanyTable({ list, live = false, showTerms = true }: { list: D
   );
 }
 
+function Draft({ label, body, href }: { label: string; body: string; href?: string }) {
+  return (
+    <div>
+      <p className="flex items-center gap-2 text-[11px] font-semibold text-[#2B2A31]">
+        {label}
+        {href && <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-[#5B3DF5] hover:underline">Open profile</a>}
+      </p>
+      <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-[#2B2A31]">{body}</p>
+    </div>
+  );
+}
+
 // Public posts with platform, intent and date, newest evidence visible.
 export function SignalTable({ leads, action }: { leads: DemoSocialLead[]; action: (reply: boolean) => ReactNode }) {
   const [filter, setFilter] = useState<"All" | DemoSocialLead["platform"]>("All");
@@ -98,19 +110,29 @@ export function SignalTable({ leads, action }: { leads: DemoSocialLead[]; action
                 <td className={td}>
                   <a href={l.url} target="_blank" rel="noopener noreferrer" className="line-clamp-2 font-medium text-[#111114] hover:text-[#5B3DF5]">{l.title}</a>
                   {l.matched?.length ? <p className="mt-0.5 text-xs text-[#6B6A72]">Mentions {l.matched.slice(0, 3).join(", ")}</p> : null}
-                  {l.reply && (
+                  {(l.reply || l.sequence) && (
                     <button type="button" aria-expanded={open === l.url} onClick={() => setOpen(open === l.url ? null : l.url)} className="mt-1 text-xs font-medium text-[#5B3DF5]">
-                      {open === l.url ? "Hide drafted reply" : "View drafted reply"}
+                      {open === l.url ? "Hide drafts" : l.sequence ? "View reply, DM and follow-ups" : "View drafted reply"}
                     </button>
                   )}
-                  {open === l.url && l.reply && (
-                    <div className="demo-pop-in mt-2 rounded-lg bg-[#F3F2EE] p-3">
-                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-[#2B2A31]">{l.reply}</p>
-                      <div className="mt-2">{action(true)}</div>
+                  {open === l.url && (l.reply || l.sequence) && (
+                    <div className="demo-pop-in mt-2 space-y-2 rounded-lg bg-[#F3F2EE] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6B6A72]">Drafts for you to send from your own account. Nothing is sent from the demo.</p>
+                      {l.reply && <Draft label="Public reply" body={l.reply} />}
+                      {l.sequence && <Draft label={`Direct message${l.authorName ? ` to ${l.authorName}` : ""}`} body={l.sequence.dm} href={l.profileUrl ?? undefined} />}
+                      {l.sequence?.followUps.map((f) => <Draft key={f.day} label={`Follow-up, day ${f.day}`} body={f.body} />)}
+                      <div>{action(true)}</div>
                     </div>
                   )}
                 </td>
-                <td className={`${td} whitespace-nowrap text-[#4A4950]`}><p>{l.platform}</p><p className="max-w-[9rem] truncate text-xs text-[#6B6A72]">{l.author ?? l.community ?? "Public post"}</p></td>
+                <td className={`${td} whitespace-nowrap text-[#4A4950]`}>
+                  <p>{l.platform}</p>
+                  {l.profileUrl
+                    ? <a href={l.profileUrl} target="_blank" rel="noopener noreferrer" className="block max-w-[10rem] truncate text-xs font-medium text-[#5B3DF5] hover:underline">{l.authorName ?? l.author ?? "Author's profile"}</a>
+                    : l.community?.startsWith("r/")
+                      ? <a href={`https://www.reddit.com/${l.community}/`} target="_blank" rel="noopener noreferrer" className="block max-w-[10rem] truncate text-xs text-[#5B3DF5] hover:underline">{l.community}</a>
+                      : <p className="max-w-[10rem] truncate text-xs text-[#6B6A72]">{l.authorName ?? l.author ?? l.community ?? "Public post"}</p>}
+                </td>
                 <td className={`${td} text-[#4A4950]`}>{l.intent}</td>
                 <td className={`${td} whitespace-nowrap text-[#4A4950]`}>{postLabel(l)}</td>
               </tr>

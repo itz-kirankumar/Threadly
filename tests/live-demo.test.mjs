@@ -180,3 +180,38 @@ test("news and blog pages are not customer stories", () => {
   assert.equal(steps.caseStudyCustomer(hit("Agentforce in Action: Customer Success Stories - Salesforce", "https://www.salesforce.com/news/stories/agentforce-customer-success-stories"), "Salesforce"), null);
   assert.equal(steps.caseStudyCustomer(hit("KLM handles record daily volumes of support cases with Salesforce.", "https://www.salesforce.com/eu/customer-stories/klm"), "Salesforce")?.name, "Klm");
 });
+
+test("public profile results are matched to the company, not to namesakes", async () => {
+  const people = await import("../src/lib/prospecting/people.ts");
+  const shahin = people.profileFromResult({ title: "Shahin Hoda - Founder at xGrowth | Host of Growth Colony - LinkedIn", url: "https://au.linkedin.com/in/shoda", content: "Headline: Director at xGrowth | Building predictable B2B pipelines Current role: Founder" });
+  assert.deepEqual({ name: shahin.name, url: shahin.url, country: shahin.country }, { name: "Shahin Hoda", url: "https://www.linkedin.com/in/shoda", country: "au" });
+  assert.ok(people.profileMatchesCompany(shahin, { name: "xGrowth", domain: "xgrowth.com.au" }));
+  const egypt = people.profileFromResult({ title: "Ahmed El-Hefnawy - Co-CEO | XGrowth", url: "https://eg.linkedin.com/in/ahmed", content: "" });
+  assert.equal(people.profileMatchesCompany(egypt, { name: "xGrowth", domain: "xgrowth.com.au" }), false, "same name, other country");
+  const namesake = people.profileFromResult({ title: "Allan Taylor - Founding Partner at Taylor Co. Ltd.", url: "https://www.linkedin.com/in/allan-taylor-1", content: "" });
+  assert.equal(people.profileMatchesCompany(namesake, { name: "Allan Taylor & Co", domain: "allantaylorbrokers.com" }), false, "a person named like the company is not at it");
+  assert.equal(people.profileFromResult({ title: "xGrowth | LinkedIn", url: "https://au.linkedin.com/company/xgrowth", content: "" }), null, "company pages are not people");
+  assert.equal(people.profileTitle(shahin), "Director");
+});
+
+test("a sentence that mentions a partner is not a job title", async () => {
+  const people = await import("../src/lib/prospecting/people.ts");
+  const found = people.extractPeople("<h3>Welsh Sports</h3><p>: 2buy2 is a proud partner of the</p><h3>Joe Brown</h3><p>Cofounder &amp; CEO</p>");
+  assert.deepEqual(found.map((p) => p.name), ["Joe Brown"]);
+});
+
+test("a competitor's own customers page lists its stories", () => {
+  const html = `<a href="/customers/intercom">Intercom</a><a href="/customers/figma"><span>Read the story</span></a><a href="https://coda.io/blog/x">Blog</a><a href="https://other.com/customers/y">Other</a>`;
+  const links = steps.storyLinksIn(html, "https://coda.io/customers", "coda.io");
+  assert.deepEqual(links.map((l) => l.url), ["https://coda.io/customers/intercom", "https://coda.io/customers/figma"]);
+  assert.equal(steps.caseStudyCustomer(links[1], "Coda")?.name, "Figma", "link text like \"Read the story\" falls back to the slug");
+});
+
+test("a company's name must appear as a whole word in the profile headline", async () => {
+  const people = await import("../src/lib/prospecting/people.ts");
+  const p = people.profileFromResult({ title: "Tom Michel - Founder AdEngineStrategies | LinkedIn", url: "https://www.linkedin.com/in/tom", content: "" });
+  assert.equal(people.profileMatchesCompany(p, { name: "Engine", domain: "engine.com" }), false);
+  const q = people.profileFromResult({ title: "Eric Lammertsma - Head of Product @ Docfield ➤ Driving exceptional results | LinkedIn", url: "https://www.linkedin.com/in/eric", content: "" });
+  assert.ok(people.profileMatchesCompany(q, { name: "Docfield", domain: "docfield.com" }));
+  assert.equal(people.profileTitle(q), "Head of Product");
+});

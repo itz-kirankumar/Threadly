@@ -70,6 +70,11 @@ export interface DemoSocialLead {
   // For undated posts, the search window that found them ("month" means
   // posted in the last 30 days).
   window?: "month" | "year" | null;
+  // The author's display name and public profile link, when the post shows them.
+  authorName?: string | null;
+  profileUrl?: string | null;
+  // Drafted direct message and follow-ups; drafts only, nothing is sent.
+  sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
 }
 export interface DemoSocial {
   topic: string;
@@ -82,6 +87,9 @@ export interface DemoPerson {
   title: string;
   // The company's own page the person was read from.
   source: string | null;
+  // Their public profile, from a search result whose headline names the company.
+  profileUrl?: string | null;
+  via?: "team page" | "public search";
 }
 export interface DemoContacts {
   roles: string[];

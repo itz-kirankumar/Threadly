@@ -785,12 +785,13 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
   }
 }
 
-// Decision makers each company names on its own site, with the page they
-// came from; a role search on LinkedIn for the rest. Emails are not guessed.
+// Decision makers: the people each company names on its own team page, and
+// public profiles whose headline names the company, each with a direct link
+// and the source it came from. Emails are not guessed.
 function ContactsStage({ contacts }: { contacts: DemoContacts }) {
   const byCompany = contacts.companies.map((c) => ({ ...c, people: contacts.people.filter((p) => p.domain === c.domain) }));
-  const role = contacts.roles[0] ?? "Founder";
-  const search = (company: string) => `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${role} ${company}`)}`;
+  const cell = "border-t border-black/[0.06] px-4 py-3 align-top";
+  const link = "text-violet-700 hover:underline";
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-zinc-600">
@@ -798,22 +799,26 @@ function ContactsStage({ contacts }: { contacts: DemoContacts }) {
         {contacts.roles.map((r) => <span key={r} className="rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-zinc-800">{r}</span>)}
       </div>
       <div className="max-h-[48vh] overflow-auto rounded-2xl border border-black/[0.08] bg-white demo-scroll">
-        <table className="w-full min-w-[620px] border-separate border-spacing-0 text-sm">
-          <thead><tr>{["Company", "Person", "Title", "Source"].map((h) => <th key={h} className="sticky top-0 z-10 bg-white px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[#6B6A72]">{h}</th>)}</tr></thead>
+        <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
+          <thead><tr>{["Company", "Person", "Title", "Found on"].map((h) => <th key={h} className="sticky top-0 z-10 bg-white px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[#6B6A72]">{h}</th>)}</tr></thead>
           <tbody>
             {byCompany.flatMap((c) => (c.people.length ? c.people : [null]).map((p, i) => (
               <tr key={`${c.domain}-${p?.name ?? "none"}`} className="demo-row-in">
-                <td className="border-t border-black/[0.06] px-4 py-3 align-top">{i === 0 ? <><p className="font-medium">{c.name}</p><p className="font-mono text-xs text-zinc-500">{c.domain}</p></> : null}</td>
+                <td className={cell}>{i === 0 ? <><p className="font-medium">{c.name}</p><p className="font-mono text-xs text-zinc-500">{c.domain}</p></> : null}</td>
                 {p ? (
                   <>
-                    <td className="border-t border-black/[0.06] px-4 py-3 align-top font-medium">{p.name}</td>
-                    <td className="border-t border-black/[0.06] px-4 py-3 align-top text-zinc-700">{p.title}</td>
-                    <td className="border-t border-black/[0.06] px-4 py-3 align-top">{p.source ? <a href={p.source} target="_blank" rel="noopener noreferrer" className="text-xs text-violet-700 hover:underline">Their team page</a> : null}</td>
+                    <td className={`${cell} font-medium`}>{p.profileUrl ? <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className={link}>{p.name}</a> : p.name}</td>
+                    <td className={`${cell} text-zinc-700`}>{p.title}</td>
+                    <td className={`${cell} text-xs`}>
+                      <div className="flex flex-col gap-0.5">
+                        {p.source && <a href={p.source} target="_blank" rel="noopener noreferrer" className={link}>Their team page</a>}
+                        {p.profileUrl && <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className={link}>LinkedIn profile</a>}
+                        {p.via === "public search" && <span className="text-zinc-500">public profile search</span>}
+                      </div>
+                    </td>
                   </>
                 ) : (
-                  <td colSpan={3} className="border-t border-black/[0.06] px-4 py-3 align-top text-xs text-zinc-500">
-                    No public team page. <a href={search(c.name)} target="_blank" rel="noopener noreferrer" className="font-medium text-violet-700 hover:underline">Search {role} at {c.name} on LinkedIn</a>
-                  </td>
+                  <td colSpan={3} className={`${cell} text-xs text-zinc-500`}>No team page or public profile names someone at {c.name} in these roles.</td>
                 )}
               </tr>
             )))}
@@ -821,7 +826,7 @@ function ContactsStage({ contacts }: { contacts: DemoContacts }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-xs text-zinc-500">Names and titles as each company publishes them on its own site. Emails are never guessed: verified addresses come from a licensed provider in your workspace.</p>
+      <p className="mt-3 text-xs text-zinc-500">People named on each company&apos;s own team page, and public profiles whose headline names the company. Check the profile before reaching out. Emails are never guessed: verified addresses come from a licensed provider in your workspace.</p>
     </div>
   );
 }
@@ -944,7 +949,9 @@ function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; to
                 {items.map((l) => (
                   <li key={l.url} className="demo-pop-in rounded-xl border border-zinc-200 bg-white p-3">
                     <p className="flex items-center gap-1.5 text-[11px]">
-                      <span className="truncate text-zinc-600">{l.author ?? l.community ?? "public post"}</span>
+                      {l.profileUrl
+                        ? <a href={l.profileUrl} target="_blank" rel="noopener noreferrer" className="truncate text-violet-700 hover:underline">{l.authorName ?? l.author ?? "author"}</a>
+                        : <span className="truncate text-zinc-600">{l.authorName ?? l.author ?? l.community ?? "public post"}</span>}
                       <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 font-semibold ${l.intent === "discussing the topic" ? "bg-zinc-100 text-zinc-600" : "bg-emerald-50 text-emerald-800"}`}>{l.intent}</span>
                     </p>
                     <a href={l.url} target="_blank" rel="noopener noreferrer" className="mt-1 line-clamp-2 text-sm font-semibold hover:underline">{l.title}</a>

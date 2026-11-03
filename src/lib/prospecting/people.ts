@@ -10,6 +10,12 @@ import { fetchHtml } from "./web.ts";
 export interface PublicPerson {
   name: string;
   title: string;
+  // Their public LinkedIn profile, from a search result; null when none was
+  // found or the match was not certain.
+  profileUrl?: string | null;
+  // "team page" when the company names them on its own site, "public
+  // search" when they come only from a profile search result.
+  via?: "team page" | "public search";
 }
 
 export interface CompanyPeople {
@@ -36,6 +42,9 @@ function isTitle(s: string): boolean {
   const t = s.trim();
   // "EA to the President" names the president's assistant.
   if (/^(ea|pa|assistant|executive assistant|personal assistant)\b|\bassistant to\b/i.test(t)) return false;
+  // A title is a short phrase ("Co-founder & CEO", "VP of Sales"), not a
+  // sentence that happens to contain "partner" or "director".
+  if (/^[:\-–—|·,]/.test(t) || /\b(is|are|was|our|we|proud|the best|of the)\b/i.test(t) || t.split(/\s+/).length > 8) return false;
   return t.length >= 2 && t.length <= 80 && TITLE_WORDS.test(t) && !/[.!?]\s+\S/.test(t) && !isName(t);
 }
 
@@ -125,4 +134,93 @@ export async function findDecisionMakers(company: { domain: string; name: string
     }
   }
   return { domain: company.domain, company: company.name, people: [], source: null };
+}
+
+// ---- Public profile links ------------------------------------------------------
+// A public LinkedIn profile as a search engine indexes it: "Jane Doe - VP
+// Sales at Acme | LinkedIn", with "Headline:" in the snippet. Only the search
+// result is read; nothing is fetched from LinkedIn.
+
+// Words of a name, hyphenated parts included ("El-Hefnawy"), and initials.
+const PERSON = /^(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'’]+(?:-\p{L}[\p{Ll}'’]*)*)(?:\s+(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'’]+(?:-\p{L}[\p{Ll}'’]*)*|de|van|von|da|di|del|der|la|le|bin|al))*\s+\p{Lu}[\p{Ll}'’]+(?:-\p{L}[\p{Ll}'’]*)*$/u;
+
+export interface ProfileResult {
+  name: string;
+  headline: string;
+  url: string;
+  // The country subdomain the profile was indexed under (au, in, uk), if any.
+  country: string | null;
+}
+
+const invisible = (s: string) => s.replace(/[‎‏‪-‮⁦-⁩]/g, "").replace(/\s+/g, " ").trim();
+
+export function profileFromResult(hit: { title: string; url: string; content: string }): ProfileResult | null {
+  let u: URL;
+  try {
+    u = new URL(hit.url);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.toLowerCase();
+  if (!/(^|\.)linkedin\.com$/.test(host) || !/^\/in\/[^/]+\/?$/.test(u.pathname)) return null;
+  const title = invisible(hit.title).replace(/\s*[|·–—-]\s*LinkedIn\s*$/i, "");
+  const [name, ...rest] = title.split(/\s+[-–—|]\s+/);
+  if (!name || name.length > 40 || !PERSON.test(name.trim()) || NOT_NAME.test(name)) return null;
+  const fromSnippet = invisible(hit.content).match(/Headline:\s*(.+?)(?=\s+(?:Current role|Seniority|Location|Experience|Education|Company|About):|$)/i)?.[1];
+  const headline = invisible(fromSnippet ?? rest.join(" - ")).slice(0, 160);
+  const country = host.match(/^([a-z]{2})\.linkedin\.com$/)?.[1] ?? null;
+  return { name: name.trim(), headline, url: `https://www.linkedin.com${u.pathname.replace(/\/$/, "")}`, country };
+}
+
+const squashWords = (s: string) => s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+
+// Whether a profile is at this company: its headline names the company
+// (or its domain), the person is not merely named like the company ("Allan
+// Taylor" at Allan Taylor & Co), and a country-coded domain (.com.au) agrees
+// with the profile's country.
+export function profileMatchesCompany(p: ProfileResult, company: { name: string; domain: string }): boolean {
+  const head = ` ${squashWords(p.headline)} `;
+  const name = squashWords(company.name.replace(/\b(inc|ltd|llc|gmbh|co|corp|plc|limited)\b\.?/gi, ""));
+  const label = company.domain.split(".")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+  // Whole words only: "Engine" is not "AdEngineStrategies".
+  const named = (name.length >= 3 && head.includes(` ${name} `)) || (label.length >= 3 && head.includes(` ${label} `));
+  if (!named) return false;
+  if (squashWords(p.name).includes(name) || name.includes(squashWords(p.name))) return false;
+  const tld = company.domain.split(".").pop() ?? "";
+  const cc = tld === "uk" ? "uk" : tld.length === 2 && !["io", "ai", "co", "me", "so", "tv", "gg", "ly"].includes(tld) ? tld : null;
+  return !cc || !p.country || p.country === cc;
+}
+
+// The role a profile states, if it is a decision maker's.
+export function profileTitle(p: ProfileResult): string | null {
+  // The first clause of a headline: "Head of Product @ Docfield ➤ Driving..."
+  // is "Head of Product".
+  const head = p.headline.split(/\s+[|➤•·]\s*|\s+-\s+|\s+@\s+|\s+at\s+/i)[0].trim();
+  return TITLE_WORDS.test(head) ? head.replace(/[,;:]\s*$/, "").slice(0, 80) : null;
+}
+
+type Search = (q: string, max: number, options: { includeDomains: string[] }) => Promise<Array<{ title: string; url: string; content: string }>>;
+
+// Adds public profile links: each person a team page named is looked up by
+// name and company; a company with no team page is searched by role. Only
+// profiles whose headline names the company are kept.
+export async function withProfiles(team: CompanyPeople, roles: string[], search: Search): Promise<CompanyPeople> {
+  const company = { name: team.company, domain: team.domain };
+  if (team.people.length) {
+    const people = await Promise.all(team.people.slice(0, 3).map(async (person, i) => {
+      if (i > 1) return { ...person, via: "team page" as const };
+      const hits = await search(`"${person.name}" ${team.company}`, 5, { includeDomains: ["linkedin.com"] }).catch(() => []);
+      const match = hits.map(profileFromResult).find((p) => p && squashWords(p.name) === squashWords(person.name) && profileMatchesCompany(p, company));
+      return { ...person, via: "team page" as const, profileUrl: match?.url ?? null };
+    }));
+    return { ...team, people };
+  }
+  const hits = await search(`${team.company} ${roles[0] ?? "founder"} founder`, 10, { includeDomains: ["linkedin.com"] }).catch(() => []);
+  const found: PublicPerson[] = [];
+  for (const p of hits.map(profileFromResult)) {
+    if (!p || !profileMatchesCompany(p, company) || found.some((f) => squashWords(f.name) === squashWords(p.name))) continue;
+    const title = profileTitle(p);
+    if (title) found.push({ name: p.name, title, profileUrl: p.url, via: "public search" });
+  }
+  return { ...team, people: rankForRoles(found, roles).slice(0, 3) };
 }

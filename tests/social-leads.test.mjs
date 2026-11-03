@@ -102,3 +102,16 @@ test("the lead topic is the category said the way buyers ask", () => {
   assert.equal(social.leadTopic(["AI workspace"], [], "x"), "AI workspace");
   assert.equal(social.leadTopic(["financial services platform"], ["payment processing", "payments"], "x"), "payment processing");
 });
+
+test("post authors link to their public profiles", () => {
+  assert.deepEqual(social.authorProfile("X", "https://x.com/tomdoerr/status/1", 'Tom Dörr on X: "Open-source alternative" / X'), { name: "Tom Dörr", profileUrl: "https://x.com/tomdoerr" });
+  assert.deepEqual(social.authorProfile("LinkedIn", "https://www.linkedin.com/posts/m-bilal-manzoor-8506_which-crm-activity-7", "Which CRM Is Best for Your Business? | M Bilal Manzoor posted on the topic | LinkedIn"), { name: "M Bilal Manzoor", profileUrl: "https://www.linkedin.com/in/m-bilal-manzoor-8506" });
+  assert.deepEqual(social.authorProfile("Reddit", "https://www.reddit.com/r/CRM/comments/1abc/best_crm/", "Best CRM? : r/CRM"), { name: null, profileUrl: null }, "a Reddit thread URL has no author");
+});
+
+test("a message sequence is a disclosed DM and two follow-ups, drafts only", () => {
+  const seq = social.draftMessageSequence({ name: "Acme", domain: "acme.io", summary: "The forecasting platform for revenue teams.", category: "", keywords: [] }, { title: "Best CRM for a small team?", authorName: "Jane Doe", matched: ["HubSpot", "crm"], platform: "LinkedIn" });
+  assert.match(seq.dm, /^Hi Jane, I saw your post: "Best CRM for a small team"\. I work at Acme\./);
+  assert.match(seq.dm, /compares with HubSpot/);
+  assert.deepEqual(seq.followUps.map((f) => f.day), [3, 7]);
+});

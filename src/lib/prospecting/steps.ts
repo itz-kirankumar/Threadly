@@ -4,9 +4,9 @@ import { contactProvider } from "./contacts.ts";
 import { modelEnabled, modelJson } from "./model.ts";
 import { findDecisionMakers } from "./people.ts";
 import { draftCompanyEmail } from "./social.ts";
-import { categoryAreas, categoryPhrases, categoryTerms, companyName, extractAudiencePhrases, extractKeywords, firstSentence, matchedTerms, outboundDomains, searchTopics, termsIn } from "./text.ts";
+import { categoryAreas, categoryPhrases, categoryTerms, companyName, decodeEntities, extractAudiencePhrases, extractKeywords, firstSentence, matchedTerms, outboundDomains, searchTopics, termsIn } from "./text.ts";
 import type { Campaign, Competitor, Evidence, ProspectCompany, ProspectContact, ProspectingState, EmailDraft, Research, StepId } from "./types.ts";
-import { FetchRefused, fetchPage, mapLimit, search, searchAvailable, type SearchHit } from "./web.ts";
+import { FetchRefused, fetchHtml, fetchPage, mapLimit, search, searchAvailable, type SearchHit } from "./web.ts";
 
 export interface StepContext {
   brand: BrandProfile;
@@ -273,9 +273,11 @@ export function rankCompetitorCandidates(
   brandUrls: Set<string> = new Set(),
 ): Competitor[] {
   const byDomain = new Map<string, Competitor & { score: number; urls: Set<string> }>();
+  const ownLabel = own.split(".")[0];
   const touch = (domain: string, weight: number, ev: Evidence) => {
     const d = rootDomain(domain);
-    if (!d || d === own || d.endsWith(`.${own}`) || isNonCompany(d)) return;
+    // Its own other domains (notion.so for notion.com) are the same company.
+    if (!d || d === own || d.endsWith(`.${own}`) || d.split(".")[0] === ownLabel || isNonCompany(d)) return;
     const c = byDomain.get(d) ?? { domain: d, name: d, description: null, tracked: tracked.includes(d), selected: true, appearances: 0, evidence: [], score: 0, urls: new Set<string>() };
     c.score += weight;
     c.appearances += 1;
@@ -716,6 +718,8 @@ function storyName(raw: string, rival: string): string | null {
 }
 
 export function caseStudyCustomer(hit: Pick<SearchHit, "title" | "url">, rival: string): { name: string; slug: string | null } | null {
+  // Link text from a listing ("Read the story", "Learn more") is not a title.
+  if (/^(read|learn|view|see|watch|download|explore|discover)\b|^(more|story|case study)$/i.test(hit.title.trim())) hit = { ...hit, title: "" };
   let path = "";
   try {
     path = new URL(hit.url).pathname.toLowerCase();
@@ -737,6 +741,40 @@ export function caseStudyCustomer(hit: Pick<SearchHit, "title" | "url">, rival: 
 }
 
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+
+// Links to individual customer stories on a competitor's own customers
+// page (/customers, /case-studies...), with relative links resolved. Each
+// comes back with its link text as a title, for the name.
+export function storyLinksIn(html: string, base: string, rivalDomain: string): Array<{ title: string; url: string }> {
+  const out = new Map<string, { title: string; url: string }>();
+  for (const m of html.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#]+)["'][^>]*>([\s\S]{0,400}?)<\/a>/gi)) {
+    let url: URL;
+    try {
+      url = new URL(decodeEntities(m[1]), base);
+    } catch {
+      continue;
+    }
+    if (rootDomain(url.hostname) !== rootDomain(rivalDomain) || !STORY_SLUG.test(url.pathname.replace(/\/$/, ""))) continue;
+    const key = url.pathname.replace(/\/$/, "").toLowerCase();
+    const text = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+    if (!out.has(key) || (text && !out.get(key)!.title)) out.set(key, { title: text, url: url.toString() });
+  }
+  return [...out.values()];
+}
+
+async function listedStories(rivalDomain: string): Promise<Array<{ title: string; url: string }>> {
+  for (const path of ["/customers", "/case-studies", "/customer-stories", "/customers/stories", "/success-stories"]) {
+    try {
+      const { html, finalUrl } = await fetchHtml(`https://${rivalDomain}${path}`, 7000);
+      const links = storyLinksIn(html, finalUrl, rivalDomain);
+      if (links.length >= 3) return links;
+    } catch {
+      // no such page
+    }
+  }
+  return [];
+}
 
 // A domain belongs to a named company when its first label is the name,
 // written with or without spaces ("Built In" is builtin.com), or the name
@@ -803,20 +841,24 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
       let named = 0;
       const found = await mapLimit(rivals, 3, async (rival) => {
         if (named >= 24 || pastDeadline(ctx)) return [];
-        const q = "customer stories case studies";
-        queries.push(`${q} (${rival.domain})`);
         ctx.log(`reading ${rival.name}'s public customer stories`);
-        let hits: SearchHit[] = [];
-        try {
-          hits = await search(q, 10, { includeDomains: [rival.domain] });
-        } catch {
-          ctx.log(`  ${rival.name}: search failed; continuing`);
-          return [];
+        // The competitor's own customers page lists its stories; search
+        // fills in when there is no such page.
+        let hits: Array<Pick<SearchHit, "title" | "url">> = await listedStories(rival.domain);
+        if (hits.length < 4) {
+          const q = "customer stories case studies";
+          queries.push(`${q} (${rival.domain})`);
+          try {
+            hits = [...hits, ...(await search(q, 10, { includeDomains: [rival.domain] }))];
+          } catch {
+            ctx.log(`  ${rival.name}: search failed; continuing`);
+          }
         }
         const stories = hits
           .map((h) => ({ h, who: caseStudyCustomer(h, rival.name) }))
-          .filter((x): x is { h: SearchHit; who: { name: string; slug: string | null } } => x.who !== null)
-          .filter((x, i, all) => all.findIndex((y) => squash(y.who.name) === squash(x.who.name)) === i);
+          .filter((x): x is { h: Pick<SearchHit, "title" | "url">; who: { name: string; slug: string | null } } => x.who !== null)
+          .filter((x, i, all) => all.findIndex((y) => squash(y.who.name) === squash(x.who.name)) === i)
+          .slice(0, 12);
         const resolved = await mapLimit(stories, 4, async ({ h, who }) => {
           if (pastDeadline(ctx)) return null;
           const domain = await customerDomain(who.name, who.slug, h.url, rival.domain);
