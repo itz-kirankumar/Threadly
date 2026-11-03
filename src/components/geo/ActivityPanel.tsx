@@ -22,15 +22,19 @@ const ACTION_LABELS: Record<string, string> = {
 
 export default function ActivityPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
   const [entries, setEntries] = useState<AuditEntry[] | "loading" | "error">("loading");
+  const [reason, setReason] = useState("");
 
   useEffect(() => {
     authedFetch("/api/geo/audit")
       .then((payload) => setEntries((payload as { entries: AuditEntry[] }).entries))
-      .catch(() => setEntries("error"));
+      .catch((error: unknown) => {
+        setReason(error instanceof Error ? error.message : "");
+        setEntries("error");
+      });
   }, [authedFetch]);
 
   if (entries === "loading") return <p className="text-sm text-zinc-500">Loading activity…</p>;
-  if (entries === "error") return <p className="text-sm text-rose-300">Could not load the activity log.</p>;
+  if (entries === "error") return <p className="text-sm text-rose-300">{reason || "Could not load the activity log."}</p>;
   if (!entries.length) {
     return <p className="text-sm text-zinc-500">No activity yet. Scans, question changes, key updates and team events are recorded here.</p>;
   }

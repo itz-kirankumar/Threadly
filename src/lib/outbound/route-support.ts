@@ -5,12 +5,16 @@ import { RtdbAuditStore } from "./rtdb-audit-store.ts";
 
 export const NO_STORE = { "Cache-Control": "no-store" } as const;
 
-// Every outbound route returns 404 unless BOTH OUTBOUND_ENABLED=true AND an
-// explicit OUTBOUND_DATA_ROOT are set. There is no implicit default root, so
-// a stray flag can never silently target production tenant data.
+// Outbound is on for the production deployment, at the default data root
+// ("outbound"), unless OUTBOUND_ENABLED=false turns it off. Anywhere else
+// (preview deployments, tests, local runs) it stays off unless BOTH
+// OUTBOUND_ENABLED=true AND an explicit OUTBOUND_DATA_ROOT are set, so a
+// preview can never silently write into production tenant data.
 export function outboundEnabled(): boolean {
-  if (process.env.OUTBOUND_ENABLED !== "true") return false;
-  return typeof process.env.OUTBOUND_DATA_ROOT === "string" && process.env.OUTBOUND_DATA_ROOT.length > 0;
+  if (process.env.OUTBOUND_ENABLED === "false") return false;
+  const root = process.env.OUTBOUND_DATA_ROOT;
+  if (process.env.OUTBOUND_ENABLED === "true") return typeof root === "string" && root.length > 0;
+  return process.env.VERCEL_ENV === "production" && (root === undefined || root.length > 0);
 }
 
 export async function recordAudit(

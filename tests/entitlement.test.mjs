@@ -675,3 +675,11 @@ test("daily scans run for live paid plans, never for credit workspaces or lapsed
   assert.equal(scheduledScanIncluded(null, null, now), false);
   assert.equal(scheduledScanIncluded("forged", null, now), false);
 });
+
+test("the product owner and their team have every surface, whatever plan a test purchase left", async () => {
+  const { ownerFloor } = await import("../src/lib/geo/plan.ts");
+  assert.equal(ownerFloor("pro", "kiran160703kumar@gmail.com"), "enterprise");
+  assert.equal(ownerFloor("none", "KIRAN160703KUMAR@gmail.com"), "enterprise");
+  assert.equal(ownerFloor("pro", "someone@example.com"), "pro");
+  assert.equal(ownerFloor("growth", undefined), "growth");
+});

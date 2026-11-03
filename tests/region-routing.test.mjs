@@ -25,3 +25,11 @@ test("unavailable owning provider fails closed, never cross-routes", () => {
   assert.deepEqual(routeProviderForRegion({ billingCountry: "IN", dodoOperational: true, razorpayOperational: false }), { ok: false, reason: "provider_unavailable" });
   assert.deepEqual(routeProviderForRegion({ billingCountry: "US", dodoOperational: false, razorpayOperational: true }), { ok: false, reason: "provider_unavailable" });
 });
+
+test("the owner is told which billing setting is missing", async () => {
+  const { providerSetupHint } = await import("../src/lib/billing/region-routing.ts");
+  assert.match(providerSetupHint("razorpay", {}), /set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET/);
+  assert.match(providerSetupHint("razorpay", { RAZORPAY_KEY_ID: "rzp_live_x", RAZORPAY_KEY_SECRET: "s" }), /RAZORPAY_LIVE_ENABLED=true/);
+  assert.match(providerSetupHint("dodo", { DODO_PAYMENTS_API_KEY: "k" }, "DODO_PRODUCT_STARTER"), /set DODO_PRODUCT_STARTER/);
+  assert.match(providerSetupHint("dodo", {}), /DODO_PAYMENTS_API_KEY/);
+});

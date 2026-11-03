@@ -13,10 +13,14 @@ export default function ApiKeysPanel({ authedFetch }: { authedFetch: (path: stri
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
+  const [reason, setReason] = useState("");
   const load = () => {
     authedFetch("/api/geo/api-keys")
       .then((payload) => setKeys((payload as { keys: ListedKey[] }).keys))
-      .catch(() => setKeys("error"));
+      .catch((err: unknown) => {
+        setReason(err instanceof Error ? err.message : "");
+        setKeys("error");
+      });
   };
 
   useEffect(load, [authedFetch]);
@@ -104,7 +108,7 @@ export default function ApiKeysPanel({ authedFetch }: { authedFetch: (path: stri
       {error && <p className="text-sm text-rose-300">{error}</p>}
 
       {keys === "loading" && <p className="text-sm text-zinc-500">Loading keys…</p>}
-      {keys === "error" && <p className="text-sm text-rose-300">Could not load API keys.</p>}
+      {keys === "error" && <p className="text-sm text-rose-300">{reason || "Could not load API keys."}</p>}
       {Array.isArray(keys) && keys.length === 0 && <p className="text-sm text-zinc-500">No API keys yet.</p>}
       {Array.isArray(keys) && keys.length > 0 && (
         <ul className="divide-y divide-white/5 rounded-xl border border-white/10">

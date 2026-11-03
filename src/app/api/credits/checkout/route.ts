@@ -5,7 +5,8 @@ import { inWorkspace } from "@/lib/geo/team";
 import { billingConfigured, billingTestMode, canCheckout, dodoClient } from "@/lib/billing/dodo";
 import { lookupVerifiedPhone } from "@/lib/billing/identity";
 import { razorpayCheckoutAllowed, razorpayCreateCreditOrder, razorpayKeyId, razorpayOperational, razorpayTestMode } from "@/lib/billing/razorpay";
-import { routeProviderForRegion } from "@/lib/billing/region-routing";
+import { providerSetupHint, routeProviderForRegion } from "@/lib/billing/region-routing";
+import { isOwnerTeamEmail } from "@/lib/geo/signup-gate";
 import { CREDIT_PACKS, isCreditPack } from "@/lib/credits/rates";
 
 export const runtime = "nodejs";
@@ -32,8 +33,13 @@ export async function POST(request: Request) {
       razorpayOperational: razorpayOperational(),
     });
     if (!route.ok) {
+      // The product owner and team are told exactly which setting is missing.
+      const country = typeof body.billingCountry === "string" ? body.billingCountry.trim().toUpperCase() : "";
+      const hint = route.reason === "provider_unavailable" && isOwnerTeamEmail(access.identity.email)
+        ? ` ${providerSetupHint(country === "IN" ? "razorpay" : "dodo", process.env, pack.dodoProductEnv)}`
+        : "";
       return Response.json(
-        { error: route.reason === "missing_country" ? "Choose your billing country." : "Credit packs are not on sale in your region yet.", code: route.reason },
+        { error: route.reason === "missing_country" ? "Choose your billing country." : `Credit packs are not on sale in your region yet.${hint}`, code: route.reason },
         { status: route.reason === "missing_country" ? 400 : 503, headers: noStore },
       );
     }

@@ -1,4 +1,5 @@
 import type { ScanRun } from "./types";
+import { isOwnerTeamEmail } from "./signup-gate.ts";
 
 // Dynamic portal-db access: keeps the pure lapse decision below loadable in
 // standalone unit tests (node strip-types cannot resolve the "@/" alias).
@@ -125,7 +126,13 @@ export async function loadPlan(email?: string): Promise<PlanId> {
     }
   }
   // New workspaces start with no plan: the 7-day trial is a paid product.
-  return applyExemption(resolved, email, process.env.TRIAL_EXEMPT_EMAILS ?? "");
+  return ownerFloor(applyExemption(resolved, email, process.env.TRIAL_EXEMPT_EMAILS ?? ""), email);
+}
+
+// The product owner and their team run the product, so every surface is
+// open to them (Enterprise), whatever plan record a test purchase left.
+export function ownerFloor(plan: PlanId, email: string | undefined): PlanId {
+  return email && isOwnerTeamEmail(email) ? "enterprise" : plan;
 }
 
 export async function savePlan(plan: PlanId): Promise<void> {

@@ -40,3 +40,22 @@ test("audit export returns 404 on a deployment where outbound is dark", async ()
   assert.equal(res.status, 404);
   assert.equal(res.headers.get("cache-control"), "no-store");
 });
+
+test("outbound is on for the production deployment by default, and can be turned off", async () => {
+  const { outboundEnabled } = await import("../src/lib/outbound/route-support.ts");
+  const saved = { e: process.env.OUTBOUND_ENABLED, r: process.env.OUTBOUND_DATA_ROOT, v: process.env.VERCEL_ENV };
+  try {
+    delete process.env.OUTBOUND_ENABLED; delete process.env.OUTBOUND_DATA_ROOT;
+    process.env.VERCEL_ENV = "production";
+    assert.equal(outboundEnabled(), true, "production, nothing set: on at the default root");
+    process.env.OUTBOUND_ENABLED = "false";
+    assert.equal(outboundEnabled(), false, "an explicit off wins");
+    delete process.env.OUTBOUND_ENABLED;
+    process.env.VERCEL_ENV = "preview";
+    assert.equal(outboundEnabled(), false, "a preview never writes into production data by default");
+  } finally {
+    for (const [k, v] of [["OUTBOUND_ENABLED", saved.e], ["OUTBOUND_DATA_ROOT", saved.r], ["VERCEL_ENV", saved.v]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});
