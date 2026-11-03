@@ -90,6 +90,10 @@ export interface DemoPerson {
   // Their public profile, from a search result whose headline names the company.
   profileUrl?: string | null;
   via?: "team page" | "public search";
+  // The headshot on the company's own team page, if any.
+  photoUrl?: string | null;
+  // Drafted first message and follow-ups; nothing is sent.
+  sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
 }
 export interface DemoContacts {
   roles: string[];

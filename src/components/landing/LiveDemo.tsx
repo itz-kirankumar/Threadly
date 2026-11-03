@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import OnboardModal from "./OnboardModal";
 import ResearchReport from "./ResearchReport";
 import ThreadLines from "./ThreadLines";
-import { CompanyTable, Logo, postLabel, SignalTable } from "./demo-tables";
+import { authorPicture, Avatar, CompanyTable, Logo, MessageFlow, PLATFORM_TONE, postLabel, SignalTable } from "./demo-tables";
 import {
   DEMO_STEPS,
   DEMO_STEP_LABELS,
@@ -666,7 +666,7 @@ function StepHeader({ view, results, streamed, done, readAt }: { view: View; res
     campaigns: results.campaigns ? `${results.campaigns.length} audience${results.campaigns.length === 1 ? "" : "s"} to prospect.` : "Choosing who to target.",
     companies: `${(results.companies ?? streamed.companies).length} potential customers, each with the reason it was found.`,
     social: `${social.filter((l) => l.intent !== "discussing the topic").length} people asking${social.some((l) => l.intent === "discussing the topic") ? `, ${social.filter((l) => l.intent === "discussing the topic").length} related conversations` : ""} on Reddit, X and LinkedIn.`,
-    contacts: results.contacts ? `${results.contacts.people.length} decision makers named on their own company's website.` : "Reading each company's team page.",
+    contacts: results.contacts ? `${results.contacts.people.length} decision makers from company team pages and public profiles, each with a message flow.` : "Reading each company's team page and public profiles.",
     pitch: results.pitch ? `${results.pitch.length} first emails written from each company's own words.` : "Writing first emails.",
     report: "Everything this run found, in one place.",
   };
@@ -785,46 +785,65 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
   }
 }
 
-// Decision makers: the people each company names on its own team page, and
-// public profiles whose headline names the company, each with a direct link
-// and the source it came from. Emails are not guessed.
+// Decision makers as profiles: picture, name linked to their public profile,
+// title, where they were found, and the message flow to send them. People
+// come from each company's own team page and from public profiles whose
+// headline names the company. Emails are not guessed.
 function ContactsStage({ contacts }: { contacts: DemoContacts }) {
+  const [open, setOpen] = useState<string | null>(null);
   const byCompany = contacts.companies.map((c) => ({ ...c, people: contacts.people.filter((p) => p.domain === c.domain) }));
-  const cell = "border-t border-black/[0.06] px-4 py-3 align-top";
-  const link = "text-violet-700 hover:underline";
+  const withPeople = byCompany.filter((c) => c.people.length);
+  const without = byCompany.filter((c) => !c.people.length);
+  const link = "font-medium text-violet-700 hover:underline";
   return (
-    <div>
+    <div className="max-h-[56vh] overflow-auto pr-1 demo-scroll">
       <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-zinc-600">
         <span>Roles for this campaign:</span>
         {contacts.roles.map((r) => <span key={r} className="rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-zinc-800">{r}</span>)}
       </div>
-      <div className="max-h-[48vh] overflow-auto rounded-2xl border border-black/[0.08] bg-white demo-scroll">
-        <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
-          <thead><tr>{["Company", "Person", "Title", "Found on"].map((h) => <th key={h} className="sticky top-0 z-10 bg-white px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[#6B6A72]">{h}</th>)}</tr></thead>
-          <tbody>
-            {byCompany.flatMap((c) => (c.people.length ? c.people : [null]).map((p, i) => (
-              <tr key={`${c.domain}-${p?.name ?? "none"}`} className="demo-row-in">
-                <td className={cell}>{i === 0 ? <><p className="font-medium">{c.name}</p><p className="font-mono text-xs text-zinc-500">{c.domain}</p></> : null}</td>
-                {p ? (
-                  <>
-                    <td className={`${cell} font-medium`}>{p.profileUrl ? <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className={link}>{p.name}</a> : p.name}</td>
-                    <td className={`${cell} text-zinc-700`}>{p.title}</td>
-                    <td className={`${cell} text-xs`}>
-                      <div className="flex flex-col gap-0.5">
-                        {p.source && <a href={p.source} target="_blank" rel="noopener noreferrer" className={link}>Their team page</a>}
-                        {p.profileUrl && <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className={link}>LinkedIn profile</a>}
-                        {p.via === "public search" && <span className="text-zinc-500">public profile search</span>}
+      <div className="space-y-4">
+        {withPeople.map((c) => (
+          <section key={c.domain}>
+            <p className="mb-2 text-sm font-semibold">{c.name} <span className="font-mono text-xs font-normal text-zinc-500">{c.domain}</span></p>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {c.people.map((p) => {
+                const key = `${c.domain}-${p.name}`;
+                return (
+                  <li key={key} className="demo-pop-in rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <Avatar name={p.name} src={p.photoUrl} size={44} />
+                      <div className="min-w-0 flex-1">
+                        {p.profileUrl
+                          ? <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className="block truncate font-semibold text-zinc-900 hover:text-violet-700">{p.name}</a>
+                          : <p className="truncate font-semibold">{p.name}</p>}
+                        <p className="truncate text-xs text-zinc-600">{p.title}</p>
+                        <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                          {p.profileUrl && <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className={link}>LinkedIn profile</a>}
+                          {p.source && <a href={p.source} target="_blank" rel="noopener noreferrer" className={link}>Team page</a>}
+                          {p.via === "public search" && <span className="text-zinc-500">public profile search</span>}
+                        </p>
                       </div>
-                    </td>
-                  </>
-                ) : (
-                  <td colSpan={3} className={`${cell} text-xs text-zinc-500`}>No team page or public profile names someone at {c.name} in these roles.</td>
-                )}
-              </tr>
-            )))}
-            {!byCompany.length && <tr><td colSpan={4} className="px-4 py-3 text-zinc-500">No companies to look up in this run.</td></tr>}
-          </tbody>
-        </table>
+                    </div>
+                    {p.sequence && (
+                      <button type="button" aria-expanded={open === key} onClick={() => setOpen(open === key ? null : key)} className="mt-2 text-xs font-semibold text-violet-700">
+                        {open === key ? "Hide message flow" : "View message flow"}
+                      </button>
+                    )}
+                    {open === key && p.sequence && (
+                      <div className="mt-2">
+                        <MessageFlow to={p.name.split(/\s+/)[0]} sequence={p.sequence} profileUrl={p.profileUrl ?? p.source} openLabel={p.profileUrl ? "Open LinkedIn profile" : "Open team page"} action={<ActionButton label="Send from your workspace" />} />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+        {!withPeople.length && <p className="text-sm text-zinc-500">No team page or public profile names someone in these roles at the companies in this run.</p>}
+        {without.length > 0 && (
+          <p className="text-xs text-zinc-500">No team page or matching public profile for {without.map((c) => c.name).join(", ")}.</p>
+        )}
       </div>
       <p className="mt-3 text-xs text-zinc-500">People named on each company&apos;s own team page, and public profiles whose headline names the company. Check the profile before reaching out. Emails are never guessed: verified addresses come from a licensed provider in your workspace.</p>
     </div>
@@ -949,9 +968,12 @@ function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; to
                 {items.map((l) => (
                   <li key={l.url} className="demo-pop-in rounded-xl border border-zinc-200 bg-white p-3">
                     <p className="flex items-center gap-1.5 text-[11px]">
+                      <Avatar name={l.authorName ?? l.author ?? l.community ?? lane} src={authorPicture(l)} size={20} tone={PLATFORM_TONE[lane]} />
                       {l.profileUrl
-                        ? <a href={l.profileUrl} target="_blank" rel="noopener noreferrer" className="truncate text-violet-700 hover:underline">{l.authorName ?? l.author ?? "author"}</a>
-                        : <span className="truncate text-zinc-600">{l.authorName ?? l.author ?? l.community ?? "public post"}</span>}
+                        ? <a href={l.profileUrl} target="_blank" rel="noopener noreferrer" className="truncate font-medium text-violet-700 hover:underline">{l.authorName ?? l.author ?? "author"}</a>
+                        : l.community?.startsWith("r/")
+                          ? <a href={`https://www.reddit.com/${l.community}/`} target="_blank" rel="noopener noreferrer" className="truncate font-medium text-violet-700 hover:underline">{l.community}</a>
+                          : <span className="truncate text-zinc-600">{l.authorName ?? l.author ?? "public post"}</span>}
                       <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 font-semibold ${l.intent === "discussing the topic" ? "bg-zinc-100 text-zinc-600" : "bg-emerald-50 text-emerald-800"}`}>{l.intent}</span>
                     </p>
                     <a href={l.url} target="_blank" rel="noopener noreferrer" className="mt-1 line-clamp-2 text-sm font-semibold hover:underline">{l.title}</a>

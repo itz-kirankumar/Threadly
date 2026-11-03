@@ -74,14 +74,49 @@ export function CompanyTable({ list, live = false, showTerms = true }: { list: D
   );
 }
 
-function Draft({ label, body, href }: { label: string; body: string; href?: string }) {
+// A person's picture: their published photo or avatar, else initials.
+export function Avatar({ name, src, size = 36, tone = "#5B3DF5" }: { name: string; src?: string | null; size?: number; tone?: string }) {
+  const [failed, setFailed] = useState(false);
+  const initials = name.replace(/^(@|u\/|r\/)/, "").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join("") || "?";
+  if (src && !failed) {
+    return <img src={src} alt="" width={size} height={size} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="shrink-0 rounded-full bg-[#F3F2EE] object-cover" style={{ width: size, height: size }} />;
+  }
+  return <span aria-hidden className="flex shrink-0 items-center justify-center rounded-full font-semibold" style={{ width: size, height: size, background: tone, color: "#fff", fontSize: Math.round(size * 0.36) }}>{initials}</span>;
+}
+
+// The public picture for a post author: an X avatar from the handle; other
+// platforms do not expose one without signing in.
+export function authorPicture(lead: Pick<DemoSocialLead, "platform" | "author">): string | null {
+  return lead.platform === "X" && lead.author?.startsWith("@") ? `https://unavatar.io/x/${lead.author.slice(1)}?fallback=false` : null;
+}
+
+export const PLATFORM_TONE: Record<DemoSocialLead["platform"], string> = { Reddit: "#FF4500", X: "#111114", LinkedIn: "#0A66C2" };
+
+function Bubble({ label, body, first }: { label: string; body: string; first?: boolean }) {
   return (
-    <div>
-      <p className="flex items-center gap-2 text-[11px] font-semibold text-[#2B2A31]">
-        {label}
-        {href && <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-[#5B3DF5] hover:underline">Open profile</a>}
-      </p>
-      <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-[#2B2A31]">{body}</p>
+    <div className="flex justify-end">
+      <div className={`max-w-[92%] rounded-2xl rounded-br-md px-3 py-2 text-xs leading-relaxed ${first ? "bg-[#5B3DF5] text-white" : "bg-white text-[#2B2A31] ring-1 ring-black/[0.07]"}`}>
+        <p className={`mb-0.5 text-[10px] font-semibold uppercase tracking-wider ${first ? "text-white/75" : "text-[#6B6A72]"}`}>{label}</p>
+        <p className="whitespace-pre-wrap">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+// The message flow for one person: a public reply where there is a post,
+// then the first direct message and the follow-ups, as a conversation.
+// Drafts for a person to send; nothing is sent from the demo.
+export function MessageFlow({ to, reply, sequence, profileUrl, openLabel = "Open profile", action }: { to: string; reply?: string | null; sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null; profileUrl?: string | null; openLabel?: string; action?: ReactNode }) {
+  return (
+    <div className="demo-pop-in space-y-2 rounded-xl bg-[#F3F2EE] p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6B6A72]">Drafts you send from your own account. Nothing is sent from the demo.</p>
+      {reply && <Bubble label="Public reply on the post" body={reply} />}
+      {sequence && <Bubble first label={`Day 0 · message to ${to}`} body={sequence.dm} />}
+      {sequence?.followUps.map((f) => <Bubble key={f.day} label={`Day ${f.day} · follow-up if no reply`} body={f.body} />)}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        {profileUrl && <a href={profileUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-[#111114] hover:border-[#5B3DF5]">{openLabel}</a>}
+        {action}
+      </div>
     </div>
   );
 }
@@ -112,26 +147,34 @@ export function SignalTable({ leads, action }: { leads: DemoSocialLead[]; action
                   {l.matched?.length ? <p className="mt-0.5 text-xs text-[#6B6A72]">Mentions {l.matched.slice(0, 3).join(", ")}</p> : null}
                   {(l.reply || l.sequence) && (
                     <button type="button" aria-expanded={open === l.url} onClick={() => setOpen(open === l.url ? null : l.url)} className="mt-1 text-xs font-medium text-[#5B3DF5]">
-                      {open === l.url ? "Hide drafts" : l.sequence ? "View reply, DM and follow-ups" : "View drafted reply"}
+                      {open === l.url ? "Hide message flow" : l.sequence ? "View message flow" : "View drafted reply"}
                     </button>
                   )}
                   {open === l.url && (l.reply || l.sequence) && (
-                    <div className="demo-pop-in mt-2 space-y-2 rounded-lg bg-[#F3F2EE] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6B6A72]">Drafts for you to send from your own account. Nothing is sent from the demo.</p>
-                      {l.reply && <Draft label="Public reply" body={l.reply} />}
-                      {l.sequence && <Draft label={`Direct message${l.authorName ? ` to ${l.authorName}` : ""}`} body={l.sequence.dm} href={l.profileUrl ?? undefined} />}
-                      {l.sequence?.followUps.map((f) => <Draft key={f.day} label={`Follow-up, day ${f.day}`} body={f.body} />)}
-                      <div>{action(true)}</div>
+                    <div className="mt-2">
+                      <MessageFlow
+                        to={l.authorName ?? (l.platform === "Reddit" ? "the poster" : "the author")}
+                        reply={l.reply}
+                        sequence={l.sequence}
+                        profileUrl={l.profileUrl ?? l.url}
+                        openLabel={l.profileUrl ? "Open profile" : "Open the thread to message them"}
+                        action={action(true)}
+                      />
                     </div>
                   )}
                 </td>
-                <td className={`${td} whitespace-nowrap text-[#4A4950]`}>
-                  <p>{l.platform}</p>
-                  {l.profileUrl
-                    ? <a href={l.profileUrl} target="_blank" rel="noopener noreferrer" className="block max-w-[10rem] truncate text-xs font-medium text-[#5B3DF5] hover:underline">{l.authorName ?? l.author ?? "Author's profile"}</a>
-                    : l.community?.startsWith("r/")
-                      ? <a href={`https://www.reddit.com/${l.community}/`} target="_blank" rel="noopener noreferrer" className="block max-w-[10rem] truncate text-xs text-[#5B3DF5] hover:underline">{l.community}</a>
-                      : <p className="max-w-[10rem] truncate text-xs text-[#6B6A72]">{l.authorName ?? l.author ?? l.community ?? "Public post"}</p>}
+                <td className={`${td} text-[#4A4950]`}>
+                  <div className="flex items-center gap-2">
+                    <Avatar name={l.authorName ?? l.author ?? l.community ?? l.platform} src={authorPicture(l)} size={30} tone={PLATFORM_TONE[l.platform]} />
+                    <div className="min-w-0">
+                      {l.profileUrl
+                        ? <a href={l.profileUrl} target="_blank" rel="noopener noreferrer" className="block max-w-[9rem] truncate text-xs font-semibold text-[#5B3DF5] hover:underline">{l.authorName ?? l.author ?? "Profile"}</a>
+                        : l.community?.startsWith("r/")
+                          ? <a href={`https://www.reddit.com/${l.community}/`} target="_blank" rel="noopener noreferrer" className="block max-w-[9rem] truncate text-xs font-semibold text-[#5B3DF5] hover:underline">{l.community}</a>
+                          : <p className="max-w-[9rem] truncate text-xs text-[#6B6A72]">{l.authorName ?? l.author ?? "Public post"}</p>}
+                      <p className="text-[11px] text-[#6B6A72]">{l.platform}</p>
+                    </div>
+                  </div>
                 </td>
                 <td className={`${td} text-[#4A4950]`}>{l.intent}</td>
                 <td className={`${td} whitespace-nowrap text-[#4A4950]`}>{postLabel(l)}</td>

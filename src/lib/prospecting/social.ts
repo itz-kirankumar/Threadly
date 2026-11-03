@@ -441,6 +441,21 @@ export function draftMessageSequence(sender: Sender, lead: Pick<SocialLead, "tit
   };
 }
 
+// A first message and two follow-ups to a decision maker, opening with what
+// their company says about itself. Drafts only.
+export function draftPersonSequence(sender: Sender, person: { name: string; title: string }, company: { name: string; description: string | null }): MessageSequence {
+  const first = person.name.split(/\s+/)[0];
+  const fact = firstSentence(company.description, 140)?.replace(/\.$/, "");
+  const opener = fact ? `I was reading how ${company.name} describes itself: "${fact}."` : `I came across ${company.name}.`;
+  return {
+    dm: `Hi ${first}, ${opener} I work at ${sender.name}. ${whatWeDo(sender)} Would a two-line note on how this could apply to ${company.name} be useful?`,
+    followUps: [
+      { day: 3, body: `Hi ${first}, following up in case my note got buried. Happy to send that short write-up for ${company.name} if it is useful.` },
+      { day: 7, body: `Hi ${first}, last note from me. If now is not the time, no problem; if it helps later, ${sender.domain} has the details.` },
+    ],
+  };
+}
+
 // A reply to one public post, answering what the author asked.
 export async function draftSocialReply(sender: Sender, lead: SocialLead): Promise<Draft> {
   if (modelEnabled()) {

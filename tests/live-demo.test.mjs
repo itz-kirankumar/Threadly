@@ -215,3 +215,11 @@ test("a company's name must appear as a whole word in the profile headline", asy
   assert.ok(people.profileMatchesCompany(q, { name: "Docfield", domain: "docfield.com" }));
   assert.equal(people.profileTitle(q), "Head of Product");
 });
+
+test("a team page's headshot is the image named for the person", async () => {
+  const people = await import("../src/lib/prospecting/people.ts");
+  const html = `<img src="/logo.svg" alt="Acme"><div><img data-src="/team/jane.jpg" alt="Jane Doe, CEO"><h3>Jane Doe</h3></div><img src="http://insecure.example/x.jpg" alt="Ravi Kumar">`;
+  assert.equal(people.photoFor(html, "Jane Doe", "https://acme.com/about"), "https://acme.com/team/jane.jpg");
+  assert.equal(people.photoFor(html, "Ravi Kumar", "https://acme.com/about"), null, "only https images");
+  assert.equal(people.photoFor(html, "Maria Lopez", "https://acme.com/about"), null);
+});

@@ -115,3 +115,10 @@ test("a message sequence is a disclosed DM and two follow-ups, drafts only", () 
   assert.match(seq.dm, /compares with HubSpot/);
   assert.deepEqual(seq.followUps.map((f) => f.day), [3, 7]);
 });
+
+test("a decision maker's message flow opens with their company's own words", () => {
+  const seq = social.draftPersonSequence({ name: "Acme", domain: "acme.io", summary: "The forecasting platform for revenue teams.", category: "", keywords: [] }, { name: "Jane Doe", title: "VP Sales" }, { name: "Beta", description: "Beta helps finance teams close the books." });
+  assert.match(seq.dm, /^Hi Jane, I was reading how Beta describes itself: "Beta helps finance teams close the books\."/);
+  assert.match(seq.dm, /I work at Acme\./);
+  assert.deepEqual(seq.followUps.map((f) => f.day), [3, 7]);
+});

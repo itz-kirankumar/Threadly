@@ -6,7 +6,7 @@ import type { DemoEvent, DemoStep } from "@/lib/live-demo/types";
 import { contactProvider } from "@/lib/prospecting/contacts";
 import { findDecisionMakers, withProfiles } from "@/lib/prospecting/people";
 import { researchTerms, runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
-import { draftCompanyEmail, draftMessageSequence, draftSocialReply, findSocialLeads, leadTopics, socialTopic, type Sender } from "@/lib/prospecting/social";
+import { draftCompanyEmail, draftMessageSequence, draftPersonSequence, draftSocialReply, findSocialLeads, leadTopics, socialTopic, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
 import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, search, searchAvailable } from "@/lib/prospecting/web";
 import { auditSite, organizationFacts } from "@/lib/geo/site-audit";
@@ -219,7 +219,21 @@ export async function POST(request: Request) {
           log(linked.people.length ? `  ${c.name}: ${linked.people.map((p) => `${p.name} (${p.title})${p.profileUrl ? " with profile" : ""}`).join(", ")}` : `  ${c.name}: no team page or matching public profile`);
           return linked;
         });
-        const people = found.filter((f): f is NonNullable<typeof f> => f !== null).flatMap((f) => f.people.map((p) => ({ company: f.company, domain: f.domain, name: p.name, title: p.title, source: p.via === "public search" ? null : f.source, profileUrl: p.profileUrl ?? null, via: p.via ?? "team page" })));
+        const people = found.filter((f): f is NonNullable<typeof f> => f !== null).flatMap((f) => {
+          const company = companies.find((c) => c.domain === f.domain);
+          return f.people.map((p) => ({
+            company: f.company,
+            domain: f.domain,
+            name: p.name,
+            title: p.title,
+            source: p.via === "public search" ? null : f.source,
+            profileUrl: p.profileUrl ?? null,
+            photoUrl: p.photoUrl ?? null,
+            via: p.via ?? "team page",
+            // A drafted first message and follow-ups; nothing is sent.
+            sequence: draftPersonSequence(sender, p, { name: f.company, description: company?.description ?? null }),
+          }));
+        });
         const provider = contactProvider();
         log(provider
           ? `verified emails come from ${provider.label}, a licensed provider, inside a workspace`

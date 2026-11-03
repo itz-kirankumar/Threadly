@@ -16,6 +16,8 @@ export interface PublicPerson {
   // "team page" when the company names them on its own site, "public
   // search" when they come only from a profile search result.
   via?: "team page" | "public search";
+  // The headshot the company publishes next to their name, if any.
+  photoUrl?: string | null;
 }
 
 export interface CompanyPeople {
@@ -102,6 +104,25 @@ export function extractPeople(html: string, limit = 12, company = ""): PublicPer
   return out;
 }
 
+// The headshot a team page shows for a person: an image whose alt text is
+// their name, as https, from the company's own page.
+export function photoFor(html: string, name: string, base: string): string | null {
+  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const tag of html.match(/<img\b[^>]*>/gi) ?? []) {
+    const alt = (tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!alt || !(alt === key || (alt.includes(key) && alt.length - key.length <= 24))) continue;
+    const raw = tag.match(/\b(?:data-src|src)\s*=\s*["']([^"']+)["']/i)?.[1] ?? tag.match(/\bsrcset\s*=\s*["']([^\s"',]+)/i)?.[1];
+    if (!raw || raw.startsWith("data:")) continue;
+    try {
+      const url = new URL(decodeEntities(raw), base);
+      if (url.protocol === "https:") return url.toString();
+    } catch {
+      // not a usable address
+    }
+  }
+  return null;
+}
+
 // People whose titles match the campaign's roles first ("Head of Sales" for
 // a sales tool), then founders and the C-suite.
 export function rankForRoles(people: PublicPerson[], roles: string[]): PublicPerson[] {
@@ -128,7 +149,10 @@ export async function findDecisionMakers(company: { domain: string; name: string
       // usually customer quotes.
       if (/^\/?$/.test(new URL(finalUrl).pathname)) continue;
       const people = extractPeople(html, 12, company.name);
-      if (people.length) return { domain: company.domain, company: company.name, people: rankForRoles(people, roles).slice(0, max), source: finalUrl };
+      if (people.length) {
+        const ranked = rankForRoles(people, roles).slice(0, max).map((p) => ({ ...p, photoUrl: photoFor(html, p.name, finalUrl) }));
+        return { domain: company.domain, company: company.name, people: ranked, source: finalUrl };
+      }
     } catch {
       // not readable; try the next page
     }
