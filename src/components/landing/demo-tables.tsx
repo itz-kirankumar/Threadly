@@ -8,7 +8,7 @@ export function Logo({ name, icon, size = "h-8 w-8" }: { name: string; icon: str
     return <img src={icon} alt="" className={`${size} shrink-0 rounded-lg border border-zinc-200 bg-white object-contain p-0.5`} />;
   }
   return (
-    <span aria-hidden className={`${size} flex shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-[11px] font-semibold text-white`}>
+    <span aria-hidden style={{ background: "#111114", color: "#fff" }} className={`${size} flex shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold`}>
       {name.replace(/^www\./, "").charAt(0).toUpperCase()}
     </span>
   );
@@ -27,12 +27,23 @@ export function postedLabel(iso: string | null, now = Date.now()): string {
   return `${months} month${months === 1 ? "" : "s"} ago`;
 }
 
-// Companies or competitors, one row each. Only facts read in this run.
+// When a post was made: its own date (X and LinkedIn), else the search
+// window that found it (Reddit gives search no dates, but the window filters
+// by post date).
+export function postLabel(lead: Pick<DemoSocialLead, "postedAt" | "window">, now = Date.now()): string {
+  if (lead.postedAt) return postedLabel(lead.postedAt, now);
+  if (lead.window === "month") return "This month";
+  if (lead.window === "year") return "This year";
+  return "Undated";
+}
+
+// Companies or competitors, one row each. Only facts read in this run: for a
+// company, why it is a prospect; for a competitor, how many sources named it.
 export function CompanyTable({ list, live = false, showTerms = true }: { list: DemoCompany[]; live?: boolean; showTerms?: boolean }) {
   return (
     <div className="max-h-[52vh] overflow-auto rounded-2xl border border-black/[0.08] bg-white demo-scroll">
       <table className="w-full min-w-[560px] border-separate border-spacing-0 text-sm">
-        <thead><tr><th className={th}>Company</th><th className={th}>What their homepage says</th>{showTerms && <th className={th}>Match</th>}</tr></thead>
+        <thead><tr><th className={th}>Company</th><th className={th}>What their homepage says</th><th className={th}>{showTerms ? "Why" : "Named by"}</th></tr></thead>
         <tbody>
           {list.map((c, i) => (
             <tr key={c.domain} className="demo-row-in transition-colors hover:bg-[#F8F7F4]" style={{ animationDelay: live ? "0ms" : `${Math.min(i, 10) * 45}ms` }}>
@@ -46,10 +57,17 @@ export function CompanyTable({ list, live = false, showTerms = true }: { list: D
                 </div>
               </td>
               <td className={`${td} text-[#4A4950]`}><span className="line-clamp-2">{c.description ?? "No description on the homepage."}</span></td>
-              {showTerms && <td className={`${td} w-[22%]`}><div className="flex flex-wrap gap-1">{(c.matchedTerms ?? []).slice(0, 3).map((t) => <span key={t} className="rounded bg-[#F3F2EE] px-1.5 py-0.5 text-xs text-[#2B2A31]">{t}</span>)}</div></td>}
+              <td className={`${td} w-[24%]`}>
+                {showTerms ? (
+                  <div className="flex flex-wrap gap-1">
+                    {c.signal && <span className="rounded bg-[#EEEBFF] px-1.5 py-0.5 text-xs font-medium text-[#2F1FA8]">{c.signal}</span>}
+                    {(c.matchedTerms ?? []).slice(0, c.signal ? 2 : 3).map((t) => <span key={t} className="rounded bg-[#F3F2EE] px-1.5 py-0.5 text-xs text-[#2B2A31]">{t}</span>)}
+                  </div>
+                ) : <span className="text-xs text-[#4A4950]">{c.sources ? `${c.sources} independent source${c.sources === 1 ? "" : "s"}` : "Your brand profile"}</span>}
+              </td>
             </tr>
           ))}
-          {live && <tr><td colSpan={showTerms ? 3 : 2} className={`${td} text-xs`}><span className="demo-shimmer">Reading more homepages</span></td></tr>}
+          {live && <tr><td colSpan={3} className={`${td} text-xs`}><span className="demo-shimmer">Reading more homepages</span></td></tr>}
         </tbody>
       </table>
     </div>
@@ -79,6 +97,7 @@ export function SignalTable({ leads, action }: { leads: DemoSocialLead[]; action
               <tr key={l.url} className="demo-row-in" style={{ animationDelay: `${Math.min(i, 10) * 45}ms` }}>
                 <td className={td}>
                   <a href={l.url} target="_blank" rel="noopener noreferrer" className="line-clamp-2 font-medium text-[#111114] hover:text-[#5B3DF5]">{l.title}</a>
+                  {l.matched?.length ? <p className="mt-0.5 text-xs text-[#6B6A72]">Mentions {l.matched.slice(0, 3).join(", ")}</p> : null}
                   {l.reply && (
                     <button type="button" aria-expanded={open === l.url} onClick={() => setOpen(open === l.url ? null : l.url)} className="mt-1 text-xs font-medium text-[#5B3DF5]">
                       {open === l.url ? "Hide drafted reply" : "View drafted reply"}
@@ -93,7 +112,7 @@ export function SignalTable({ leads, action }: { leads: DemoSocialLead[]; action
                 </td>
                 <td className={`${td} whitespace-nowrap text-[#4A4950]`}><p>{l.platform}</p><p className="max-w-[9rem] truncate text-xs text-[#6B6A72]">{l.author ?? l.community ?? "Public post"}</p></td>
                 <td className={`${td} text-[#4A4950]`}>{l.intent}</td>
-                <td className={`${td} whitespace-nowrap text-[#4A4950]`}>{postedLabel(l.postedAt)}</td>
+                <td className={`${td} whitespace-nowrap text-[#4A4950]`}>{postLabel(l)}</td>
               </tr>
             ))}
             {!shown.length && <tr><td colSpan={4} className={`${td} text-[#6B6A72]`}>No recent posts on this platform.</td></tr>}

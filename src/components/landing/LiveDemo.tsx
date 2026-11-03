@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import OnboardModal from "./OnboardModal";
 import ResearchReport from "./ResearchReport";
 import ThreadLines from "./ThreadLines";
-import { CompanyTable, Logo, SignalTable } from "./demo-tables";
+import { CompanyTable, Logo, postLabel, SignalTable } from "./demo-tables";
 import {
   DEMO_STEPS,
   DEMO_STEP_LABELS,
@@ -113,7 +113,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   const [runDomain, setRunDomain] = useState("");
   const [readAt, setReadAt] = useState("");
   // Set when the run cannot start: free runs used, or the demo is busy.
-  const [blocked, setBlocked] = useState<null | "free" | "busy">(null);
+  const [blocked, setBlocked] = useState<null | "busy">(null);
   const lastSwitch = useRef(0);
   const resultAt = useRef<Partial<Record<DemoStep, number>>>({});
   const abortRef = useRef<AbortController | null>(null);
@@ -242,8 +242,8 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
       });
       if (!res.ok || !res.body) {
         const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-        if (body.code === "free_runs_used" || body.code === "busy") {
-          setBlocked(body.code === "free_runs_used" ? "free" : "busy");
+        if (body.code === "busy") {
+          setBlocked("busy");
           setPhase("idle");
           return;
         }
@@ -447,7 +447,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
             <a href="#how-it-works" className="mt-5 inline-block rounded-full border border-black/[0.12] px-5 py-2 text-sm text-[#111114] transition-colors hover:border-[#5B3DF5]/50">See how it works</a>
           </div>
         )}
-        {blocked && <OutOfRuns kind={blocked} onEligibility={openOnboard} />}
+        {blocked && <OutOfRuns onEligibility={openOnboard} />}
       </form>
 
       {phase !== "idle" && !focusOpen && (
@@ -541,7 +541,9 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                   </p>
                 )}
               </RailStep>
-              <RailStep n={7} step="contacts" status={status.contacts} />
+              <RailStep n={7} step="contacts" status={status.contacts}>
+                {results.contacts && <p className="demo-pop-in text-xs text-zinc-700">{results.contacts.people.length} people named on company sites</p>}
+              </RailStep>
               <RailStep n={8} step="pitch" status={status.pitch} />
               <RailStep n={9} step="report" status={statusOf("report")} />
               <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3">
@@ -619,42 +621,14 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   );
 }
 
-// Shown instead of the workspace when a run cannot start: what the visitor
-// can do next, without the mechanics of the limit.
-function OutOfRuns({ kind, onEligibility }: { kind: "free" | "busy"; onEligibility: () => void }) {
-  if (kind === "busy") {
-    return (
-      <div className="demo-pop-in mx-auto mt-5 max-w-xl rounded-2xl border border-violet-200 bg-white p-5 text-left shadow-sm">
-        <p className="font-semibold">The live demo is busy right now</p>
-        <p className="mt-1 text-sm text-zinc-600">Give it a few minutes and try again, or check whether your team qualifies for full runs.</p>
-        <button type="button" onClick={onEligibility} className="mt-4 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500">Check eligibility</button>
-      </div>
-    );
-  }
+// Shown instead of the workspace when the owner's daily demo budget is used:
+// what the visitor can do next.
+function OutOfRuns({ onEligibility }: { onEligibility: () => void }) {
   return (
-    <div className="demo-modal-in mx-auto mt-6 max-w-3xl overflow-hidden rounded-3xl border border-violet-200 bg-white text-left shadow-[0_30px_80px_-40px_rgba(91,33,182,0.55)]">
-      <div className="bg-violet-700 px-6 py-5 text-white">
-        <p className="text-xs font-semibold uppercase tracking-widest text-violet-100">Free runs used</p>
-        <p className="mt-1 text-2xl font-semibold tracking-tight">You&apos;ve seen what Threadly finds. Keep going with full runs.</p>
-        <p className="mt-1 text-sm text-violet-100">Full runs find every matching company, look up decision makers and send from your own domain.</p>
-      </div>
-      <div className="grid gap-px bg-zinc-100 sm:grid-cols-3">
-        <button type="button" onClick={onEligibility} className="group bg-white p-5 text-left transition hover:bg-violet-50">
-          <p className="text-sm font-semibold">New here?</p>
-          <p className="mt-1 text-xs text-zinc-600">Check your eligibility. Qualified teams are onboarded on the spot.</p>
-          <span className="mt-3 inline-block rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white group-hover:bg-violet-500">Check eligibility</span>
-        </button>
-        <a href="/portal" className="group bg-white p-5 transition hover:bg-violet-50">
-          <p className="text-sm font-semibold">Already onboarded?</p>
-          <p className="mt-1 text-xs text-zinc-600">Sign in and run it from your workspace with the credits you have left.</p>
-          <span className="mt-3 inline-block rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-900 group-hover:border-violet-400">Sign in</span>
-        </a>
-        <a href="/portal" className="group bg-white p-5 transition hover:bg-violet-50">
-          <p className="text-sm font-semibold">Out of credits?</p>
-          <p className="mt-1 text-xs text-zinc-600">Top up with a credit pack. Your first pack earns bonus credits.</p>
-          <span className="mt-3 inline-block rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-900 group-hover:border-violet-400">Upgrade now</span>
-        </a>
-      </div>
+    <div className="demo-pop-in mx-auto mt-5 max-w-xl rounded-2xl border border-violet-200 bg-white p-5 text-left shadow-sm">
+      <p className="font-semibold">The live demo is busy right now</p>
+      <p className="mt-1 text-sm text-zinc-600">Give it a few minutes and try again, or check whether your team qualifies for full runs.</p>
+      <button type="button" onClick={onEligibility} className="mt-4 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500">Check eligibility</button>
     </div>
   );
 }
@@ -688,11 +662,11 @@ function StepHeader({ view, results, streamed, done, readAt }: { view: View; res
   const summary: Record<View, string> = {
     research: results.research ? `Read ${results.research.name} and pulled ${results.research.keywords.length} themes from its own words.` : "Reading the homepage.",
     crawler: results.crawler ? `${results.crawler.passed} of ${results.crawler.total} checks passed.` : "Checking what AI assistants can read.",
-    competitors: `${(results.competitors ?? streamed.competitors).length} companies verified against their own homepages.`,
+    competitors: `${(results.competitors ?? streamed.competitors).length} competitors, named by independent comparison sources.`,
     campaigns: results.campaigns ? `${results.campaigns.length} audience${results.campaigns.length === 1 ? "" : "s"} to prospect.` : "Choosing who to target.",
-    companies: `${(results.companies ?? streamed.companies).length} companies matched to the campaign.`,
-    social: `${social.length} public posts found so far across Reddit, X and LinkedIn.`,
-    contacts: "Who to reach, from a licensed provider in your workspace.",
+    companies: `${(results.companies ?? streamed.companies).length} potential customers, each with the reason it was found.`,
+    social: `${social.filter((l) => l.intent !== "discussing the topic").length} people asking${social.some((l) => l.intent === "discussing the topic") ? `, ${social.filter((l) => l.intent === "discussing the topic").length} related conversations` : ""} on Reddit, X and LinkedIn.`,
+    contacts: results.contacts ? `${results.contacts.people.length} decision makers named on their own company's website.` : "Reading each company's team page.",
     pitch: results.pitch ? `${results.pitch.length} first emails written from each company's own words.` : "Writing first emails.",
     report: "Everything this run found, in one place.",
   };
@@ -765,6 +739,7 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
             <span className="rounded-md border border-zinc-200 px-2.5 py-1 text-xs font-semibold">✓ Found</span>
           </div>
           <p className="mt-5 text-[15px] leading-relaxed text-zinc-700">{r.summary}</p>
+          {r.category && <p className="mt-4 text-sm"><span className="text-zinc-500">Reads as </span><span className="font-semibold">{r.category}</span></p>}
           {r.keywords.length > 0 && (
             <>
               <p className="mt-6 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Keywords</p>
@@ -803,20 +778,52 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
       const s = data as DemoSocial;
       return s.leads.length ? <SignalTable leads={s.leads} action={(reply) => <ActionButton label={reply ? "Post this reply" : "Draft a reply"} />} /> : <p className="mt-16 text-center text-sm text-zinc-600">No recent public posts on this topic.</p>;
     }
-    case "contacts": {
-      const c = data as DemoContacts;
-      return (
-        <div className="mx-auto mt-4 max-w-xl rounded-2xl border border-zinc-200 bg-white p-7 shadow-sm">
-          <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-            For invited workspaces, Threadly looks up people in these roles{c.companies.length ? ` at ${c.companies.slice(0, 3).join(", ")}` : ""} through a licensed contact data provider and records where each contact came from. Profiles are not scraped and addresses are not guessed.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-1.5">{c.roles.map((r, i) => <span key={r} className="demo-pop-in rounded-lg border border-zinc-200 px-2.5 py-1 text-sm" style={{ animationDelay: `${i * 80}ms` }}>{r}</span>)}</div>
-        </div>
-      );
-    }
+    case "contacts":
+      return <ContactsStage contacts={data as DemoContacts} />;
     case "pitch":
       return <PitchStage drafts={data as DemoDraft[]} />;
   }
+}
+
+// Decision makers each company names on its own site, with the page they
+// came from; a role search on LinkedIn for the rest. Emails are not guessed.
+function ContactsStage({ contacts }: { contacts: DemoContacts }) {
+  const byCompany = contacts.companies.map((c) => ({ ...c, people: contacts.people.filter((p) => p.domain === c.domain) }));
+  const role = contacts.roles[0] ?? "Founder";
+  const search = (company: string) => `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${role} ${company}`)}`;
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-zinc-600">
+        <span>Roles for this campaign:</span>
+        {contacts.roles.map((r) => <span key={r} className="rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-zinc-800">{r}</span>)}
+      </div>
+      <div className="max-h-[48vh] overflow-auto rounded-2xl border border-black/[0.08] bg-white demo-scroll">
+        <table className="w-full min-w-[620px] border-separate border-spacing-0 text-sm">
+          <thead><tr>{["Company", "Person", "Title", "Source"].map((h) => <th key={h} className="sticky top-0 z-10 bg-white px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[#6B6A72]">{h}</th>)}</tr></thead>
+          <tbody>
+            {byCompany.flatMap((c) => (c.people.length ? c.people : [null]).map((p, i) => (
+              <tr key={`${c.domain}-${p?.name ?? "none"}`} className="demo-row-in">
+                <td className="border-t border-black/[0.06] px-4 py-3 align-top">{i === 0 ? <><p className="font-medium">{c.name}</p><p className="font-mono text-xs text-zinc-500">{c.domain}</p></> : null}</td>
+                {p ? (
+                  <>
+                    <td className="border-t border-black/[0.06] px-4 py-3 align-top font-medium">{p.name}</td>
+                    <td className="border-t border-black/[0.06] px-4 py-3 align-top text-zinc-700">{p.title}</td>
+                    <td className="border-t border-black/[0.06] px-4 py-3 align-top">{p.source ? <a href={p.source} target="_blank" rel="noopener noreferrer" className="text-xs text-violet-700 hover:underline">Their team page</a> : null}</td>
+                  </>
+                ) : (
+                  <td colSpan={3} className="border-t border-black/[0.06] px-4 py-3 align-top text-xs text-zinc-500">
+                    No public team page. <a href={search(c.name)} target="_blank" rel="noopener noreferrer" className="font-medium text-violet-700 hover:underline">Search {role} at {c.name} on LinkedIn</a>
+                  </td>
+                )}
+              </tr>
+            )))}
+            {!byCompany.length && <tr><td colSpan={4} className="px-4 py-3 text-zinc-500">No companies to look up in this run.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-zinc-500">Names and titles as each company publishes them on its own site. Emails are never guessed: verified addresses come from a licensed provider in your workspace.</p>
+    </div>
+  );
 }
 
 function CrawlerStage({ audit }: { audit: DemoCrawler }) {
@@ -884,15 +891,16 @@ function CompetitorStage({ list, live, summary }: { list: DemoCompany[]; live: b
         <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
           Competitors
           <span className="rounded border border-zinc-200 px-1.5 py-0.5 normal-case tracking-normal text-zinc-700">
-            {live ? <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />{list.length} verified so far</span> : `✓ ${list.length} found`}
+            {live ? <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />{list.length} confirmed so far</span> : `✓ ${list.length} found`}
           </span>
         </p>
         <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {list.map((c, i) => (
             <li key={c.domain} className="demo-logo-in" style={{ animationDelay: live ? "0ms" : `${i * 70}ms` }}>
-              <a href={`https://${c.domain}`} target="_blank" rel="noopener noreferrer" title={c.description ?? c.domain} className="flex h-full flex-col items-center gap-2 rounded-xl border border-zinc-200 bg-white px-2 py-3 text-center transition hover:-translate-y-0.5 hover:border-zinc-400 hover:shadow-md">
+              <a href={`https://${c.domain}`} target="_blank" rel="noopener noreferrer" title={`${c.description ?? c.domain}${c.sources ? ` · named by ${c.sources} sources` : ""}`} className="flex h-full flex-col items-center gap-2 rounded-xl border border-zinc-200 bg-white px-2 py-3 text-center transition hover:-translate-y-0.5 hover:border-zinc-400 hover:shadow-md">
                 <Logo name={c.domain} icon={c.iconDataUrl} size="h-9 w-9" />
-                <span className="w-full truncate text-xs font-medium">{c.domain}</span>
+                <span className="w-full truncate text-xs font-medium">{c.name && c.name !== c.domain ? c.name : c.domain}</span>
+                {c.sources ? <span className="text-[10px] text-zinc-500">{c.sources} source{c.sources === 1 ? "" : "s"}</span> : null}
               </a>
             </li>
           ))}
@@ -918,7 +926,7 @@ function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; to
       </div>
       {!live && leads.length > 0 && (
         <div className="demo-pop-in mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-900 bg-white px-4 py-2.5">
-          <p className="text-sm"><span className="font-semibold">{leads.length} people</span> are asking about what you sell. Reply and track every thread from your workspace.</p>
+          <p className="text-sm"><span className="font-semibold">{leads.filter((l) => l.intent !== "discussing the topic").length} people</span> are asking about what you sell. Reply and track every thread from your workspace.</p>
           <ActionButton tone="green" label="Reach out to all" />
         </div>
       )}
@@ -937,10 +945,11 @@ function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; to
                   <li key={l.url} className="demo-pop-in rounded-xl border border-zinc-200 bg-white p-3">
                     <p className="flex items-center gap-1.5 text-[11px]">
                       <span className="truncate text-zinc-600">{l.author ?? l.community ?? "public post"}</span>
-                      <span className="ml-auto shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800">{l.intent}</span>
+                      <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 font-semibold ${l.intent === "discussing the topic" ? "bg-zinc-100 text-zinc-600" : "bg-emerald-50 text-emerald-800"}`}>{l.intent}</span>
                     </p>
                     <a href={l.url} target="_blank" rel="noopener noreferrer" className="mt-1 line-clamp-2 text-sm font-semibold hover:underline">{l.title}</a>
                     {l.snippet && <p className="mt-1 line-clamp-2 text-xs text-zinc-600">{l.snippet}</p>}
+                    <p className="mt-1 text-[11px] text-zinc-500">{postLabel(l)}{l.matched?.length ? ` · mentions ${l.matched.slice(0, 2).join(", ")}` : ""}</p>
                     {l.reply && (
                       <div className="mt-2 rounded-lg bg-zinc-50 p-2">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Suggested reply</p>

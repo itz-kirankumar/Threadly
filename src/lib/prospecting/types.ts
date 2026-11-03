@@ -43,6 +43,12 @@ export interface Research {
   summary: string;
   summarySource: "homepage" | "model" | "profile";
   keywords: string[];
+  // What the site says it is ("AI workspace"), and every such phrase found;
+  // absent on runs saved before categories were read.
+  category?: string | null;
+  categoryPhrases?: string[];
+  // Business areas the site lists ("sales, marketing, support"), for suites.
+  categoryAreas?: string[];
   audiencePhrases: string[];
   page: PageSnapshot | null;
   pageError: string | null;
@@ -57,6 +63,11 @@ export interface Competitor {
   tracked: boolean;
   selected: boolean;
   appearances: number;
+  // Distinct pages (search results and articles) that named it.
+  sources?: number;
+  // Of those, pages about this company's own alternatives ("Zoho
+  // alternatives"): independent comparisons that agree it competes.
+  consensus?: number;
   evidence: Evidence[];
 }
 
@@ -75,7 +86,7 @@ export interface Campaign {
   description: string;
   searchQuery: string;
   roles: string[];
-  source: "homepage" | "model" | "user";
+  source: "homepage" | "model" | "user" | "competitors";
   evidence: Evidence[];
   selected: boolean;
 }
@@ -91,6 +102,10 @@ export interface ProspectCompany {
   description: string | null;
   campaignId: string;
   matchedTerms: string[];
+  // Why it is a prospect, in one line ("Customer of Coda, from coda.io").
+  signal?: string;
+  // Its own team or leadership page, when the homepage links one.
+  peopleUrl?: string;
   selected: boolean;
   evidence: Evidence[];
 }

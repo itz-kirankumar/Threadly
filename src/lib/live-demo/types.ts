@@ -18,6 +18,8 @@ export interface DemoResearch {
   name: string;
   domain: string;
   summary: string;
+  // What the site says it is, e.g. "AI workspace"; null when it does not say.
+  category?: string | null;
   keywords: string[];
   iconDataUrl: string | null;
   readHomepage: boolean;
@@ -41,6 +43,10 @@ export interface DemoCompany {
   description: string | null;
   iconDataUrl?: string | null;
   matchedTerms?: string[];
+  // Competitors: how many independent pages named it.
+  sources?: number;
+  // Potential customers: why it is one ("Customer of Coda").
+  signal?: string | null;
 }
 export interface DemoCampaign {
   name: string;
@@ -57,16 +63,30 @@ export interface DemoSocialLead {
   author: string | null;
   community: string | null;
   intent: string;
+  // The competitors and category words the post mentions.
+  matched?: string[];
   reply: string | null;
   postedAt: string | null;
+  // For undated posts, the search window that found them ("month" means
+  // posted in the last 30 days).
+  window?: "month" | "year" | null;
 }
 export interface DemoSocial {
   topic: string;
   leads: DemoSocialLead[];
 }
+export interface DemoPerson {
+  company: string;
+  domain: string;
+  name: string;
+  title: string;
+  // The company's own page the person was read from.
+  source: string | null;
+}
 export interface DemoContacts {
   roles: string[];
-  companies: string[];
+  companies: Array<{ name: string; domain: string }>;
+  people: DemoPerson[];
 }
 export interface DemoDraft {
   company: string;

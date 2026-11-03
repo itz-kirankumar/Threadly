@@ -140,7 +140,8 @@ test("expired link refuses selection", async () => {
   const created = await createBookingLink(s, {
     tenantId: "t1", conversationId: null, contactId: "ct_1", organizerSenderId: "snd_1", policyId: "bpo_1", actor: "u1", ttlDays: 1,
   });
-  const later = new Date(NOW.getTime() + 2 * 24 * 60 * 60 * 1000);
+  // Links expire from the real clock, so "later" is measured from it too.
+  const later = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
   const result = await selectSlot(s, calendar, { token: created.token, startISO: "2026-11-04T09:00:00.000Z", actor: "recipient", now: later });
   assert.equal(result.status, 410);
 });

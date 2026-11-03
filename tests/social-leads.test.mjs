@@ -44,7 +44,7 @@ test("with no search configured there are no leads and no requests", async () =>
   const saved = process.env.TAVILY_API_KEY;
   delete process.env.TAVILY_API_KEY;
   try {
-    assert.deepEqual(await social.findSocialLeads("anything", [], () => {}), []);
+    assert.deepEqual(await social.findSocialLeads({ topic: "anything", competitors: [], primary: [], related: [], brand: "Acme" }, () => {}), []);
   } finally {
     if (saved !== undefined) process.env.TAVILY_API_KEY = saved;
   }
@@ -72,4 +72,33 @@ test("post dates come from X and LinkedIn ids, and old posts are dropped", () =>
   assert.equal(social.isRecentPost("2024-06-01T00:00:00Z", now), false);
   assert.equal(social.isRecentPost("2026-06-01T00:00:00Z", now), true);
   assert.equal(social.isRecentPost(null, now), true);
+});
+
+test("a post counts only when its title names a competitor or the category", () => {
+  const input = { competitors: ["Salesforce", "HubSpot", "Clay"], primary: ["crm"], related: ["sales", "marketing", "finance", "customer relationship"], brand: "Zoho" };
+  assert.ok(social.postRelevance("Best CRM for a 10 person team?", "", input));
+  assert.ok(social.postRelevance("Moving off Salesforce, what next?", "", input));
+  assert.equal(social.postRelevance("Marketing/sales/finance career path recommendations?", "", input), null, "broad words alone are not the market");
+  assert.equal(social.postRelevance("Best clay for pottery beginners?", "", input), null, "a brand that is a common word needs the category too");
+  assert.ok(social.postRelevance("Which tool should I pick?", "We are deciding between HubSpot and Salesforce", input), "a competitor named in the post body");
+});
+
+test("launches, self-promotion and careers are not people asking", () => {
+  assert.equal(social.classifyIntent("Affine: Open Source Alternative to Notion, Miro, Airtable", undefined, "LinkedIn").score, 0);
+  assert.equal(social.classifyIntent("I made a free and open-source alternative to Obsidian", undefined, "Reddit").score, 0);
+  assert.equal(social.classifyIntent("Marketing/sales/finance career path recommendations?").score, 0);
+  assert.equal(social.classifyIntent("Obsidian Alternatives for Cloud, Teams, and Documentation", undefined, "LinkedIn").score, 0);
+  assert.equal(social.classifyIntent("Anyone moved from ZoomInfo to Clay for prospecting?").intent, "looking for an alternative");
+  assert.equal(social.classifyIntent("Looking for a CRM that works for a small agency?", undefined, "LinkedIn").intent, "asking for a recommendation");
+});
+
+test("X posts show their text, not the author's name", () => {
+  assert.equal(social.postTitle("X", 'Tom on X: "Open-source Obsidian Publish alternative" / X', ""), "Open-source Obsidian Publish alternative");
+  assert.equal(social.postTitle("X", "Giri Kunche", "Giri Kunche on X: Looking for a better CRM than HubSpot"), "Looking for a better CRM than HubSpot");
+});
+
+test("the lead topic is the category said the way buyers ask", () => {
+  assert.equal(social.leadTopic(["prospecting and AI visibility platform", "prospecting platform", "AI visibility platform"], [], "x"), "prospecting tool");
+  assert.equal(social.leadTopic(["AI workspace"], [], "x"), "AI workspace");
+  assert.equal(social.leadTopic(["financial services platform"], ["payment processing", "payments"], "x"), "payment processing");
 });

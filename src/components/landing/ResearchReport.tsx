@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import type { DemoCompany, DemoResults } from "@/lib/live-demo/types";
 import CountUp from "./CountUp";
-import { CompanyTable, postedLabel } from "./demo-tables";
+import { CompanyTable, postLabel } from "./demo-tables";
 
 const delay = (i: number) => ({ animationDelay: `${i * 70}ms` });
 
@@ -55,14 +55,16 @@ export default function ResearchReport({ results, action, signals: signalView, e
   const buyers = signals.filter((s) => s.intent !== "discussing the topic");
   const platforms = (["Reddit", "X", "LinkedIn"] as const).map((p) => ({ name: p, count: signals.filter((s) => s.platform === p).length }));
   const fixes = (audit?.categories ?? []).flatMap((c) => c.checks).filter((c) => !c.passed).sort((a, b) => b.weight - a.weight).slice(0, 3);
-  const sources = [...new Set([`https://${r.domain}/`, ...competitors.map((c) => `https://${c.domain}/`), ...companies.map((c) => `https://${c.domain}/`), ...signals.map((s) => s.url)])];
+  const people = results.contacts?.people ?? [];
+  const sources = [...new Set([`https://${r.domain}/`, ...competitors.map((c) => `https://${c.domain}/`), ...companies.map((c) => `https://${c.domain}/`), ...people.map((p) => p.source).filter((u): u is string => Boolean(u)), ...signals.map((s) => s.url)])];
   const moves = [
     buyers.length ? `Reply to the ${buyers.length} ${buyers.length === 1 ? "person" : "people"} publicly asking about this topic.` : null,
+    people[0] ? `Reach ${people[0].name}, ${people[0].title} at ${people[0].company}${people.length > 1 ? `, and ${people.length - 1} more decision makers` : ""}.` : null,
     drafts[0] ? `Review the first email to ${drafts[0].company}${drafts[1] ? ` and ${drafts.length - 1} more` : ""}.` : null,
     fixes[0] ? `Fix "${fixes[0].label}" to lift your readiness score by ${fixes[0].weight} points.` : null,
     campaign ? `Start with the ${campaign.name} campaign and look up ${campaign.roles.slice(0, 2).join(" and ")} contacts.` : null,
   ].filter((m): m is string => Boolean(m));
-  const kpis: Array<[string, number]> = [["AI readiness", audit?.score ?? 0], ["Competitors", competitors.length], ["Potential customers", companies.length], ["Public posts", signals.length], ["Active buyers", buyers.length]];
+  const kpis: Array<[string, number]> = [["AI readiness", audit?.score ?? 0], ["Competitors", competitors.length], ["Potential customers", companies.length], ["People asking", buyers.length], ["Decision makers", people.length]];
 
   const tabs: Array<[string, number | null]> = [["Overview", null], ["Companies", companies.length], ["Competitors", competitors.length], ["Signals", signals.length], ["Emails", drafts.length]];
   const bar = (
@@ -132,7 +134,7 @@ export default function ResearchReport({ results, action, signals: signalView, e
               {buyers.slice(0, 4).map((s) => (
                 <li key={s.url} className="py-2 first:pt-0 last:pb-0">
                   <a href={s.url} target="_blank" rel="noopener noreferrer" className="line-clamp-1 hover:text-[#5B3DF5]">{s.title}</a>
-                  <span className="text-xs text-[#6B6A72]">{s.platform} · {s.intent} · {postedLabel(s.postedAt)}</span>
+                  <span className="text-xs text-[#6B6A72]">{s.platform} · {s.intent} · {postLabel(s)}</span>
                 </li>
               ))}
             </ul>
@@ -145,7 +147,7 @@ export default function ResearchReport({ results, action, signals: signalView, e
         <Card title="Potential customers" index={12}>
           <div className="grid gap-1.5">{companies.slice(0, 6).map((c) => <Mini key={c.domain} company={c} />)}</div>
         </Card>
-        <Card title={`Sources read (${sources.length})`} index={13}>
+        <Card title={`Sources (${sources.length})`} index={13}>
           <ul className="space-y-1 font-mono text-xs text-[#6B6A72]">
             {sources.slice(0, 8).map((u) => <li key={u} className="truncate"><a href={u} target="_blank" rel="noopener noreferrer" className="hover:text-[#5B3DF5]">{u.replace(/^https?:\/\/(www\.)?/, "")}</a></li>)}
           </ul>

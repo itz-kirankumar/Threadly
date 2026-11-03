@@ -29,7 +29,12 @@ function privateAddress(ip: string): boolean {
 export async function assertPublicHost(host: string): Promise<string> {
   const clean = parseAuditDomain(host);
   if (!clean) throw new FetchRefused("not a public hostname");
-  const addresses = await lookup(clean, { all: true }).catch(() => []);
+  // A resolver hiccup should not lose the whole run: one retry.
+  let addresses = await lookup(clean, { all: true }).catch(() => []);
+  if (!addresses.length) {
+    await new Promise((r) => setTimeout(r, 400));
+    addresses = await lookup(clean, { all: true }).catch(() => []);
+  }
   if (!addresses.length) throw new FetchRefused("domain does not resolve");
   if (addresses.some((a) => privateAddress(a.address))) throw new FetchRefused("resolves to a private address");
   return clean;
@@ -302,6 +307,20 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, in
   });
   await Promise.all(workers);
   return out;
+}
+
+// One public page's raw HTML, for reading structure that text extraction
+// loses (a team page's name and title pairs). Same rules as fetchPage.
+export async function fetchHtml(url: string, timeoutMs = 7000): Promise<{ html: string; finalUrl: string }> {
+  const parsed = new URL(url);
+  const host = await assertPublicHost(parsed.hostname);
+  if (!(await robotsAllows(host, parsed.pathname || "/"))) throw new FetchRefused("robots.txt disallows ThreadlyBot");
+  const { res, finalUrl } = await safeGet(url, timeoutMs);
+  if (!res.ok || !/html/i.test(res.headers.get("content-type") ?? "html")) {
+    await res.body?.cancel().catch(() => {});
+    throw new FetchRefused(`site answered ${res.status}`);
+  }
+  return { html: await readCapped(res), finalUrl };
 }
 
 // The homepage's raw HTML plus how it was served, for the readiness audit.

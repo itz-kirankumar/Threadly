@@ -1,19 +1,23 @@
 import { readJsonBody, RequestError } from "@/lib/api-request";
 import { parseAuditDomain, runOpenSeoAudit } from "@/lib/geo/openseo-engine";
 import type { BrandProfile } from "@/lib/geo/types";
-import { reserveDemoRun, visitorKey } from "@/lib/live-demo/quota";
+import { reserveDemoRun } from "@/lib/live-demo/quota";
 import type { DemoEvent, DemoStep } from "@/lib/live-demo/types";
 import { contactProvider } from "@/lib/prospecting/contacts";
-import { runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
-import { draftCompanyEmail, draftSocialReply, findSocialLeads, socialTopic, type Sender } from "@/lib/prospecting/social";
+import { findDecisionMakers } from "@/lib/prospecting/people";
+import { researchTerms, runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
+import { draftCompanyEmail, draftSocialReply, findSocialLeads, leadTopics, socialTopic, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
 import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, searchAvailable } from "@/lib/prospecting/web";
 import { auditSite, organizationFacts } from "@/lib/geo/site-audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
+// When each step stops starting new searches and page reads, counted from
+// the start of the run, so the whole run streams inside maxDuration.
+const STEP_BUDGET_MS = { competitors: 60_000, companies: 135_000, social: 185_000, contacts: 215_000 };
 
 // The landing-page live demo: runs the prospecting pipeline for one website
 // and streams each step as it happens (newline-delimited JSON). Nothing is
@@ -32,15 +36,15 @@ export async function POST(request: Request) {
   if (!domain) return Response.json({ error: "Enter a website, like example.com." }, { status: 400 });
   if (!searchAvailable()) return Response.json({ error: "The live demo is not available right now." }, { status: 503 });
 
-  const quota = await reserveDemoRun(visitorKey(request));
+  // No per-visitor or per-address limit. An owner-set site-wide daily
+  // budget (PUBLIC_DEMO_DAILY_RUNS) is the only cap, and it is off unless set.
+  const quota = await reserveDemoRun();
   if (!quota.allowed) {
-    // Visitors see what to do next, not the mechanics of the limit.
-    return quota.reason === "visitor"
-      ? Response.json({ error: "You've used your free runs.", code: "free_runs_used" }, { status: 429, headers: { "Cache-Control": "no-store" } })
-      : Response.json({ error: "The live demo is busy right now. Try again in a little while.", code: "busy" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    return Response.json({ error: "The live demo is busy right now. Try again in a little while.", code: "busy" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 
   const target = domain;
+  const started = Date.now();
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -74,11 +78,12 @@ export async function POST(request: Request) {
           createdAt: "",
           updatedAt: "",
         };
-        const ctx = { brand, senderName: "", log };
+        const ctx: { brand: BrandProfile; senderName: string; log: (t: string) => void; deadline?: number } = { brand, senderName: "", log };
         let state: ProspectingState = { version: 1, updatedAt: "" };
         state = await runResearch(state, ctx);
         const r = state.research!;
-        send({ type: "result", step: "research", data: { name: r.name, domain: r.domain, summary: r.summary, keywords: r.keywords, iconDataUrl: preview?.iconDataUrl ?? null, readHomepage: Boolean(r.page) } });
+        const phrases = r.categoryPhrases ?? [];
+        send({ type: "result", step: "research", data: { name: r.name, domain: r.domain, summary: r.summary, category: r.category ?? null, keywords: [...new Set([...phrases.filter((p) => !/\s(and|&)\s/i.test(p)), ...r.keywords])].slice(0, 8), iconDataUrl: preview?.iconDataUrl ?? null, readHomepage: Boolean(r.page) } });
         if (stopped()) return;
 
         begin("crawler");
@@ -116,10 +121,11 @@ export async function POST(request: Request) {
         if (stopped()) return;
 
         begin("competitors");
+        ctx.deadline = started + STEP_BUDGET_MS.competitors;
         state = await runCompetitors(state, ctx);
         log("loading competitor logos");
-        const competitorList = await mapLimit(state.competitors!.items.slice(0, 12), 6, async (c) => {
-          const item = { domain: c.domain, name: c.name, description: c.description, iconDataUrl: await fetchSiteIcon(c.domain) };
+        const competitorList = await mapLimit(state.competitors!.items, 6, async (c) => {
+          const item = { domain: c.domain, name: c.name, description: c.description, sources: c.sources ?? c.appearances, iconDataUrl: await fetchSiteIcon(c.domain) };
           send({ type: "item", step: "competitors", data: item });
           return item;
         });
@@ -136,75 +142,85 @@ export async function POST(request: Request) {
             name: audience.charAt(0).toUpperCase() + audience.slice(1),
             description: "The audience you entered.",
             searchQuery: /compan|startup|firm|agenc|business|brand/i.test(audience) ? audience : `${audience} companies`,
-            roles: ["Founder", "CEO", "Head of Marketing", "Head of Growth"],
+            roles: state.campaigns!.items[0]?.roles ?? ["Founder", "CEO", "Head of Marketing", "Head of Growth"],
             source: "user",
             evidence: [{ kind: "user", quote: "Entered in the live demo", at }],
             selected: true,
           });
         }
-        // One campaign in the demo bounds the searches a visitor can trigger.
-        const campaigns = state.campaigns!.items.map((c, i) => ({ ...c, selected: i === 0 }));
+        // The demo runs two campaigns: the first audience the site names (or
+        // the visitor entered), and the competitors' customers.
+        const firstAudience = state.campaigns!.items.findIndex((c) => c.source !== "competitors");
+        const campaigns = state.campaigns!.items.map((c, i) => ({ ...c, selected: i === firstAudience || c.source === "competitors" }));
         state = { ...state, campaigns: { ...state.campaigns!, items: campaigns } };
-        send({ type: "result", step: "campaigns", data: campaigns.slice(0, 3).map((c) => ({ name: c.name, description: c.description, searchQuery: c.searchQuery, roles: c.roles, selected: c.selected })) });
+        send({ type: "result", step: "campaigns", data: campaigns.slice(0, 4).map((c) => ({ name: c.name, description: c.description, searchQuery: c.searchQuery, roles: c.roles, selected: c.selected })) });
         if (stopped()) return;
 
         begin("companies");
-        state = await runCompanies(state, ctx);
+        ctx.deadline = started + STEP_BUDGET_MS.companies;
+        if (campaigns.some((c) => c.selected)) state = await runCompanies(state, ctx);
+        else {
+          log("no audience or competitor to start from; skipping company search");
+          state = { ...state, companies: { items: [], queries: [], skipped: [], ranAt: new Date().toISOString() } };
+        }
         // A narrow audience can find nothing. Widen once: the next campaign, or
         // companies that already buy from the top competitor.
-        if (!state.companies!.items.length) {
+        if (!state.companies!.items.length && campaigns.length) {
           const rival = state.competitors!.items[0]?.name;
-          const next = campaigns[1];
+          const next = campaigns.find((c, i) => !c.selected && i > firstAudience);
           if (next || rival) {
             log("no matches for that audience; widening the search");
-            const items = campaigns.map((c, i) => (next ? { ...c, selected: i === 1 } : { ...c, searchQuery: `companies that use ${rival}` }));
+            const items = campaigns.map((c) => (next ? { ...c, selected: c.id === next.id } : { ...c, searchQuery: `companies that use ${rival}` }));
             state = await runCompanies({ ...state, campaigns: { ...state.campaigns!, items } }, ctx);
           }
         }
-        const companies = state.companies!.items.slice(0, 8);
+        const companies = state.companies!.items;
         const companyList = await mapLimit(companies, 6, async (c) => {
-          const item = { domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms, iconDataUrl: await fetchSiteIcon(c.domain) };
+          const item = { domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms, signal: c.signal ?? null, iconDataUrl: await fetchSiteIcon(c.domain) };
           send({ type: "item", step: "companies", data: item });
           return item;
         });
         send({ type: "result", step: "companies", data: companyList });
         if (stopped()) return;
 
-        const sender: Sender = { name: r.name, domain: r.domain, summary: r.summary, category: brand.category, keywords: r.keywords };
+        const sender: Sender = { name: r.name, domain: r.domain, summary: r.summary, category: r.category ?? brand.category, keywords: r.keywords };
 
         begin("social");
-        const topic = socialTopic(brand.category, r.keywords, brand.name);
-        const competitorNames = state.competitors!.items.slice(0, 2).map((c) => c.name);
-        const leads = await findSocialLeads(topic, competitorNames, log, 9, (lead) =>
-          send({ type: "item", step: "social", data: { platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, community: lead.community, intent: lead.intent, reply: null, postedAt: lead.postedAt } }),
-        );
-        log(`ranked ${leads.length} posts by buying intent; drafting replies to the top ${Math.min(3, leads.length)}`);
-        const withReplies = await Promise.all(leads.map(async (lead, i) => ({
-          platform: lead.platform,
-          url: lead.url,
-          title: lead.title,
-          snippet: lead.snippet,
-          author: lead.author,
-          community: lead.community,
-          intent: lead.intent,
-          postedAt: lead.postedAt,
-          reply: i < 3 ? (await draftSocialReply(sender, lead)).body : null,
-        })));
+        const { primary, related } = researchTerms(r, brand.category);
+        const [topic, ...also] = leadTopics(phrases, related, socialTopic(brand.category, r.keywords, brand.name), r.categoryAreas ?? []);
+        const rivals = state.competitors!.items.slice(0, 8).map((c) => c.name);
+        const toLead = (lead: Awaited<ReturnType<typeof findSocialLeads>>[number], reply: string | null) => ({ platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, community: lead.community, intent: lead.intent, matched: lead.matched, reply, postedAt: lead.postedAt, window: lead.window });
+        const leads = await findSocialLeads({ topic, also, competitors: rivals, primary, related, brand: r.name }, log, 60, (lead) => send({ type: "item", step: "social", data: toLead(lead, null) }));
+        const asking = leads.filter((l) => l.intentScore > 0).length;
+        log(`kept ${leads.length} posts about your market, ${asking} of them people asking; drafting replies to the top ${Math.min(5, asking)}`);
+        const withReplies = await Promise.all(leads.map(async (lead, i) => toLead(lead, i < 5 && lead.intentScore > 0 ? (await draftSocialReply(sender, lead)).body : null)));
         send({ type: "result", step: "social", data: { topic, leads: withReplies } });
         if (stopped()) return;
 
         begin("contacts");
-        const roles = campaigns.find((c) => c.selected)?.roles ?? [];
+        const roles = campaigns.find((c) => c.selected && c.source === "competitors")?.roles ?? campaigns.find((c) => c.selected)?.roles ?? [];
+        // People each company names on its own team or leadership page, with
+        // that page as the source. Emails are never guessed; a licensed
+        // provider adds them in a workspace.
+        log(`reading each company's own team or leadership page for ${roles.slice(0, 3).join(", ")}`);
+        const contactsBy = started + STEP_BUDGET_MS.contacts;
+        const found = await mapLimit(companies.slice(0, 12), 6, async (c) => {
+          if (Date.now() > contactsBy) return null;
+          const team = await findDecisionMakers(c, roles);
+          log(team.people.length ? `  ${c.name}: ${team.people.map((p) => `${p.name} (${p.title})`).join(", ")}` : `  ${c.name}: no public team page found`);
+          return team;
+        });
+        const people = found.filter((f): f is NonNullable<typeof f> => f !== null).flatMap((f) => f.people.map((p) => ({ company: f.company, domain: f.domain, name: p.name, title: p.title, source: f.source })));
         const provider = contactProvider();
         log(provider
-          ? `decision makers come from ${provider.label}, a licensed provider; the public demo does not look them up`
-          : "decision makers come only from a licensed contact provider; none is looked up in the public demo");
-        send({ type: "result", step: "contacts", data: { roles, companies: companies.slice(0, 4).map((c) => c.name) } });
+          ? `verified emails come from ${provider.label}, a licensed provider, inside a workspace`
+          : "verified emails come only from a licensed contact provider inside a workspace; none are guessed here");
+        send({ type: "result", step: "contacts", data: { roles, companies: companies.slice(0, 12).map((c) => ({ name: c.name, domain: c.domain })), people } });
         if (stopped()) return;
 
         begin("pitch");
         const drafts = [];
-        for (const company of companies.slice(0, 3)) {
+        for (const company of companies.slice(0, 5)) {
           log(`writing a first email to ${company.name} from what its homepage says`);
           const d = await draftCompanyEmail(sender, company);
           drafts.push({ company: company.name, domain: company.domain, subject: d.subject, body: d.body, sources: d.sources, engine: d.engine });

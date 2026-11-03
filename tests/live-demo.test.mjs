@@ -37,11 +37,38 @@ test("topic relevance needs a phrase or two distinct words", () => {
   assert.ok(steps.onTopic("Tools for revenue teams", terms).includes("revenue teams"));
 });
 
-test("the category comes from the title segment that is not the brand", () => {
-  assert.equal(text.categoryFromPage({ title: "Threadly — Enterprise GEO Intelligence", headings: [] }, "Threadly"), "Enterprise GEO Intelligence");
-  assert.equal(text.categoryFromPage({ title: "Attio: CRM for agentic revenue", headings: [] }, "Attio"), "CRM for agentic revenue");
-  assert.equal(text.categoryFromPage({ title: "Home", headings: ["Payments infrastructure for the internet"] }, "Stripe"), "Payments infrastructure for the internet");
+test("the category is the noun phrase a site uses for itself", () => {
+  assert.equal(text.categoryFromPage({ title: "Threadly — Enterprise GEO Intelligence", headings: [] }, "Threadly"), "enterprise GEO intelligence");
+  assert.equal(text.categoryFromPage({ title: "Attio: The CRM for agentic revenue", headings: [] }, "Attio"), "CRM");
+  assert.equal(text.categoryFromPage({ title: "Home", headings: ["Payments infrastructure for the internet"] }, "Stripe"), "payments infrastructure");
   assert.equal(text.categoryFromPage({ title: "Acme", headings: ["Hi!"] }, "Acme"), null);
+});
+
+test("category phrases come from the definition and title, not slogans or instructions", () => {
+  const read = (page, name) => text.categoryPhrases({ title: null, description: null, headings: [], paragraphs: [], ...page }, name);
+  const threadly = read({ title: "Threadly — Pipeline, by invitation", description: "Threadly is a private, invitation-only prospecting and AI visibility platform for eligible B2B teams.", paragraphs: ["A private intelligence desk for B2B teams"] }, "Threadly");
+  assert.equal(threadly.category, "prospecting and AI visibility platform");
+  assert.deepEqual(threadly.phrases, ["prospecting and AI visibility platform", "prospecting platform", "AI visibility platform"], "body-copy metaphors are not read when the definition says it");
+  assert.equal(read({ title: "The AI workspace that works for you. | Notion", description: "Build Custom Agents, search across all your apps, and automate busywork. The AI workspace where teams get more done, faster." }, "Notion").category, "AI workspace");
+  assert.equal(read({ title: "The only platform you need for outbound | lemlist" }, "lemlist").category, "outbound platform");
+  assert.equal(read({ title: "Stripe | Financial Infrastructure to Grow Your Revenue", description: "Stripe is a financial services platform that helps all types of businesses accept payments." }, "Stripe").category, "financial services platform");
+  assert.equal(read({ title: "Threadly — Pipeline, by invitation" }, "Threadly").category, null, "a slogan is not a category");
+});
+
+test("category terms separate the site's own words from buyers' synonyms, and drop broad words", () => {
+  const t = text.categoryTerms(["prospecting platform", "AI visibility platform"]);
+  assert.ok(t.primary.includes("prospecting") && t.primary.includes("ai visibility"));
+  assert.ok(t.related.includes("lead generation") && t.related.includes("generative engine optimization"));
+  assert.deepEqual(text.categoryTerms(["cloud software suite"]).primary, [], "a suite described only as cloud software has no category word of its own");
+  const zoho = text.categoryAreas({ title: null, description: "Zoho is a cloud software suite offering business applications across sales, marketing, support, finance, HR, and custom app development, including CRM, Mail, Creator, Books, Desk, and Bigin.", headings: [], paragraphs: [] });
+  for (const a of ["sales", "marketing", "support", "finance", "hr", "crm"]) assert.ok(zoho.includes(a), a);
+  assert.ok(!zoho.includes("bigin") && !zoho.includes("mail"), "product names are not business areas");
+});
+
+test("keywords are pairs of adjacent words, without instructions or praise", () => {
+  const kw = text.extractKeywords({ title: "Threadly — Pipeline, by invitation", description: "Build custom agents and get done faster. A suite trusted by millions.", headings: ["Buying signals for B2B teams"], paragraphs: [] }, "Threadly");
+  assert.ok(!kw.includes("pipeline invitation"), "words across punctuation are not a pair");
+  assert.ok(!kw.some((k) => /^build |faster$|trusted/.test(k)), kw.join(", "));
 });
 
 test("company names drop taglines and trademark marks", () => {
@@ -74,13 +101,82 @@ test("demo routes validate input before doing any work", async () => {
   }
 });
 
-test("each visitor gets a bounded number of demo runs per day", async () => {
-  const visitor = `v_${Math.random().toString(36).slice(2)}`;
-  const results = [];
-  for (let i = 0; i < quota.DEMO_RUNS_PER_VISITOR + 1; i++) results.push(await quota.reserveDemoRun(visitor));
-  assert.ok(results.slice(0, -1).every((r) => r.allowed));
-  assert.deepEqual(results.at(-1), { allowed: false, reason: "visitor" });
-  const req = (ip) => new Request("https://t.local", { headers: { "x-real-ip": ip } });
-  assert.notEqual(quota.visitorKey(req("1.1.1.1")), quota.visitorKey(req("2.2.2.2")));
-  assert.equal(quota.visitorKey(req("1.1.1.1")).length, 32);
+test("there is no per-visitor limit; only an owner-set daily budget can stop a run", async () => {
+  for (let i = 0; i < 12; i++) assert.deepEqual(await quota.reserveDemoRun(0), { allowed: true });
+  assert.equal(quota.visitorKey, undefined, "visitors are not keyed by address");
+  // With a budget but no database to count against, runs are allowed.
+  assert.deepEqual(await quota.reserveDemoRun(5), { allowed: true });
+});
+
+test("brand-name results only count when they are about this company", () => {
+  const terms = ["prospecting", "lead generation", "ai visibility"];
+  const namesake = { title: "Threadly Alternatives - iOS Concurrency", content: "Threadly is a Swift library for threads.", url: "https://ios.libhunt.com/threadly-alternatives" };
+  const ours = { title: "Best Threadly alternatives", content: "Threadly is a prospecting tool; these lead generation platforms compete.", url: "https://example.com/threadly-alternatives" };
+  assert.equal(steps.aboutCompany(namesake, "Threadly", "gothreadly.live", terms), false);
+  assert.equal(steps.aboutCompany(ours, "Threadly", "gothreadly.live", terms), true);
+  const qs = steps.competitorQueries("Notion", "notion.com", ["AI workspace"], [], []);
+  assert.deepEqual(qs.map((q) => q.q), ["Notion alternatives", "Notion competitors", "Notion vs", "best AI workspace software"]);
+  assert.ok(qs.filter((q) => q.q.startsWith("Notion")).every((q) => q.brand), "brand queries are checked");
+});
+
+test("a competitor must sell in the category on its own homepage", () => {
+  const primary = ["ai workspace", "workspace"];
+  const related = ["wiki", "knowledge base", "docs", "project management"];
+  assert.ok(steps.competitorMatch("Coda: your all-in-one collaborative workspace", 3, primary, related));
+  assert.ok(steps.competitorMatch("ClickUp: one app for projects, docs and wiki", 3, primary, related), "consensus plus synonyms");
+  assert.equal(steps.competitorMatch("Zapier: automate AI workflows across 8,000 apps", 5, primary, related), null, "an integration partner named often is not a competitor");
+  assert.equal(steps.competitorMatch("Kimco: cloud phone system for teams", 1, primary, related), null);
+});
+
+test("customers are read from competitors' customer-story pages", () => {
+  const hit = (title, url) => ({ title, url, content: "", domain: "x", published: null });
+  assert.deepEqual(steps.caseStudyCustomer(hit("How Intercom PMMs save one day a month working in Coda - Coda", "https://coda.io/solutions/case-studies/intercom"), "Coda"), { name: "Intercom", slug: "intercom" });
+  assert.equal(steps.caseStudyCustomer(hit("Ashby CRM Customer Success: 4X More Meetings with Apollo.io", "https://www.apollo.io/magazine/ashby-customer-story"), "Apollo")?.name, "Ashby");
+  assert.equal(steps.caseStudyCustomer(hit("Case studies and customer stories - Coda", "https://coda.io/solutions/case-studies"), "Coda"), null, "the listing page is not a customer");
+  assert.equal(steps.caseStudyCustomer(hit("How to plan an effective user research study.", "https://coda.io/blog/product-teams/how-to-plan"), "Coda"), null);
+  assert.ok(steps.domainMatchesName("builtin.com", "Built In"));
+  assert.ok(steps.domainMatchesName("hugeinc.com", "Huge"));
+  assert.ok(!steps.domainMatchesName("intercom.com", "Qualtrics"));
+});
+
+test("a company's own team page names its decision makers", async () => {
+  const people = await import("../src/lib/prospecting/people.ts");
+  const html = `<nav>About Us</nav><h2>Our Leadership</h2>
+    <div class="card"><h3>Jane Doe</h3><p>Co-founder &amp; CEO</p></div>
+    <div class="card"><h3>Ravi Kumar</h3><span>VP of Sales</span></div>
+    <li>Maria García, Head of Marketing</li>
+    <div><h3>Read More</h3><p>Director of everything</p></div>`;
+  const found = people.extractPeople(html);
+  assert.deepEqual(found.map((p) => p.name), ["Jane Doe", "Ravi Kumar", "Maria García"]);
+  assert.equal(found[0].title, "Co-founder & CEO");
+  const ranked = people.rankForRoles(found, ["Head of Sales", "VP Sales"]);
+  assert.equal(ranked[0].name, "Ravi Kumar", "the campaign's role comes first");
+});
+
+test("names several comparison results agree on become competitor candidates", () => {
+  const r = (content) => ({ title: "Top Zoho alternatives", content });
+  const names = steps.namesInResults([
+    r("The best Zoho alternatives are HubSpot, Salesforce and Odoo. Pricing starts free."),
+    r("Compare Zoho with Odoo, Freshworks, Salesforce and HubSpot for small business CRM."),
+    r("Today Odoo and HubSpot lead, with Salesforce close; Bitrix24 is cheaper. Read More."),
+    r("Salesforce vs HubSpot vs Odoo: features and pricing."),
+  ], "Zoho");
+  assert.deepEqual(names.slice(0, 3).map((n) => n.name), ["HubSpot", "Odoo", "Salesforce"]);
+  assert.ok(!names.some((n) => ["Zoho", "Pricing", "Read", "More", "CRM"].includes(n.name)), "the company itself and page words are not names");
+  assert.ok(!names.some((n) => n.name === "Bitrix24"), "one mention is not agreement");
+});
+
+test("headline capitals and sentence starts are not company names", () => {
+  const names = steps.namesInResults([
+    { title: "B2B Prospecting Tools Ranked: Top 10 Sales Intelligence Tools", content: "Prospecting is hard. We compared Apollo and ZoomInfo." },
+    { title: "Best Prospecting Software", content: "Prospecting needs data. Teams like Apollo and ZoomInfo." },
+    { title: "Prospecting Visibility Report", content: "Visibility matters. Many use Apollo, ZoomInfo and Prospecting tools." },
+  ], "Threadly", ["prospecting platform", "prospecting"]);
+  assert.deepEqual(names.map((n) => n.name), ["Apollo", "ZoomInfo"]);
+});
+
+test("news and blog pages are not customer stories", () => {
+  const hit = (title, url) => ({ title, url, content: "", domain: "x", published: null });
+  assert.equal(steps.caseStudyCustomer(hit("Agentforce in Action: Customer Success Stories - Salesforce", "https://www.salesforce.com/news/stories/agentforce-customer-success-stories"), "Salesforce"), null);
+  assert.equal(steps.caseStudyCustomer(hit("KLM handles record daily volumes of support cases with Salesforce.", "https://www.salesforce.com/eu/customer-stories/klm"), "Salesforce")?.name, "Klm");
 });

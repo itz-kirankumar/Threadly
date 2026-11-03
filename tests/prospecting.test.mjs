@@ -72,11 +72,12 @@ test("competitor ranking excludes own domain and publishers, and rewards homepag
   assert.ok(!domains.includes("blog.example.com"), "a single non-homepage article is not a competitor");
 });
 
-test("competitor queries are anchored on the category, not only an ambiguous brand name", () => {
-  const qs = steps.competitorQueries("acme.io", ["revenue analytics", "pipeline forecasting"], "revenue analytics", ["rival.ai"]);
-  assert.ok(qs.includes("best revenue analytics tools"));
-  assert.ok(qs.includes("rival.ai alternatives"));
-  assert.ok(qs.every((q) => !/^Acme /.test(q)));
+test("competitor queries pair brand comparisons with category searches", () => {
+  const qs = steps.competitorQueries("Acme", "acme.io", ["revenue analytics platform"], ["revenue analytics", "pipeline forecasting"], ["rival.ai"]);
+  const q = qs.map((x) => x.q);
+  assert.ok(q.includes("best revenue analytics platforms"));
+  assert.ok(q.includes("rival.ai alternatives"));
+  assert.ok(qs.filter((x) => /^Acme /.test(x.q)).every((x) => x.brand), "brand-name queries are checked for namesakes");
 });
 
 test("email template cites the prospect's own words and lists what is missing", () => {

@@ -4,7 +4,6 @@ import { parseAuditDomain } from "@/lib/geo/openseo-engine";
 import { fetchHomepageRaw, fetchPage } from "@/lib/prospecting/web";
 import { runOpenSeoAudit } from "@/lib/geo/openseo-engine";
 import { auditSite } from "@/lib/geo/site-audit";
-import { checkRateLimit, requestAddressKey } from "@/lib/rate-limit";
 import { BUDGETS, CRMS, MAX_APPLICATIONS, OUTREACH_VOLUMES, QUALIFY_SCORE, scoreApplicant, TEAM_SIZES, type ApplicantSite } from "@/lib/waitlist/score";
 import { domainAgeDays, mailSetup } from "@/lib/waitlist/signals";
 import { loadApplication, saveApplication, type WaitlistApplication } from "@/lib/waitlist/store";
@@ -35,11 +34,6 @@ export async function POST(request: Request) {
   const crm = (CRMS as readonly string[]).includes(String(body.crm)) ? String(body.crm) : "";
   if (!EMAIL.test(email)) return Response.json({ error: "Enter a valid email address." }, { status: 400 });
   if (!domain) return Response.json({ error: "Enter your company website, like acme.com." }, { status: 400 });
-
-  const limit = await checkRateLimit(`waitlist:${requestAddressKey(request)}`, 8, 3600);
-  if (limit && !limit.allowed) {
-    return Response.json({ error: "Too many requests. Try again later." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
-  }
 
   const existing = await loadApplication(email).catch(() => null);
   if (existing?.status === "invited") {

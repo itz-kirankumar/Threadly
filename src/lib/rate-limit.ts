@@ -100,9 +100,3 @@ export function tooManyRequests(retryAfterSeconds: number) {
     { status: 429, headers: { "Retry-After": String(retryAfterSeconds), "Cache-Control": "no-store" } },
   );
 }
-
-export function requestAddressKey(request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = request.headers.get("x-real-ip")?.trim() || forwarded || "unknown";
-  return hashedKey(address);
-}

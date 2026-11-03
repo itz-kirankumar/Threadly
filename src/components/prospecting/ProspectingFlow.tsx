@@ -663,7 +663,7 @@ function CompaniesPanel({ state, running, onRun, onToggle, onSaveLeads }: { stat
 function ContactsPanel({ state, running, onRun, onOpenTab }: { state: ProspectingState; running: StepId | null; onRun: () => void; onOpenTab?: Props["onOpenTab"] }) {
   const c = state.contacts;
   if (!c) {
-    return <StartCard title="Find decision makers" body="Looks up people at the selected companies through a licensed contact data provider. Threadly does not scrape social networks or guess email addresses." action="Find decision makers" running={running === "contacts"} onRun={onRun} />;
+    return <StartCard title="Find decision makers" body="Finds the people each selected company names on its own team or leadership page, and verified emails through a licensed contact data provider when one is connected. Threadly does not scrape social networks or guess email addresses." action="Find decision makers" running={running === "contacts"} onRun={onRun} />;
   }
   if (c.status === "provider_not_configured") {
     return (
@@ -702,7 +702,7 @@ function ContactsPanel({ state, running, onRun, onOpenTab }: { state: Prospectin
               </td>
               <td className="px-3 py-3 text-xs text-zinc-400">{p.title ?? "Not listed"}</td>
               <td className="px-3 py-3 font-mono text-xs text-zinc-400">{p.companyDomain}</td>
-              <td className="px-3 py-3 font-mono text-xs">{p.email ?? "None"}</td>
+              <td className="px-3 py-3 font-mono text-xs">{p.email ?? (p.evidence[0]?.url ? <ExternalLink href={p.evidence[0].url} className="font-sans text-zinc-400">Not published; see their team page</ExternalLink> : "None")}</td>
               <td className="px-3 py-3 text-xs text-zinc-400">{[p.verification, p.confidence !== null ? `confidence ${p.confidence}` : null].filter(Boolean).join(", ") || "Not reported"}</td>
             </tr>
           ))}

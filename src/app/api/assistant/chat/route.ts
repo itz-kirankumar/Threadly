@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit } from "@/lib/rate-limit";
 import { pickAnswer, isConfidentialAsk, CONFIDENTIAL_ANSWER, ASSISTANT_SYSTEM_PROMPT } from "@/lib/assistant/knowledge";
 
 export const dynamic = "force-dynamic";
@@ -45,14 +44,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
   if (!message) return NextResponse.json({ error: "empty_message" }, { status: 400 });
-
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const rl = await checkRateLimit(`assistant:${ip}`, 20, 3600);
-  if (rl && !rl.allowed) {
-    return NextResponse.json({
-      reply: "You're chatting faster than I can keep up. Give me a little break, or use the [contact page](/contact).",
-    });
-  }
 
   if (isConfidentialAsk(message)) {
     return NextResponse.json({ reply: CONFIDENTIAL_ANSWER });
