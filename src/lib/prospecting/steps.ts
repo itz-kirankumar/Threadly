@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BrandProfile } from "../geo/types.ts";
 import { contactProvider } from "./contacts.ts";
 import { modelEnabled, modelJson } from "./model.ts";
-import { findDecisionMakers } from "./people.ts";
+import { findDecisionMakers, withProfiles } from "./people.ts";
 import { draftCompanyEmail } from "./social.ts";
 import { categoryAreas, categoryPhrases, categoryTerms, companyName, decodeEntities, extractAudiencePhrases, extractKeywords, firstSentence, matchedTerms, outboundDomains, searchTopics, termsIn } from "./text.ts";
 import type { Campaign, Competitor, Evidence, ProspectCompany, ProspectContact, ProspectingState, EmailDraft, Research, StepId } from "./types.ts";
@@ -1000,8 +1000,12 @@ export async function runContacts(state: ProspectingState, ctx: StepContext): Pr
     ctx.log("no licensed contact provider is connected; reading each company's own team page for the people it names");
     const teams = await mapLimit(companies.slice(0, 25), 5, async (company) => {
       if (pastDeadline(ctx)) return null;
-      const team = await findDecisionMakers(company, roles);
-      ctx.log(team.people.length ? `  ${company.domain}: ${team.people.length} named on ${team.source}` : `  ${company.domain}: no public team page`);
+      const found = await findDecisionMakers(company, roles);
+      // Public profile links from a profile search, kept only when the
+      // headline names the company; a company with no team page is
+      // searched by role.
+      const team = searchAvailable() ? await withProfiles(found, roles, search) : found;
+      ctx.log(team.people.length ? `  ${company.domain}: ${team.people.map((p) => `${p.name}${p.profileUrl ? " (profile)" : ""}`).join(", ")}` : `  ${company.domain}: no team page or matching public profile`);
       return team;
     });
     const items: ProspectContact[] = teams.filter((t): t is NonNullable<typeof t> => t !== null).flatMap((t) => t.people.map((p) => ({
@@ -1012,15 +1016,17 @@ export async function runContacts(state: ProspectingState, ctx: StepContext): Pr
       title: p.title,
       email: null,
       confidence: null,
-      verification: "named on its own team page",
-      linkedinUrl: null,
-      source: "company website",
-      evidence: t.source ? [{ kind: "page" as const, url: t.source, quote: `${p.name}, ${p.title}`, at }] : [],
+      verification: p.via === "public search" ? "public profile whose headline names the company" : "named on its own team page",
+      linkedinUrl: p.profileUrl ?? null,
+      source: p.via === "public search" ? "public profile search" : "company website",
+      evidence: p.via === "public search" && p.profileUrl
+        ? [{ kind: "page" as const, url: p.profileUrl, quote: `${p.name}, ${p.title}`, at }]
+        : t.source ? [{ kind: "page" as const, url: t.source, quote: `${p.name}, ${p.title}`, at }] : [],
     })));
     return {
       ...clearAfter(state, "contacts"),
       contacts: items.length
-        ? { status: "found", provider: "company websites", items, searchedDomains: teams.filter(Boolean).length, ranAt: at }
+        ? { status: "found", provider: "company websites and public profiles", items, searchedDomains: teams.filter(Boolean).length, ranAt: at }
         : { status: "provider_not_configured", provider: null, items: [], searchedDomains: 0, ranAt: at },
     };
   }

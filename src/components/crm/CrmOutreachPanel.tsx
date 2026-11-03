@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { priorityOf } from "@/lib/leads/score";
 import type { CrmLead, CrmActivity, OutreachTemplate, CrmStats, LeadStage } from "@/lib/crm/types";
 
 interface Props {
@@ -39,6 +40,13 @@ function stageLabel(stage: LeadStage): string {
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
+}
+
+// The lead's score with its band: Hot 75 and up, Warm 55 to 74, else Cold.
+function ScoreBadge({ score }: { score: number }) {
+  const band = priorityOf(score);
+  const tone = band === "Hot" ? "bg-violet-600 text-white" : band === "Warm" ? "bg-violet-500/20 text-violet-200" : "bg-white/10 text-zinc-300";
+  return <span title={`${band} lead: score ${score} of 100`} className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${tone}`}>{band} {score}</span>;
 }
 
 export default function CrmOutreachPanel({ authedFetch }: Props) {
@@ -244,13 +252,16 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
     }
   }
 
+  // Best leads first: by score, then most recently updated.
   const filteredLeads = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return leads.filter((lead) => {
-      if (filterStage !== "all" && lead.stage !== filterStage) return false;
-      if (!q) return true;
-      return [lead.name, lead.company, lead.domain, lead.email].some((v) => (v || "").toLowerCase().includes(q));
-    });
+    return leads
+      .filter((lead) => {
+        if (filterStage !== "all" && lead.stage !== filterStage) return false;
+        if (!q) return true;
+        return [lead.name, lead.company, lead.domain, lead.email].some((v) => (v || "").toLowerCase().includes(q));
+      })
+      .sort((a, b) => (b.score || 0) - (a.score || 0) || b.updatedAt.localeCompare(a.updatedAt));
   }, [leads, filterStage, searchQuery]);
 
   const templatesDirty = JSON.stringify(templates) !== JSON.stringify(templateDraft);
@@ -398,7 +409,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
                       onClick={() => openLead(lead)}
                       className="w-full rounded-lg border border-white/10 bg-white/[0.03] p-3 text-left transition-colors hover:border-blue-500/50"
                     >
-                      <p className="truncate text-xs font-semibold text-white">{lead.company}</p>
+                      <p className="flex items-center gap-1.5 truncate text-xs font-semibold text-white">{lead.score ? <ScoreBadge score={lead.score} /> : null}<span className="truncate">{lead.company}</span></p>
                       <p className="mt-0.5 truncate text-[11px] text-zinc-400">{lead.email || "No contact yet"}</p>
                       {lead.dealValue ? <p className="mt-1 text-xs text-zinc-300">${lead.dealValue.toLocaleString()}</p> : null}
                     </button>
@@ -415,6 +426,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
             <thead className="border-b border-white/10 bg-white/[0.03] text-[11px] uppercase tracking-wider text-zinc-400">
               <tr>
                 <th scope="col" className="px-4 py-3">Company and contact</th>
+                <th scope="col" className="px-3 py-3">Score</th>
                 <th scope="col" className="px-3 py-3">Stage</th>
                 <th scope="col" className="px-3 py-3">Source</th>
                 <th scope="col" className="px-3 py-3">Last updated</th>
@@ -431,6 +443,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
                       {lead.domain}{lead.email ? ` · ${lead.email}` : " · No contact yet"}
                     </div>
                   </td>
+                  <td className="px-3 py-3">{lead.score ? <ScoreBadge score={lead.score} /> : <span className="text-zinc-500">Not scored</span>}</td>
                   <td className="px-3 py-3">{stageLabel(lead.stage)}</td>
                   <td className="px-3 py-3 text-zinc-400">{SOURCE_LABELS[lead.source] ?? lead.source}</td>
                   <td className="px-3 py-3 text-zinc-400">{new Date(lead.updatedAt).toLocaleDateString()}</td>

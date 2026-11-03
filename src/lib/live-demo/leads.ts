@@ -9,10 +9,11 @@
 // and a score that weighs intent highest. Nothing here is a prediction:
 // every number comes from what the run read, and "why" lists it.
 
+import { clampScore as clamp, combineScore as combine, companyFitIntent, priorityOf, rightRole, type Priority } from "../leads/score.ts";
 import type { DemoCompany, DemoPerson, DemoResults, DemoSocialLead } from "./types";
 
+export { priorityOf, type Priority };
 export type LeadKind = "Person asking" | "Decision maker" | "Company";
-export type Priority = "Hot" | "Warm" | "Cold";
 
 export interface ScoredLead {
   id: string;
@@ -35,16 +36,6 @@ export interface ScoredLead {
   why: string[];
   reply: string | null;
   sequence: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
-}
-
-const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
-
-export function priorityOf(score: number): Priority {
-  return score >= 75 ? "Hot" : score >= 55 ? "Warm" : "Cold";
-}
-
-function combine(fit: number, intent: number, reach: number): number {
-  return clamp(0.4 * fit + 0.45 * intent + 0.15 * reach);
 }
 
 const DAY = 86_400_000;
@@ -94,23 +85,16 @@ export function scoreAsk(lead: DemoSocialLead, competitors: string[], now = Date
   };
 }
 
-// A potential customer's own fit and intent: a competitor's customer already
-// pays for the category (strong fit, a switch to win); a campaign match fits
-// the audience but shows no buying yet.
 function companySignal(company: DemoCompany): { fit: number; intent: number; why: string[] } {
-  const signal = company.signal ?? "";
-  const terms = company.matchedTerms ?? [];
-  if (/^Customer of /.test(signal)) return { fit: 80 + Math.min(10, terms.length * 5), intent: 45, why: [signal.replace(/^Customer of/, "uses"), "a switch to win"] };
-  return { fit: 55 + Math.min(10, terms.length * 5), intent: 25, why: [signal || "matches the campaign", ...(terms.length ? [`homepage says ${terms.slice(0, 2).join(", ")}`] : [])] };
+  return companyFitIntent(company.signal, company.matchedTerms ?? []);
 }
 
 export function scorePerson(person: DemoPerson, company: DemoCompany | undefined, roles: string[]): ScoredLead {
   const base = company ? companySignal(company) : { fit: 55, intent: 25, why: [] as string[] };
-  const words = roles.join(" ").toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3 && !["head", "chief", "officer", "vice", "president"].includes(w));
-  const rightRole = words.some((w) => person.title.toLowerCase().includes(w)) || /\b(ceo|founder|co-?founder|owner|managing director|president)\b/i.test(person.title);
-  const intent = base.intent + (rightRole ? 10 : 0);
+  const right = rightRole(person.title, roles);
+  const intent = base.intent + (right ? 10 : 0);
   const reach = person.profileUrl ? 85 : person.source ? 60 : 40;
-  const why = [...base.why, ...(rightRole ? [`the right role: ${person.title}`] : []), person.profileUrl ? "direct profile link" : person.source ? "named on their team page" : ""].filter(Boolean);
+  const why = [...base.why, ...(right ? [`the right role: ${person.title}`] : []), person.profileUrl ? "direct profile link" : person.source ? "named on their team page" : ""].filter(Boolean);
   const score = combine(base.fit, intent, reach);
   return {
     id: `person:${person.domain}:${person.name}`,

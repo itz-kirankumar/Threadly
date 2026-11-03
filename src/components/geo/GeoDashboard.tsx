@@ -16,6 +16,7 @@ import TeamPanel from "./TeamPanel";
 import BillingPanel from "./BillingPanel";
 import CreditsPanel from "./CreditsPanel";
 import ActivityPanel from "./ActivityPanel";
+import PipelineSummary from "./PipelineSummary";
 import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import CrmOutreachPanel from "@/components/crm/CrmOutreachPanel";
@@ -673,6 +674,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 
       {tab === "overview" && (
         <div className="space-y-6">
+          {!readOnly && <PipelineSummary authedFetch={authedFetch} onNavigate={(t) => setTab(t)} />}
+          {!readOnly && <h2 className="text-sm font-semibold text-white">AI visibility</h2>}
           <div data-tour="metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricCard label="Mention rate" value={latest ? String(latest.mentionRate) : "—"} suffix="%" change={latest ? delta(latest.mentionRate, state.snapshots, "mentionRate") : null} />
             <MetricCard label="Citation share" value={latest ? String(latest.citationShare) : "—"} suffix="%" change={latest ? delta(latest.citationShare, state.snapshots, "citationShare") : null} />
