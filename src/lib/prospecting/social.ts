@@ -78,7 +78,7 @@ export function classifyIntent(text: string, title = text, platform: Platform = 
 
 // Brand names that are also ordinary words only count next to a category
 // word ("Clay" in a pottery thread is not the company).
-const COMMON_WORD_NAMES = new Set(["notion", "slack", "clay", "dust", "coda", "square", "monday", "pipeline", "glean", "cursor", "apollo", "mercury", "linear", "loom", "front", "close", "bolt", "wave", "craft", "bear", "things", "basecamp", "asana", "copper", "folk", "capsule", "nimble", "streak", "instantly", "reply", "outreach", "gong", "profound", "hunter", "podium", "birdeye", "tally", "senja", "plausible", "kaspr", "affine", "obsidian"]);
+const COMMON_WORD_NAMES = new Set(["notion", "slack", "clay", "dust", "coda", "square", "monday", "pipeline", "glean", "cursor", "apollo", "mercury", "linear", "loom", "front", "close", "bolt", "wave", "craft", "bear", "things", "basecamp", "asana", "copper", "folk", "capsule", "nimble", "streak", "instantly", "reply", "outreach", "gong", "profound", "hunter", "podium", "tally", "senja", "plausible", "kaspr", "affine", "obsidian"]);
 
 function nameRegex(name: string): RegExp {
   const core = name.replace(/\.(com|io|ai|co|app|so)$/i, "").trim();
@@ -238,12 +238,16 @@ export function socialQueries(topic: string, competitors: string[], related: str
   const qs: string[] = [];
   if (competitors[0]) qs.push(`alternative to ${competitors[0]}`);
   qs.push(`looking for ${topic} recommendations`, `best ${topic}`);
+  // People ask in plain words: "AI reputation management tool" is asked
+  // for as "reputation management software".
+  const plain = topic.replace(/^ai[- ]/i, "").replace(/\s+(tool|platform|app|solution)s?$/i, " software");
+  if (plain.toLowerCase() !== topic.toLowerCase()) qs.push(`best ${plain}`, `${plain} recommendation`);
   for (const t of also) qs.push(`looking for ${t} recommendations`);
   if (competitors[1]) qs.push(`${competitors[1]} alternative`);
   if (competitors[2]) qs.push(`switching from ${competitors[2]}`);
   const syn = related.find((r) => r.includes(" ") && !topic.toLowerCase().includes(r));
   if (syn) qs.push(`${syn} recommendation`);
-  return [...new Set(qs)].slice(0, 7);
+  return [...new Set(qs)].slice(0, 9);
 }
 
 export interface LeadSearch {
