@@ -80,7 +80,13 @@ export function classifyIntent(text: string, title = text, platform: Platform = 
 // word ("Clay" in a pottery thread is not the company).
 const COMMON_WORD_NAMES = new Set(["notion", "slack", "clay", "dust", "coda", "square", "monday", "pipeline", "glean", "cursor", "apollo", "mercury", "linear", "loom", "front", "close", "bolt", "wave", "craft", "bear", "things", "basecamp", "asana", "copper", "folk", "capsule", "nimble", "streak", "instantly", "reply", "outreach", "gong", "profound", "hunter", "podium", "tally", "senja", "plausible", "kaspr", "affine", "obsidian"]);
 
+// Everyday words that brands put a domain ending on ("speaking.app",
+// "simply.coach") are matched only with the ending.
+const EVERYDAY = /^(speaking|simply|interviewing|learning|reading|writing|coach|career|jobs?|hire|talk|notes?|forms?|mail|chat|meet|work|study|tutor|resume|apply)$/i;
+
 function nameRegex(name: string): RegExp {
+  const dotted = name.match(/^(.+?)\.([a-z]{2,6})$/i);
+  if (dotted && EVERYDAY.test(dotted[1])) return new RegExp(`(^|[^a-z0-9])${dotted[1]}\\.${dotted[2]}([^a-z0-9]|$)`, "i");
   const core = name.replace(/\.(com|io|ai|co|app|so)$/i, "").trim();
   return new RegExp(`(^|[^a-z0-9])${core.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[\\s-]?")}(\\.(com|io|ai|co|app|so))?([^a-z0-9]|$)`, "i");
 }

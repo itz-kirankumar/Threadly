@@ -35,7 +35,7 @@ const TITLE_WORDS = /\b(chief\s+[a-z]+(\s+officer)?|ceo|cto|cfo|coo|cmo|cro|cpo|
 // Lines that look like names but are headings, buttons or company words.
 const NOT_NAME = /\b(team|teams|leadership|board|about|contact|careers|join|our|the|meet|read|more|view|profile|company|inc|llc|ltd|gmbh|group|services|solutions|products|privacy|terms|cookies?|news|blog|press|investors?|customers?|partners?|offices?|locations?|management|executive|advisors?|directors|values|mission|history|learn|follow|linkedin|twitter|email|watch|download|sign|log|book|get|started|pricing|platform|features?)\b/i;
 // Words in job titles and departments: "Delivery Lead" is a role, not a name.
-const ROLE_WORD = /\b(chief|officer|lead|leader|director|manager|head|founder|co-?founder|president|partner|owner|principal|chair\w*|vp|ceo|cto|cfo|coo|cmo|cro|product|revenue|sales|marketing|operations|engineering|customer|success|growth|delivery|finance|people|design|strategy|business|development|technology|data|security|legal|general|counsel|board|interim|senior|junior|associate|executive|managing|global|regional)\b/i;
+const ROLE_WORD = /\b(chancellor|vice|dean|principal|registrar|provost|rector|professor|chief|officer|lead|leader|director|manager|head|founder|co-?founder|president|partner|owner|principal|chair\w*|vp|ceo|cto|cfo|coo|cmo|cro|product|revenue|sales|marketing|operations|engineering|customer|success|growth|delivery|finance|people|design|strategy|business|development|technology|data|security|legal|general|counsel|board|interim|senior|junior|associate|executive|managing|global|regional)\b/i;
 const NAME = /^\p{Lu}[\p{Ll}'’-]+(?:\s+(?:\p{Lu}\.|\p{Lu}[\p{Ll}'’-]+|de|van|von|da|di|del|der|la|le|bin|al))*\s+\p{Lu}[\p{Ll}'’-]+$/u;
 
 function isName(s: string): boolean {
@@ -222,7 +222,7 @@ export function profileMatchesCompany(p: ProfileResult, company: { name: string;
 export function profileTitle(p: ProfileResult): string | null {
   // The first clause of a headline: "Head of Product @ Docfield ➤ Driving..."
   // is "Head of Product".
-  const head = p.headline.split(/\s+[|➤•·]\s*|\s+-\s+|\s+@\s+|\s+at\s+/i)[0].trim();
+  const head = p.headline.split(/\s+[|➤•·]\s*|\s+-\s+|\s+@\s+|\s+at\s+|\s*\[\.\.\.\]|\s+Description:/i)[0].trim();
   return TITLE_WORDS.test(head) ? head.replace(/[,;:]\s*$/, "").slice(0, 80) : null;
 }
 
@@ -295,7 +295,10 @@ export async function withXProfiles(team: CompanyPeople, search: Search, max = 2
 // Adds public profile links: each person a team page named is looked up by
 // name and company; a company with no team page is searched by role. Only
 // profiles whose headline names the company are kept.
-export async function withProfiles(team: CompanyPeople, roles: string[], search: Search): Promise<CompanyPeople> {
+// country: the company's own country code ("in") when its site says so; a
+// profile found only by search must then be indexed under that country, so
+// a namesake company abroad does not supply its founders.
+export async function withProfiles(team: CompanyPeople, roles: string[], search: Search, country: string | null = null): Promise<CompanyPeople> {
   const company = { name: team.company, domain: team.domain };
   if (team.people.length) {
     const people = await Promise.all(team.people.slice(0, 3).map(async (person, i) => {
@@ -310,6 +313,7 @@ export async function withProfiles(team: CompanyPeople, roles: string[], search:
   const found: PublicPerson[] = [];
   for (const p of hits.map(profileFromResult)) {
     if (!p || !profileMatchesCompany(p, company) || found.some((f) => squashWords(f.name) === squashWords(p.name))) continue;
+    if (country && p.country !== country) continue;
     const title = profileTitle(p);
     if (title) found.push({ name: p.name, title, profileUrl: p.url, via: "public search" });
   }

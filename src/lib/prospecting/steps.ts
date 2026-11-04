@@ -149,7 +149,19 @@ export async function runResearch(state: ProspectingState, ctx: StepContext): Pr
   const keywords = page ? extractKeywords(page, ctx.brand.name) : [];
   const audiences = page ? extractAudiencePhrases(page) : [];
   const reading = page ? categoryPhrases(page, ctx.brand.name) : { category: null, phrases: [] };
-  const category = reading.category ?? (ctx.brand.category.trim() || null);
+  // A tagline is not a category: "A career coach, one WhatsApp message
+  // away." is read as "career coach", and "AI" is kept when the page says
+  // "AI career coach".
+  const pageText = page ? [page.title, page.description, ...page.headings, ...page.paragraphs].join(" ") : "";
+  const tidy = (c: string | null) => {
+    if (!c) return null;
+    const core = c.replace(/^(a|an|the|your|our)\s+/i, "").split(/[,.;:!?–—]|\s-\s/)[0].trim();
+    if (!core || core.split(/\s+/).length > 5) return null;
+    return new RegExp(`\\bAI\\s+${core.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(pageText) && !/^ai\b/i.test(core) ? `AI ${core}` : core;
+  };
+  reading.phrases = [...new Set(reading.phrases.map(tidy).filter((p): p is string => Boolean(p)))];
+  reading.category = tidy(reading.category) ?? reading.phrases[0] ?? null;
+  const category = reading.category ?? tidy(ctx.brand.category.trim() || null);
   if (page) ctx.log(`extracted ${keywords.length} keywords and ${audiences.length} audience phrases from the page text`);
   ctx.log(category ? `reads as: ${category}${reading.phrases.length > 1 ? ` (also ${reading.phrases.slice(1, 3).join(", ")})` : ""}` : "the homepage does not say what kind of product it is in one phrase; using its keywords");
 
@@ -227,6 +239,9 @@ export function competitorQueries(name: string, domain: string, phrases: string[
     qs.push({ q: generic ? `best ${p.replace(/s$/, "")}s` : `best ${p} software`, brand: false });
   }
   if (tracked[0]) qs.push({ q: `${tracked[0]} alternatives`, brand: false });
+  // What the product does, in its own feature words ("interview practice"),
+  // finds rivals that describe themselves differently.
+  for (const k of keywords.filter((k) => k.includes(" ") && k.split(/\s+/).length <= 3 && !phrases.some((p) => p.toLowerCase() === k.toLowerCase())).slice(0, 2)) qs.push({ q: `best ${k} apps`, brand: false });
   if (!brand) qs.push({ q: `${domain} alternatives`, brand: true });
   // Directories list alternatives even for small products with no articles.
   if (brand) qs.push({ q: `${brand} alternatives`, brand: true, includeDomains: ["alternativeto.net", "saashub.com", "g2.com", "capterra.com", "producthunt.com"] }, { q: `sites like ${brand}`, brand: true });
@@ -236,7 +251,7 @@ export function competitorQueries(name: string, domain: string, phrases: string[
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
-  }).slice(0, 9);
+  }).slice(0, 11);
 }
 
 // A brand-query result is about this company when it names the company and
@@ -528,6 +543,14 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
     .sort((a, b) => Number(b.tracked) - Number(a.tracked) || (b.consensus ?? 0) - (a.consensus ?? 0) || (b.sources ?? 0) - (a.sources ?? 0) || b.matched - a.matched)
     .slice(0, MAX_COMPETITORS)
     .map(({ matched: _m, ...c }) => c);
+  // A "competitor" named after a word of this company's own category
+  // ("Coach" for a career coach) is a generic site, not a brand rivals are
+  // searched by.
+  const ownWords = new Set([...phrases, ...primary].flatMap((p) => p.toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length >= 3));
+  for (let i = read.length - 1; i >= 0; i--) {
+    const words = read[i].name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    if (!read[i].tracked && words.length && words.every((w) => ownWords.has(w) || w === "ai")) read.splice(i, 1);
+  }
   ctx.log(`kept ${read.length} competitors named by independent sources`);
 
   return {
@@ -557,6 +580,23 @@ const ROLE_RULES: Array<[RegExp, string[]]> = [
   [/\b(observability|monitoring|infrastructure|api|developer|devops|database|hosting)\b/, ["CTO", "VP Engineering", "Head of Platform"]],
   [/\b(analytics|data|dashboards)\b/, ["Head of Data", "Head of Product", "CTO"]],
 ];
+
+// Who usually buys a kind of product, for a site that names no audience:
+// a career coach sells to job seekers directly and to the colleges and
+// institutes whose students it prepares.
+export const BUYER_GROUPS: Array<[RegExp, Array<{ name: string; searchQuery: string; roles: string[] }>]> = [
+  [/\b(career|interview|resume|job search|placement|job seekers?)\b/i, [
+    { name: "Colleges and universities", searchQuery: "colleges with training and placement cell", roles: ["Training and Placement Officer", "Director", "Dean", "Principal"] },
+    { name: "Coaching and training institutes", searchQuery: "job readiness training institutes", roles: ["Founder", "Director", "Head of Placements"] },
+  ]],
+  [/\b(courses?|tutoring|test prep|exam prep|e-?learning|students?)\b/i, [
+    { name: "Schools and coaching centres", searchQuery: "coaching institutes and schools", roles: ["Principal", "Director", "Founder"] },
+  ]],
+];
+
+export function buyerGroups(text: string): Array<{ name: string; searchQuery: string; roles: string[] }> {
+  return BUYER_GROUPS.find(([re]) => re.test(text))?.[1] ?? [];
+}
 
 export function rolesFor(terms: string[]): string[] {
   const text = ` ${terms.join(" ").toLowerCase()} `;
@@ -643,6 +683,13 @@ export async function runCampaigns(state: ProspectingState, ctx: StepContext): P
     });
     ctx.log(`your homepage names no audience; using "${theirs.phrase}", which your competitors name`);
   }
+  // No audience on the site: the usual buyers of this kind of product,
+  // labelled as such.
+  const groups = items.some((c) => c.source !== "competitors") ? [] : buyerGroups(`${phrases.join(" ")} ${research.summary} ${research.keywords.join(" ")}`);
+  for (const g of groups) {
+    items.push({ id: `cmp_${randomUUID().slice(0, 8)}`, name: g.name, description: `Usual buyers of ${phrases[0] ? `a ${phrases[0]}` : "products like yours"}; your site names no audience.`, searchQuery: g.searchQuery, roles: g.roles, source: "homepage", evidence: [{ kind: "page", url: page?.finalUrl, quote: "Usual buyers of this kind of product", at }], selected: true });
+  }
+  if (groups.length) ctx.log(`your site names no audience; using the usual buyers: ${groups.map((g) => g.name).join(", ")}`);
   // Nothing named on the site or by competitors: no campaign is invented
   // from a tagline; the visitor can enter the audience instead.
   items = items.slice(0, 6);

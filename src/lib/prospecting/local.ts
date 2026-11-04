@@ -166,7 +166,7 @@ async function fromOsm(query: string): Promise<Raw[]> {
 }
 
 // Singular search words OpenStreetMap understands ("dentist in Pune").
-const OSM_WORD: Record<string, string> = { restaurants: "restaurant", cafes: "cafe", bakeries: "bakery", salons: "hairdresser", spas: "spa", dentists: "dentist", clinics: "clinic", physiotherapists: "physiotherapist", gyms: "fitness centre", hotels: "hotel", "real estate agents": "estate agent", "home service contractors": "plumber", "law firms": "lawyer", accountants: "accountant", "coaching centres": "school", "car dealers and garages": "car repair", "pet care businesses": "veterinary", "retail stores": "shop", pharmacies: "pharmacy", "event venues": "events venue", "travel agencies": "travel agency" };
+const OSM_WORD: Record<string, string> = { colleges: "college", restaurants: "restaurant", cafes: "cafe", bakeries: "bakery", salons: "hairdresser", spas: "spa", dentists: "dentist", clinics: "clinic", physiotherapists: "physiotherapist", gyms: "fitness centre", hotels: "hotel", "real estate agents": "estate agent", "home service contractors": "plumber", "law firms": "lawyer", accountants: "accountant", "coaching centres": "school", "car dealers and garages": "car repair", "pet care businesses": "veterinary", "retail stores": "shop", pharmacies: "pharmacy", "event venues": "events venue", "travel agencies": "travel agency" };
 
 export async function findLocalBusinesses(types: string[], city: string, need: ServiceNeed, opts: { deadline: number; log: (t: string) => void; limit?: number }): Promise<{ provider: string; items: LocalBusiness[]; queries: string[] }> {
   const provider = mapsProvider();

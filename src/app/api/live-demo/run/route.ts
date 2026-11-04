@@ -279,7 +279,8 @@ export async function POST(request: Request) {
         const found = await mapLimit(companies.slice(0, 12), 6, async (c) => {
           if (Date.now() > contactsBy) return null;
           const team = await findDecisionMakers(c, roles);
-          let linked = Date.now() > contactsBy ? team : await withProfiles(team, roles, search);
+          const country = /\bIndia(n)?\b/.test(c.description ?? "") || c.domain.endsWith(".in") ? "in" : null;
+          let linked = Date.now() > contactsBy ? team : await withProfiles(team, roles, search, country);
           // Apollo only as a fallback, when public sources name nobody.
           if (!linked.people.length && Date.now() < contactsBy) {
             const backup = await apolloPeople(c.domain, roles);

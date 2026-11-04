@@ -179,7 +179,7 @@ export function businessKind(input: { described: string; headline: string; body:
 
 // Local business types a business sells to, from its own words.
 const LOCAL_TYPES: Array<[RegExp, string]> = [
-  [/restaurants?|eateries/, "restaurants"], [/caf[eé]s?\b|coffee shops?/, "cafes"], [/bakeries|bakery/, "bakeries"],
+  [/colleges?|universit(?:y|ies)|institutes?|placement cells?/, "colleges"], [/restaurants?|eateries/, "restaurants"], [/caf[eé]s?\b|coffee shops?/, "cafes"], [/bakeries|bakery/, "bakeries"],
   [/salons?|barbers?(?:hops?)?|beauty parlou?rs?/, "salons"], [/spas?\b/, "spas"], [/dentists?|dental (?:clinics?|practices?)/, "dentists"],
   [/clinics?|doctors?|physicians?|medical practices?/, "clinics"], [/physiotherap\w*|chiropractors?/, "physiotherapists"],
   [/gyms?\b|fitness studios?|fitness centres?|yoga studios?/, "gyms"], [/hotels?|homestays?|guest ?houses?/, "hotels"],
@@ -272,8 +272,18 @@ export function assessFit(ev: FitEvidence): BusinessFit {
   const { kind } = businessKind({ described, headline, body: ownText, html: ev.html });
   const localTypes = localTypesIn(ownText);
   const sellsTo = sellsToIn(ownText, kind, localTypes);
+  // Career and learning products sell to people directly and to the
+  // colleges and institutes that prepare them.
+  if (/\b(career|interview|resume|job search|placement|courses?|tutoring|exam prep)\b/i.test(`${described} ${headline}`)) {
+    if (!sellsTo.includes("consumers")) sellsTo.push("consumers");
+    if (!sellsTo.includes("local businesses")) sellsTo.push("local businesses");
+    if (!localTypes.includes("colleges")) localTypes.unshift("colleges");
+    if (!localTypes.includes("coaching centres")) localTypes.push("coaching centres");
+  }
   if (industries[0]) facts.push({ label: "Industry", value: industries[0], source: "public profile", url: null });
-  const place = placeIn([ownText, ...ev.hits.map((h) => h.content)],ev.location ?? (wd?.hq ? [wd.hq, wd.country].filter(Boolean).join(", ") : null));
+  const found = placeIn([ownText, ...ev.hits.map((h) => h.content)], ev.location ?? (wd?.hq ? [wd.hq, wd.country].filter(Boolean).join(", ") : null));
+  // No city stated: an Indian site (+91, rupees, .in) gets a sample city.
+  const place = found.city ? found : /\+91|₹|\bINR\b|\bIndia\b/.test(`${ownText} ${ev.html.slice(0, 200_000)}`) || ev.domain.endsWith(".in") ? { city: "Bengaluru", country: "India" } : found;
 
   const size: BusinessFit["size"] = listed || (team && team.count > 1000) ? "large" : team && team.count > SMALL_TEAM_MAX ? "mid-sized" : team ? "small" : "unknown";
   const physical = kind === "physical business" || (outlets !== null && outlets >= 20 && kind !== "software");

@@ -377,6 +377,8 @@ const SYNONYMS: Array<[RegExp, string[]]> = [
   [/\b(reputation|reviews?|review management|listings)\b/, ["reputation management", "review management", "online reviews", "google reviews", "customer reviews", "review requests", "local seo", "listings management"]],
   [/\bworkspace|wiki|knowledge base|docs\b/, ["workspace", "wiki", "knowledge base", "note-taking", "notes app", "docs", "project management"]],
   [/\bcrm\b/, ["crm", "customer relationship", "sales pipeline", "deal tracking"]],
+  [/\b(career|interview|resume|job search|placement)\b/, ["career coach", "career coaching", "career guidance", "interview practice", "mock interview", "interview prep", "resume review", "resume builder", "job search", "job seekers", "placement"]],
+  [/\b(courses?|tutoring|e-?learning|test prep|exam prep)\b/, ["online courses", "e-learning", "tutoring", "test prep", "exam prep", "edtech", "learning platform"]],
   [/\bprospecting|lead generation|sales intelligence\b/, ["prospecting", "lead generation", "lead gen", "sales intelligence", "b2b data", "contact data", "buying signals", "intent data", "outbound"]],
   [/\boutbound|outreach|cold email|sales engagement\b/, ["outbound", "cold email", "cold outreach", "outreach", "sales engagement", "email sequences", "lead generation"]],
   [/\bai visibility|ai search|generative engine|\bgeo\b|llm visibility|ai seo\b/, ["ai visibility", "ai search", "generative engine optimization", "geo", "llm visibility", "ai seo", "chatgpt visibility", "answer engine"]],
