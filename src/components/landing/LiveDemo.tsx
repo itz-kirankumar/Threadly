@@ -914,6 +914,7 @@ function CrawlerStage({ audit }: { audit: DemoCrawler }) {
           ))}
         </ul>
         {audit.issues.length > 0 && <p className="mt-3 text-xs text-rose-700">{audit.issues[0]}</p>}
+        {audit.keywords && audit.keywords.checks.length > 0 && <KeywordPanel report={audit.keywords} />}
         <div className="pt-1"><ActionButton label="Track AI visibility weekly" /></div>
       </div>
     </div>
@@ -1148,6 +1149,39 @@ function LocalStage({ local }: { local: DemoLocal }) {
         </table>
       </div>
       <p className="mt-3 text-xs text-zinc-500">{local.provider === "OpenStreetMap" ? "Listings © OpenStreetMap contributors. Google Maps listings, with ratings and reviews, appear once your Maps source is connected." : `Listings from ${local.provider}.`} Drafts only: nothing is sent from the demo.</p>
+    </div>
+  );
+}
+
+// Where the site shows up when buyers search for its services, and the
+// keywords top pages share that the site does not use yet.
+function KeywordPanel({ report }: { report: NonNullable<DemoCrawler["keywords"]> }) {
+  const found = report.checks.filter((c) => c.position !== null).length;
+  return (
+    <div className="mt-5 border-t border-zinc-100 pt-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Your services</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">{report.services.map((s) => <span key={s} className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs text-zinc-800">{s}</span>)}</div>
+      <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Where you show up · top 20 for {found} of {report.checks.length} buyer searches</p>
+      <ul className="mt-2 max-h-48 space-y-1 overflow-auto pr-1 text-xs demo-scroll">
+        {report.checks.map((c) => (
+          <li key={c.query} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 px-2.5 py-1.5">
+            <span className="truncate text-zinc-800">&ldquo;{c.query}&rdquo;</span>
+            <span className="shrink-0 text-right">
+              {c.position !== null ? <span className="font-semibold text-emerald-700">#{c.position}</span> : <span className="text-rose-700">not in top 20</span>}
+              {c.leaders.length > 0 && <span className="ml-2 text-zinc-500">top: {c.leaders.slice(0, 2).join(", ")}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {report.suggestions.length > 0 && (
+        <>
+          <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Suggested keywords to add</p>
+          <p className="mt-0.5 text-xs text-zinc-500">Phrases the top-ranking pages for these searches use and your homepage does not.</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {report.suggestions.map((s) => <span key={s.phrase} title={`Used by ${s.pages} top pages`} className="rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: "#EEEBFF", color: "#2F1FA8" }}>+ {s.phrase} <span className="opacity-60">{s.pages}</span></span>)}
+          </div>
+        </>
+      )}
     </div>
   );
 }

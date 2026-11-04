@@ -77,6 +77,14 @@ export interface DemoCrawler {
   bots: Array<{ name: string; engine: string; status: "allowed" | "blocked" | "not_specified" }>;
   issues: string[];
   facts: { founded: string | null; location: string | null; employees: string | null };
+  // The services the site names, where it shows up when buyers search for
+  // them, and phrases top-ranking pages share that the site does not use.
+  keywords?: {
+    services: string[];
+    checks: Array<{ query: string; position: number | null; leaders: string[] }>;
+    suggestions: Array<{ phrase: string; pages: number }>;
+    searched: number;
+  };
 }
 export interface DemoCompany {
   domain: string;

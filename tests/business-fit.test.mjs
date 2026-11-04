@@ -79,3 +79,15 @@ test("an X profile counts only when the name matches and the bio names the compa
 test("title case keeps apostrophes lower case", () => {
   assert.equal(titleCase("india's fastest growing"), "India's Fastest Growing");
 });
+
+test("keywords: services are phrases, buyers' searches are checked, gaps are suggested", async () => {
+  const { serviceKeywords, buyerQueries, positionOf, suggestKeywords } = await import("../src/lib/prospecting/keywords.ts");
+  const services = serviceKeywords({ phrases: ["AI career coach"], keywords: ["interview practice", "job link", "message", "whatsapp"], areas: [], related: ["mock interview"] });
+  assert.deepEqual(services, ["ai career coach", "interview practice", "mock interview"]);
+  assert.deepEqual(buyerQueries(["mock interview"]), ["best mock interview", "mock interview recommendations"]);
+  assert.equal(positionOf([{ domain: "a.com" }, { domain: "www.praxy.me" }], "praxy.me"), 2);
+  const hits = ["x.com", "y.com", "z.com"].map((domain) => ({ domain, title: "Top interview questions", content: "Practice common interview questions with mock interviews rather than guessing." }));
+  const out = suggestKeywords(hits, "AI career coach for interview practice", services).map((s) => s.phrase);
+  assert.ok(out.some((p) => p.includes("interview questions")));
+  assert.ok(!out.includes("rather than"), "phrases unrelated to the services are not suggested");
+});

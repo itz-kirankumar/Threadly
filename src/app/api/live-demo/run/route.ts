@@ -5,6 +5,7 @@ import { reserveDemoRun } from "@/lib/live-demo/quota";
 import type { DemoEvent, DemoStep } from "@/lib/live-demo/types";
 import { contactProvider } from "@/lib/prospecting/contacts";
 import { assessFit, gatherFitEvidence, planFor } from "@/lib/prospecting/fit";
+import { keywordReport } from "@/lib/prospecting/keywords";
 import { draftLocalMessage, findLocalBusinesses, mapsProvider, serviceNeed } from "@/lib/prospecting/local";
 import { apolloPeople, findDecisionMakers, withProfiles, withXProfiles } from "@/lib/prospecting/people";
 import { extractPage } from "@/lib/prospecting/text";
@@ -143,6 +144,20 @@ export async function POST(request: Request) {
           ...home,
         });
         log(`scored ${site.passed} of ${site.total} checks: ${site.score}/100`);
+        // Search visibility: each service the site names, searched the way a
+        // buyer asks for it, and the keywords the top pages share that the
+        // site never uses.
+        const keywords = await keywordReport({
+          domain: r.domain,
+          phrases,
+          keywords: r.keywords,
+          areas: r.categoryAreas ?? [],
+          related: terms.related,
+          ownText: r.page ? [r.page.title, r.page.description, ...r.page.headings, ...r.page.paragraphs].filter(Boolean).join(" ") : "",
+          search: (q, max) => search(q, max),
+          log,
+          deadline: Date.now() + 25_000,
+        });
         send({
           type: "result",
           step: "crawler",
@@ -155,6 +170,7 @@ export async function POST(request: Request) {
             bots: audit.crawlerStatuses.map((b) => ({ name: b.userAgent, engine: b.engine, status: b.status })),
             issues: audit.criticalIssues,
             facts: organizationFacts(home.html),
+            keywords,
           },
         });
         if (stopped()) return;
