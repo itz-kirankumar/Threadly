@@ -39,13 +39,13 @@ export default function LandingPage() {
         <section className="relative">
           <ThreadLines mode="sides" target=".search-shell" className="hidden md:block" />
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-40 text-center sm:pt-48">
-            <p className="eyebrow">A private intelligence desk for B2B teams</p>
+            <p className="eyebrow">Growth for small SaaS and digital businesses</p>
             <h1 className="mx-auto mt-6 max-w-4xl font-display text-5xl leading-[1.05] tracking-tight sm:text-7xl">
               Know your market.<br />
               <span className="text-[#5B3DF5]">Find your next customer.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-[#6B6A72]">
-              Threadly researches your market, discovers companies showing relevant buying signals, identifies decision-makers, and helps your team approach them with context.
+              Built for small SaaS, agencies, online stores and other digital businesses. Threadly maps your competitors, finds the companies, local businesses and people already asking for what you sell, and writes the first message to each, with a source for every fact.
             </p>
             <div className="mt-10">
               <LiveDemo bonus={{ percent: FIRST_PACK_BONUS_PERCENT, cap: FIRST_PACK_BONUS_CAP }} />

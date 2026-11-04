@@ -11,7 +11,7 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 const display = Instrument_Serif({ weight: "400", subsets: ["latin"], variable: "--font-display" });
 
 const description =
-  "Threadly is a private, invitation-only prospecting and AI visibility platform for eligible B2B teams.";
+  "Threadly helps small SaaS and digital businesses grow: it maps competitors, finds the companies and people asking for what they sell, and writes the first message to each.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.gothreadly.live"),

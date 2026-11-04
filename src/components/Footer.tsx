@@ -13,7 +13,7 @@ export default function Footer(_props: { tone?: "dark" | "light" }) {
       <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <ThreadlyLogo size={28} wordmark />
-          <p className="mt-4 max-w-xs text-sm leading-relaxed text-[#6B6A72]">A private intelligence desk for B2B teams: market research, prospecting and AI visibility.</p>
+          <p className="mt-4 max-w-xs text-sm leading-relaxed text-[#6B6A72]">Growth for small SaaS and digital businesses: competitors, leads, decision makers and AI visibility.</p>
         </div>
         {COLUMNS.map((column) => (
           <div key={column.title}>
