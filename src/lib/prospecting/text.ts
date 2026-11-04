@@ -374,7 +374,7 @@ export function searchTopics(phrases: string[]): string[] {
 // email tool" matches an outbound platform and "Confluence" pages count as
 // a wiki. Keys and values are lower case.
 const SYNONYMS: Array<[RegExp, string[]]> = [
-  [/(reputation|reviews?|review management|listings)/, ["reputation management", "review management", "online reviews", "google reviews", "customer reviews", "review requests", "local seo", "listings management"]],
+  [/\b(reputation|reviews?|review management|listings)\b/, ["reputation management", "review management", "online reviews", "google reviews", "customer reviews", "review requests", "local seo", "listings management"]],
   [/\bworkspace|wiki|knowledge base|docs\b/, ["workspace", "wiki", "knowledge base", "note-taking", "notes app", "docs", "project management"]],
   [/\bcrm\b/, ["crm", "customer relationship", "sales pipeline", "deal tracking"]],
   [/\bprospecting|lead generation|sales intelligence\b/, ["prospecting", "lead generation", "lead gen", "sales intelligence", "b2b data", "contact data", "buying signals", "intent data", "outbound"]],
