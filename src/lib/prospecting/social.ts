@@ -253,7 +253,8 @@ export function socialQueries(topic: string, competitors: string[], related: str
   if (competitors[2]) qs.push(`switching from ${competitors[2]}`);
   const syn = related.find((r) => r.includes(" ") && !topic.toLowerCase().includes(r));
   if (syn) qs.push(`${syn} recommendation`);
-  return [...new Set(qs)].slice(0, 9);
+  for (const t of [topic, ...also].slice(0, 3)) qs.push(`which ${t} should I use`, `${t} suggestions`);
+  return [...new Set(qs)].slice(0, 14);
 }
 
 export interface LeadSearch {
@@ -296,7 +297,7 @@ export async function findSocialLeads(
   // Every query in the last month first; the strongest also over the year.
   const tasks = PLATFORMS.flatMap(({ platform, domains }) => [
     ...queries.map((q) => ({ platform, domains, q, window: "month" as const })),
-    ...queries.slice(0, 2).map((q) => ({ platform, domains, q, window: "year" as const })),
+    ...queries.map((q) => ({ platform, domains, q, window: "year" as const })),
   ]);
   const seen = new Set<string>();
   const leads: SocialLead[] = [];

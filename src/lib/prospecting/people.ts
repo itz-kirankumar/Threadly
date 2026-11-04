@@ -31,9 +31,9 @@ export interface CompanyPeople {
   source: string | null;
 }
 
-const TITLE_WORDS = /\b(chief\s+[a-z]+(\s+officer)?|ceo|cto|cfo|coo|cmo|cro|cpo|ciso|cio|founder|co-?founder|president|vice\s+president|vp|svp|evp|head\s+of|director|managing\s+director|general\s+manager|partner|owner|principal|chair(man|woman|person)?)\b/i;
+const TITLE_WORDS = /\b(principal|dean|registrar|vice[- ]chancellor|placement officer|head of placements?|career services|career counsell?or|centre head|center head|academic head|administrator|practice manager|program director|chief\s+[a-z]+(\s+officer)?|ceo|cto|cfo|coo|cmo|cro|cpo|ciso|cio|founder|co-?founder|president|vice\s+president|vp|svp|evp|head\s+of|director|managing\s+director|general\s+manager|partner|owner|principal|chair(man|woman|person)?)\b/i;
 // Lines that look like names but are headings, buttons or company words.
-const NOT_NAME = /\b(team|teams|leadership|board|about|contact|careers|join|our|the|meet|read|more|view|profile|company|inc|llc|ltd|gmbh|group|services|solutions|products|privacy|terms|cookies?|news|blog|press|investors?|customers?|partners?|offices?|locations?|management|executive|advisors?|directors|values|mission|history|learn|follow|linkedin|twitter|email|watch|download|sign|log|book|get|started|pricing|platform|features?)\b/i;
+const NOT_NAME = /\b(quick|links|desk|affiliate|program|programs|programme|programmes|admissions?|apply|enquiry|support|help|jobs|alumni|affairs|relations|setup|administrative|administration|learning|faculty|students?|courses?|research|academics?|examinations?|office|cell|department|school of|team|teams|leadership|board|about|contact|careers|join|our|the|meet|read|more|view|profile|company|inc|llc|ltd|gmbh|group|services|solutions|products|privacy|terms|cookies?|news|blog|press|investors?|customers?|partners?|offices?|locations?|management|executive|advisors?|directors|values|mission|history|learn|follow|linkedin|twitter|email|watch|download|sign|log|book|get|started|pricing|platform|features?)\b/i;
 // Words in job titles and departments: "Delivery Lead" is a role, not a name.
 const ROLE_WORD = /\b(chancellor|vice|dean|principal|registrar|provost|rector|professor|chief|officer|lead|leader|director|manager|head|founder|co-?founder|president|partner|owner|principal|chair\w*|vp|ceo|cto|cfo|coo|cmo|cro|product|revenue|sales|marketing|operations|engineering|customer|success|growth|delivery|finance|people|design|strategy|business|development|technology|data|security|legal|general|counsel|board|interim|senior|junior|associate|executive|managing|global|regional)\b/i;
 const NAME = /^\p{Lu}[\p{Ll}'’-]+(?:\s+(?:\p{Lu}\.|\p{Lu}[\p{Ll}'’-]+|de|van|von|da|di|del|der|la|le|bin|al))*\s+\p{Lu}[\p{Ll}'’-]+$/u;
@@ -223,6 +223,8 @@ export function profileTitle(p: ProfileResult): string | null {
   // The first clause of a headline: "Head of Product @ Docfield ➤ Driving..."
   // is "Head of Product".
   const head = p.headline.split(/\s+[|➤•·]\s*|\s+-\s+|\s+@\s+|\s+at\s+|\s*\[\.\.\.\]|\s+Description:/i)[0].trim();
+  // "Principal Scientist" is a senior researcher, not a college principal.
+  if (/\bprincipal\s+(research\s+)?(scientist|engineer|consultant|architect|designer|investigator|analyst|product manager|program manager|software)\b/i.test(head)) return null;
   return TITLE_WORDS.test(head) ? head.replace(/[,;:]\s*$/, "").slice(0, 80) : null;
 }
 
@@ -309,7 +311,10 @@ export async function withProfiles(team: CompanyPeople, roles: string[], search:
     }));
     return { ...team, people };
   }
-  const hits = await search(`${team.company} ${roles[0] ?? "founder"} founder`, 10, { includeDomains: ["linkedin.com"] }).catch(() => []);
+  // One search per leading role of this kind of organisation ("Principal",
+  // "Dean", "Training and Placement Officer" for a college).
+  const asks = roles.length ? roles.slice(0, 3) : ["founder"];
+  const hits = (await Promise.all(asks.map((role) => search(`${team.company} ${role}`, 10, { includeDomains: ["linkedin.com"] }).catch(() => [])))).flat();
   const found: PublicPerson[] = [];
   for (const p of hits.map(profileFromResult)) {
     if (!p || !profileMatchesCompany(p, company) || found.some((f) => squashWords(f.name) === squashWords(p.name))) continue;

@@ -42,7 +42,7 @@ const NON_COMPANY = [
   "businesswire.com", "globenewswire.com", "eventbrite.com", "meetup.com", "coursera.org", "udemy.com",
   // Messaging and link hosts that pages link to, never prospects.
   "t.me", "telegram.org", "telegram.me", "wa.me", "whatsapp.com", "discord.gg", "discord.com", "linktr.ee", "bio.link",
-  "trustpilot.com", "sourceforge.net", "softonic.com", "goodfirms.co", "findalternate.com", "noteapps.info",
+  "zoom.us", "createwith.com", "careervillage.org", "trustpilot.com", "sourceforge.net", "softonic.com", "goodfirms.co", "findalternate.com", "noteapps.info",
 ];
 
 // Contact-data vendors publish a profile page for every company, so their
@@ -55,7 +55,7 @@ function isProfileSite(domain: string): boolean {
 }
 
 const MAX_COMPETITORS = 15;
-const MAX_COMPANIES_PER_CAMPAIGN = 25;
+const MAX_COMPANIES_PER_CAMPAIGN = 40;
 
 function now(): string {
   return new Date().toISOString();
@@ -90,7 +90,9 @@ function isNonCompany(domain: string): boolean {
     || HOSTED.test(domain)
     || PUBLISHER.test(label)
     || /.(media|world|hub|list|lists|topics|ranking|rankings|directory|startups|companies)$/.test(label)
-    || INFRASTRUCTURE.test(domain);
+    || INFRASTRUCTURE.test(domain)
+    // Programs run by the largest platforms (grow.google) are not rivals.
+    || /\.(google|microsoft|amazon|meta)$/.test(domain);
 }
 
 // Titles of interstitial pages (redirects, bot checks, errors) are not names.
@@ -155,7 +157,11 @@ export async function runResearch(state: ProspectingState, ctx: StepContext): Pr
   const pageText = page ? [page.title, page.description, ...page.headings, ...page.paragraphs].join(" ") : "";
   const tidy = (c: string | null) => {
     if (!c) return null;
-    const core = c.replace(/^(a|an|the|your|our)\s+/i, "").split(/[,.;:!?–—]|\s-\s/)[0].trim();
+    // The first part that is a phrase: "career coach" from "A career coach,
+    // one message away", "privacy-friendly Google Analytics alternative"
+    // from "Simple, privacy-friendly Google Analytics alternative".
+    const parts = c.split(/[,.;:!?–—]|\s-\s/).map((p) => p.replace(/^(a|an|the|your|our)\s+/i, "").trim()).filter(Boolean);
+    const core = parts.find((p) => p.split(/\s+/).length >= 2) ?? parts[0] ?? "";
     if (!core || core.split(/\s+/).length > 5) return null;
     return new RegExp(`\\bAI\\s+${core.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(pageText) && !/^ai\b/i.test(core) ? `AI ${core}` : core;
   };
@@ -245,13 +251,17 @@ export function competitorQueries(name: string, domain: string, phrases: string[
   if (!brand) qs.push({ q: `${domain} alternatives`, brand: true });
   // Directories list alternatives even for small products with no articles.
   if (brand) qs.push({ q: `${brand} alternatives`, brand: true, includeDomains: ["alternativeto.net", "saashub.com", "g2.com", "capterra.com", "producthunt.com"] }, { q: `sites like ${brand}`, brand: true });
+  // More angles on the same question, so small products with few
+  // comparison articles still get theirs found.
+  if (brand) qs.push({ q: `${brand} alternative reddit`, brand: true }, { q: `${brand} review pros cons`, brand: true }, { q: `companies like ${brand}`, brand: true });
+  for (const p of topics.slice(0, 2)) qs.push({ q: `top ${p} tools`, brand: false }, { q: `${p} startups`, brand: false });
   const seen = new Set<string>();
   return qs.filter((x) => {
     const k = `${x.q.toLowerCase()}|${x.includeDomains?.join(",") ?? ""}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
-  }).slice(0, 11);
+  }).slice(0, 18);
 }
 
 // A brand-query result is about this company when it names the company and
@@ -375,6 +385,9 @@ export function competitorMatch(text: string, sources: number, primary: string[]
   const near = termsIn(text, related);
   const keep = (own.length >= 1 && (sources >= 2 || near.length >= 1 || own.some((t) => t.includes(" "))))
     || (near.length >= 2 && sources >= 2)
+    // Two of the category's own phrases on its homepage ("mock interview",
+    // "interview prep") show it, even when only one comparison names it.
+    || near.filter((t) => t.includes(" ")).length >= 2
     || (near.length >= 1 && sources >= 3)
     // Three or more independent comparisons of this company agree, and the
     // homepage is a product's: that is a competitor even when it describes
@@ -467,14 +480,15 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
     items.push({ domain, name, description: null, tracked: false, selected: true, appearances: count, sources: count, consensus: count, evidence: [{ kind: "search", query: "comparisons", quote: `named in ${count} comparison results`, at }] });
   }
   if (agreed.length) ctx.log(`names most comparison results agree on: ${agreed.slice(0, 8).map((a) => `${a.name} (${a.count})`).join(", ")}`);
-  items.sort((a, b) => Number(b.tracked) - Number(a.tracked) || (b.consensus ?? 0) - (a.consensus ?? 0) || (b.sources ?? 0) - (a.sources ?? 0));
+  // Sites the comparisons link to come before names only guessed from text.
+  items.sort((a, b) => Number(b.tracked) - Number(a.tracked) || Number(guessed.has(a.domain)) - Number(guessed.has(b.domain)) || (b.consensus ?? 0) - (a.consensus ?? 0) || (b.sources ?? 0) - (a.sources ?? 0));
   for (const d of tracked) {
     if (!items.some((c) => c.domain === d)) {
       const comp = ctx.brand.competitors.find((c) => rootDomain(c.domain) === d);
       items.unshift({ domain: d, name: comp?.name ?? d, description: null, tracked: true, selected: true, appearances: 0, sources: 0, evidence: [{ kind: "profile", quote: "Tracked in your brand profile", at }] });
     }
   }
-  items = items.slice(0, MAX_COMPETITORS + 20);
+  items = items.slice(0, MAX_COMPETITORS + 45);
   ctx.log(`ranked ${items.length} candidate domains; reading their homepages to check each one sells ${phrases[0] ? `a ${phrases[0]}` : "in your category"}`);
 
   const fallbackTerms = topicTerms(research.keywords, ctx.brand.category);
@@ -547,9 +561,17 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
   // ("Coach" for a career coach) is a generic site, not a brand rivals are
   // searched by.
   const ownWords = new Set([...phrases, ...primary].flatMap((p) => p.toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length >= 3));
+  const generic = (w: string) => ownWords.has(w) || /^(ai|app|apps|platform|software|tool|tools|online|hq|com|io|co|net|org|so)$/.test(w);
   for (let i = read.length - 1; i >= 0; i--) {
+    if (read[i].tracked) continue;
     const words = read[i].name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-    if (!read[i].tracked && words.length && words.every((w) => ownWords.has(w) || w === "ai")) read.splice(i, 1);
+    if (!words.length || !words.every(generic)) continue;
+    // Shown under a tagline ("Analytics Platform" for matomo.org): its
+    // brand is the domain's label; a generic domain too (analytics.com) is
+    // not a brand at all.
+    const label = read[i].domain.split(".")[0];
+    if (generic(label)) read.splice(i, 1);
+    else read[i] = { ...read[i], name: label.charAt(0).toUpperCase() + label.slice(1) };
   }
   ctx.log(`kept ${read.length} competitors named by independent sources`);
 
@@ -587,15 +609,81 @@ const ROLE_RULES: Array<[RegExp, string[]]> = [
 export const BUYER_GROUPS: Array<[RegExp, Array<{ name: string; searchQuery: string; roles: string[] }>]> = [
   [/\b(career|interview|resume|job search|placement|job seekers?)\b/i, [
     { name: "Colleges and universities", searchQuery: "colleges with training and placement cell", roles: ["Training and Placement Officer", "Director", "Dean", "Principal"] },
+    { name: "Engineering and management colleges", searchQuery: "engineering and MBA colleges placement record", roles: ["Training and Placement Officer", "Head of Career Services", "Dean", "Principal"] },
     { name: "Coaching and training institutes", searchQuery: "job readiness training institutes", roles: ["Founder", "Director", "Head of Placements"] },
   ]],
   [/\b(courses?|tutoring|test prep|exam prep|e-?learning|students?)\b/i, [
     { name: "Schools and coaching centres", searchQuery: "coaching institutes and schools", roles: ["Principal", "Director", "Founder"] },
   ]],
+  [/\b(reviews?|reputation|local seo|listings|google business)\b/i, [
+    { name: "Multi-location local businesses", searchQuery: "multi-location dental and clinic chains", roles: ["Marketing Manager", "Owner", "Operations Manager"] },
+    { name: "Marketing agencies serving local businesses", searchQuery: "local SEO agencies", roles: ["Founder", "Managing Director", "Head of SEO"] },
+  ]],
+  [/\b(seo|content marketing|social media|ads|advertising|email marketing|newsletter|marketing automation|influencer)\b/i, [
+    { name: "D2C brands", searchQuery: "fast-growing D2C brands", roles: ["Founder", "Head of Marketing", "Head of Growth"] },
+    { name: "Digital marketing agencies", searchQuery: "digital marketing agencies", roles: ["Founder", "Managing Director", "Head of Strategy"] },
+  ]],
+  [/\b(crm|sales|prospecting|lead gen\w*|outbound|cold email|pipeline)\b/i, [
+    { name: "B2B SaaS startups", searchQuery: "seed and series A B2B SaaS startups", roles: ["Founder", "Head of Sales", "Head of Growth"] },
+    { name: "Agencies selling services", searchQuery: "B2B agencies and consultancies", roles: ["Founder", "Managing Director", "Business Development Head"] },
+  ]],
+  [/\b(e-?commerce|shopify|online store|checkout|cart|d2c|dropshipping)\b/i, [
+    { name: "Shopify and D2C stores", searchQuery: "D2C brands on Shopify", roles: ["Founder", "Head of E-commerce", "Head of Marketing"] },
+  ]],
+  [/\b(hr|hiring|recruit\w*|payroll|onboarding|employee)\b/i, [
+    { name: "Growing startups", searchQuery: "startups hiring fast", roles: ["Founder", "Head of People", "HR Manager"] },
+  ]],
+  [/\b(invoic\w*|accounting|bookkeeping|expense|billing|payments?|gst)\b/i, [
+    { name: "Small businesses and freelancers", searchQuery: "small business accountants and CA firms", roles: ["Founder", "Finance Manager", "Partner"] },
+  ]],
+  [/\b(api|developer|devops|database|hosting|observability|sdk|no-?code)\b/i, [
+    { name: "Software startups", searchQuery: "developer-first startups", roles: ["CTO", "Founder", "Head of Engineering"] },
+  ]],
+  [/\b(design|figma|branding|ui|ux|video editing|templates?)\b/i, [
+    { name: "Startups and creative agencies", searchQuery: "creative and design agencies", roles: ["Founder", "Creative Director", "Head of Design"] },
+  ]],
+  [/\b(customer support|help ?desk|chat ?bot|live chat|ticketing|whatsapp business)\b/i, [
+    { name: "Online businesses with support teams", searchQuery: "e-commerce and SaaS companies customer support", roles: ["Head of Support", "Founder", "Customer Success Lead"] },
+  ]],
+  [/\b(clinic|dental|patients?|healthcare|appointments?)\b/i, [
+    { name: "Clinics and dental practices", searchQuery: "dental clinics and multi-speciality clinics", roles: ["Medical Director", "Practice Manager", "Owner"] },
+  ]],
+  [/\b(restaurants?|food|menu|ordering|pos)\b/i, [
+    { name: "Restaurants and cafés", searchQuery: "restaurant groups and cafe chains", roles: ["Owner", "General Manager", "Operations Head"] },
+  ]],
+  [/\b(salons?|spas?|beauty|gyms?|fitness|yoga|bookings?)\b/i, [
+    { name: "Salons, spas and gyms", searchQuery: "salons spas and fitness studios", roles: ["Owner", "Studio Manager", "Founder"] },
+  ]],
+  [/\b(real estate|property|realtors?|brokers?)\b/i, [
+    { name: "Real estate agencies", searchQuery: "real estate agencies and brokers", roles: ["Founder", "Managing Director", "Sales Head"] },
+  ]],
+  [/\b(legal|law firms?|lawyers?|contracts?)\b/i, [
+    { name: "Law firms", searchQuery: "law firms and legal practices", roles: ["Managing Partner", "Partner", "Office Manager"] },
+  ]],
 ];
 
+// Every matching group, so a product that spans two markets (a booking app
+// for clinics) gets the buyers of both.
 export function buyerGroups(text: string): Array<{ name: string; searchQuery: string; roles: string[] }> {
-  return BUYER_GROUPS.find(([re]) => re.test(text))?.[1] ?? [];
+  return BUYER_GROUPS.filter(([re]) => re.test(text)).flatMap(([, groups]) => groups).slice(0, 4);
+}
+
+// Who decides at a prospect depends on what kind of organisation it is,
+// read from its own homepage: a college's principal, dean and placement
+// team; a clinic's medical director; a startup's founders.
+const ORG_ROLES: Array<[RegExp, string[]]> = [
+  [/\b(colleges?|universit(?:y|ies)|institutes?|polytechnics?|schools?|academy|academies|campus|faculty|placement cell|deemed university)\b/i, ["Principal", "Dean", "Director", "Head of Career Services", "Training and Placement Officer", "Career Counsellor", "Head of Placements"]],
+  [/\b(coaching|training institute|tuition|test prep|bootcamp|learning centre|learning center)\b/i, ["Founder", "Director", "Centre Head", "Academic Head", "Head of Placements"]],
+  [/\b(hospital|clinic|dental|healthcare provider|medical centre|medical center)\b/i, ["Medical Director", "Administrator", "Practice Manager", "Owner"]],
+  [/\b(agency|studio|consultancy|consulting firm)\b/i, ["Founder", "Managing Director", "CEO", "Head of Client Services"]],
+  [/\b(non-?profit|foundation|ngo|charity)\b/i, ["Executive Director", "Program Director", "CEO"]],
+  [/\b(restaurant|cafe|café|hotel|salon|spa|gym|store|shop)\b/i, ["Owner", "General Manager", "Founder"]],
+];
+
+export function rolesForCompany(company: { name: string; description: string | null }, campaignRoles: string[]): string[] {
+  const text = `${company.name} ${company.description ?? ""}`;
+  const org = ORG_ROLES.find(([re]) => re.test(text))?.[1];
+  return org ? [...new Set([...org, ...campaignRoles.filter((r) => /founder|ceo/i.test(r))])].slice(0, 7) : campaignRoles;
 }
 
 export function rolesFor(terms: string[]): string[] {
@@ -853,6 +941,24 @@ async function customerDomain(name: string, slug: string | null, storyUrl: strin
   return null;
 }
 
+// A readable company name: "Home" or a title in another script is replaced
+// by the name the description opens with ("IIT Bombay is one of..."), else
+// the domain's label.
+export function displayName(name: string, title: string | null, description: string | null, domain: string): string {
+  const fromDomain = name.toLowerCase().replace(/[^a-z0-9]/g, "") === domain.split(".")[0].replace(/[^a-z0-9]/g, "");
+  // "The Tamil Nadu Agricultural University (TNAU) had..." gives its name
+  // when the page only offered its domain ("Tnau").
+  const opening = (description ?? "").replace(/^the\s+/i, "").match(/^((?:[A-Z][\w&.'’-]*)(?:\s+(?:of|and|for|&)?\s*[A-Z][\w&.'’-]*){1,6})/);
+  if (fromDomain) return opening && opening[1].length > name.length ? opening[1] : name;
+  if (!/^(home|welcome|index|homepage)$/i.test(name.trim()) && /[A-Za-z]/.test(name)) return name;
+  const fromTitle = (title ?? "").split(/\s+[|\-–—·]\s+|:\s+/).map((t) => t.trim()).find((t) => /[A-Za-z]/.test(t) && !/^(home|welcome)$/i.test(t) && t.length <= 60);
+  if (fromTitle) return fromTitle;
+  const lead = (description ?? "").match(/^((?:[A-Z][\w&.'’-]*)(?:\s+(?:of|and|for|&)?\s*[A-Z][\w&.'’-]*){0,5})\s+(?:is|are|was|offers|provides)\b/);
+  if (lead) return lead[1];
+  const label = domain.split(".")[0];
+  return label.length <= 5 ? label.toUpperCase() : label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 export async function runCompanies(state: ProspectingState, ctx: StepContext): Promise<ProspectingState> {
   const research = state.research;
   const campaigns = (state.campaigns?.items ?? []).filter((c) => c.selected);
@@ -917,7 +1023,7 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
       continue;
     }
     const base = campaign.searchQuery.trim();
-    const qs = [base, /compan|startup|firm|agenc/i.test(base) ? `top ${base}` : `${base} companies`];
+    const qs = [base, /compan|startup|firm|agenc/i.test(base) ? `top ${base}` : `${base} companies`, `list of ${base}`, `${base} directory`, `${base} India`];
     for (const q of qs) {
       if (pastDeadline(ctx)) break;
       queries.push(q);
@@ -1003,7 +1109,7 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
       }
       return {
         domain: c.domain,
-        name: companyName(page, c.domain),
+        name: displayName(companyName(page, c.domain), page.title, description, c.domain),
         description,
         peopleUrl: peoplePage(page.links, page.domain),
         campaignId: c.campaignId,

@@ -115,7 +115,7 @@ test("brand-name results only count when they are about this company", () => {
   assert.equal(steps.aboutCompany(namesake, "Threadly", "gothreadly.live", terms), false);
   assert.equal(steps.aboutCompany(ours, "Threadly", "gothreadly.live", terms), true);
   const qs = steps.competitorQueries("Notion", "notion.com", ["AI workspace"], [], []);
-  assert.deepEqual(qs.map((q) => q.q), ["Notion alternatives", "Notion competitors", "Notion vs", "best AI workspace software", "Notion alternatives", "sites like Notion"]);
+  assert.deepEqual(qs.map((q) => q.q), ["Notion alternatives", "Notion competitors", "Notion vs", "best AI workspace software", "Notion alternatives", "sites like Notion", "Notion alternative reddit", "Notion review pros cons", "companies like Notion", "top AI workspace tools", "AI workspace startups"]);
   assert.deepEqual(qs[4].includeDomains, ["alternativeto.net", "saashub.com", "g2.com", "capterra.com", "producthunt.com"], "comparison directories are searched too");
   assert.ok(qs.filter((q) => q.q.startsWith("Notion")).every((q) => q.brand), "brand queries are checked");
 });

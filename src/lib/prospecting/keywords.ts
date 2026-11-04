@@ -27,7 +27,7 @@ const STOP = new Set("a an the and or for to of in on with your our you we is ar
 // keywords and the product areas it lists.
 const FILLER = /\b(link|links|next|message|messages|call|click|page|here|learn|more|now|today|start|sign|login|menu|home)\b/;
 
-export function serviceKeywords(input: { phrases: string[]; keywords: string[]; areas: string[]; related?: string[] }, max = 12): string[] {
+export function serviceKeywords(input: { phrases: string[]; keywords: string[]; areas: string[]; related?: string[] }, max = 16): string[] {
   const out: string[] = [];
   for (const k of [...input.phrases, ...input.keywords, ...(input.related ?? []), ...input.areas]) {
     const c = k.toLowerCase().replace(/[^a-z0-9 &+-]/g, " ").replace(/\s+/g, " ").trim();
@@ -40,9 +40,9 @@ export function serviceKeywords(input: { phrases: string[]; keywords: string[]; 
 }
 
 // How a buyer searches for each service.
-export function buyerQueries(services: string[], max = 24): string[] {
+export function buyerQueries(services: string[], max = 48): string[] {
   const qs: string[] = [];
-  for (const s of services) qs.push(`best ${s}`, `${s} recommendations`);
+  for (const s of services) qs.push(`best ${s}`, `${s} recommendations`, `top ${s} tools`);
   return [...new Set(qs)].slice(0, max);
 }
 

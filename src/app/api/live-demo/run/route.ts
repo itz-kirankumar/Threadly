@@ -9,7 +9,7 @@ import { keywordReport } from "@/lib/prospecting/keywords";
 import { draftLocalMessage, findLocalBusinesses, mapsProvider, serviceNeed } from "@/lib/prospecting/local";
 import { apolloPeople, findDecisionMakers, withProfiles, withXProfiles } from "@/lib/prospecting/people";
 import { extractPage } from "@/lib/prospecting/text";
-import { researchTerms, runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
+import { researchTerms, rolesForCompany, runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
 import { draftCompanyEmail, draftMessageSequence, draftPersonSequence, draftSocialReply, findSocialLeads, leadTopics, socialTopic, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
 import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, runCounter, search, searchAvailable } from "@/lib/prospecting/web";
@@ -216,10 +216,16 @@ export async function POST(request: Request) {
         }
         // The demo runs two campaigns: the first audience the site names (or
         // the visitor entered), and the competitors' customers.
+        // Prospects in the business's own market: "colleges with placement
+        // cells India" for an Indian product.
+        if (fit.place.country) {
+          const country = fit.place.country;
+          state.campaigns!.items = state.campaigns!.items.map((c) => (c.source === "competitors" || c.searchQuery.toLowerCase().includes(country.toLowerCase()) ? c : { ...c, searchQuery: `${c.searchQuery} ${country}` }));
+        }
         firstAudience = state.campaigns!.items.findIndex((c) => c.source !== "competitors");
         campaigns = state.campaigns!.items.map((c, i) => ({ ...c, selected: i === firstAudience || c.source === "competitors" }));
         state = { ...state, campaigns: { ...state.campaigns!, items: campaigns } };
-        const local = planned.has("local") ? localTypes.map((t) => ({ name: `${t.charAt(0).toUpperCase()}${t.slice(1)} in ${fit.place.city}`, description: fit.localTypes.includes(t) ? `Your site says you serve ${t}.` : "Local businesses that often need what you sell.", searchQuery: `${t} in ${fit.place.city}`, roles: ["Owner"], selected: true })) : [];
+        const local = planned.has("local") ? localTypes.map((t) => ({ name: `${t.charAt(0).toUpperCase()}${t.slice(1)} in ${fit.place.city}`, description: (fit.statedLocalTypes ?? []).includes(t) ? `Your site says you serve ${t}.` : `Usual buyers of ${r.category ? `a ${r.category}` : "what you sell"}, near you.`, searchQuery: `${t} in ${fit.place.city}`, roles: rolesForCompany({ name: t, description: t }, ["Owner"]), selected: true })) : [];
         send({ type: "result", step: "campaigns", data: [...(planned.has("companies") ? campaigns.slice(0, 4).map((c) => ({ name: c.name, description: c.description, searchQuery: c.searchQuery, roles: c.roles, selected: c.selected })) : []), ...local] });
         if (stopped()) return;
         }
@@ -258,7 +264,18 @@ export async function POST(request: Request) {
         if (localRun) {
           begin("local");
           const found = await localRun;
-          const businesses = found.items.map((b, i) => ({ ...b, sequence: i < 10 ? draftLocalMessage(sender, b) : null }));
+          const withPeople = await mapLimit(found.items.slice(0, 12), 6, async (b) => {
+            const want = rolesForCompany({ name: b.name, description: b.category }, ["Owner"]);
+            const site = b.website ? b.website.replace(/^https?:\/\/(www\.)?/, "").replace(/[/?#].*$/, "") : "";
+            // A listing without its own site has a name many places share
+            // ("Government Science College"); its people cannot be told apart.
+            if (!site) return { ...b, people: [] as Array<{ name: string; title: string; profileUrl: string | null }> };
+            const team = await withProfiles({ domain: site || b.name.toLowerCase().replace(/[^a-z0-9]/g, ""), company: b.name, people: [], source: null }, want, search, fit.place.country === "India" ? "in" : null).catch(() => null);
+            return { ...b, people: (team?.people ?? []).slice(0, 3).map((p) => ({ name: p.name, title: p.title, profileUrl: p.profileUrl ?? null })) };
+          });
+          const people = withPeople.reduce((n, b) => n + b.people.length, 0);
+          log(`found ${people} decision makers at the top ${withPeople.length} listings, searched by ${rolesForCompany({ name: localTypes[0], description: localTypes[0] }, ["Owner"]).slice(0, 3).join(", ")}`);
+          const businesses = [...withPeople, ...found.items.slice(12).map((b) => ({ ...b, people: [] }))].map((b, i) => ({ ...b, sequence: i < 10 ? draftLocalMessage(sender, b) : null }));
           send({ type: "result", step: "local", data: { provider: found.provider, city: fit.place.city, types: localTypes, businesses } });
           stats();
           if (stopped()) return;
@@ -287,19 +304,26 @@ export async function POST(request: Request) {
         // People each company names on its own team or leadership page, with
         // that page as the source. Emails are never guessed; a licensed
         // provider adds them in a workspace.
-        log(`reading each company's own team or leadership page for ${roles.slice(0, 3).join(", ")}`);
+        // Roles follow each company's kind: a college's principal, dean and
+        // placement team; a startup's founders.
+        const rolesOf = new Map(companies.map((c) => {
+          const own = campaigns.find((k) => k.id === c.campaignId)?.roles ?? roles;
+          return [c.domain, rolesForCompany(c, own)] as const;
+        }));
+        log(`reading each company's own team page and public profiles for the roles that decide there: ${[...new Set([...rolesOf.values()].flat())].slice(0, 6).join(", ")}`);
         const contactsBy = started + STEP_BUDGET_MS.contacts;
         // Then each person's public profile from a profile search, kept only
         // when its headline names the company; a company with no team page
         // is searched by role.
-        const found = await mapLimit(companies.slice(0, 12), 6, async (c) => {
+        const found = await mapLimit(companies.slice(0, 20), 6, async (c) => {
           if (Date.now() > contactsBy) return null;
-          const team = await findDecisionMakers(c, roles);
+          const want = rolesOf.get(c.domain) ?? roles;
+          const team = await findDecisionMakers(c, want);
           const country = /\bIndia(n)?\b/.test(c.description ?? "") || c.domain.endsWith(".in") ? "in" : null;
-          let linked = Date.now() > contactsBy ? team : await withProfiles(team, roles, search, country);
+          let linked = Date.now() > contactsBy ? team : await withProfiles(team, want, search, country);
           // Apollo only as a fallback, when public sources name nobody.
           if (!linked.people.length && Date.now() < contactsBy) {
-            const backup = await apolloPeople(c.domain, roles);
+            const backup = await apolloPeople(c.domain, want);
             if (backup.length) linked = { ...linked, people: backup };
           }
           if (linked.people.length && Date.now() < contactsBy) linked = await withXProfiles(linked, search);
@@ -326,7 +350,7 @@ export async function POST(request: Request) {
         log(provider
           ? `verified emails come from ${provider.label}, a licensed provider, inside a workspace`
           : "verified emails come only from a licensed contact provider inside a workspace; none are guessed here");
-        send({ type: "result", step: "contacts", data: { roles, companies: companies.slice(0, 12).map((c) => ({ name: c.name, domain: c.domain })), people } });
+        send({ type: "result", step: "contacts", data: { roles: [...new Set(companies.slice(0, 20).flatMap((c) => rolesOf.get(c.domain) ?? roles))].slice(0, 8), companies: companies.slice(0, 20).map((c) => ({ name: c.name, domain: c.domain, roles: rolesOf.get(c.domain) ?? roles })), people } });
         stats();
         if (stopped()) return;
 

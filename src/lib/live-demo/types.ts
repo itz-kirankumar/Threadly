@@ -35,6 +35,7 @@ export interface DemoFit {
   kind: string;
   sellsTo: string[];
   localTypes: string[];
+  statedLocalTypes?: string[];
   team: { count: number; label: string; source: string; url: string | null } | null;
   size: "small" | "mid-sized" | "large" | "unknown";
   place: { city: string | null; country: string | null };
@@ -57,6 +58,9 @@ export interface DemoLocalBusiness {
   mapsUrl: string | null;
   source: "Google Maps" | "OpenStreetMap";
   needs: string[];
+  // Decision makers there, searched by the roles that decide at this kind
+  // of organisation.
+  people?: Array<{ name: string; title: string; profileUrl: string | null }>;
   sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
 }
 export interface DemoLocal {
@@ -148,7 +152,8 @@ export interface DemoPerson {
 }
 export interface DemoContacts {
   roles: string[];
-  companies: Array<{ name: string; domain: string }>;
+  // Each company with the roles searched there, by its kind.
+  companies: Array<{ name: string; domain: string; roles?: string[] }>;
   people: DemoPerson[];
 }
 export interface DemoDraft {

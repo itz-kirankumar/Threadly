@@ -812,13 +812,13 @@ function ContactsStage({ contacts }: { contacts: DemoContacts }) {
   return (
     <div className="max-h-[56vh] overflow-auto pr-1 demo-scroll">
       <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-zinc-600">
-        <span>Roles for this campaign:</span>
+        <span>Roles searched, by each company's kind:</span>
         {contacts.roles.map((r) => <span key={r} className="rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-zinc-800">{r}</span>)}
       </div>
       <div className="space-y-4">
         {withPeople.map((c) => (
           <section key={c.domain}>
-            <p className="mb-2 text-sm font-semibold">{c.name} <span className="font-mono text-xs font-normal text-zinc-500">{c.domain}</span></p>
+            <p className="mb-2 text-sm font-semibold">{c.name} <span className="font-mono text-xs font-normal text-zinc-500">{c.domain}</span>{c.roles?.length ? <span className="ml-2 text-xs font-normal text-zinc-500">searched: {c.roles.slice(0, 4).join(", ")}</span> : null}</p>
             <ul className="grid gap-2 sm:grid-cols-2">
               {c.people.map((p) => {
                 const key = `${c.domain}-${p.name}`;
@@ -1132,6 +1132,11 @@ function LocalStage({ local }: { local: DemoLocal }) {
                     {b.mapsUrl ? <a href={b.mapsUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-[#111114] underline decoration-zinc-300 underline-offset-4 hover:text-[#5B3DF5]">{b.name}</a> : <p className="font-medium">{b.name}</p>}
                     <p className="text-xs text-[#6B6A72]">{[b.category, b.address].filter(Boolean).join(" · ")}</p>
                     {b.rating !== null && <p className="text-xs text-[#4A4950]">{b.rating.toFixed(1)} ★ · {b.reviews ?? 0} reviews</p>}
+                    {b.people && b.people.length > 0 && (
+                      <ul className="mt-1.5 space-y-0.5 text-xs">
+                        {b.people.map((p) => <li key={p.name}>{p.profileUrl ? <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-[#5B3DF5] underline decoration-violet-200 underline-offset-2">{p.name}</a> : <span className="font-medium">{p.name}</span>} <span className="text-[#6B6A72]">{p.title}</span></li>)}
+                      </ul>
+                    )}
                     {b.sequence && (
                       <button type="button" aria-expanded={open === key} onClick={() => setOpen(open === key ? null : key)} className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800 hover:border-violet-400">{open === key ? "Hide message flow" : "View message flow"}</button>
                     )}

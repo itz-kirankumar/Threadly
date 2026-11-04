@@ -42,6 +42,8 @@ export interface BusinessFit {
   sellsTo: SellsTo[];
   // Local business types it sells to ("dentists"), when it serves them.
   localTypes: string[];
+  // The local types the site names itself; the rest are usual buyers.
+  statedLocalTypes: string[];
   team: SizeStatement | null;
   size: "small" | "mid-sized" | "large" | "unknown";
   listed: string | null;
@@ -271,6 +273,7 @@ export function assessFit(ev: FitEvidence): BusinessFit {
   const headline = home ? home.text.split("\n").slice(0, 8).join(". ") : "";
   const { kind } = businessKind({ described, headline, body: ownText, html: ev.html });
   const localTypes = localTypesIn(ownText);
+  const statedLocalTypes = [...localTypes];
   const sellsTo = sellsToIn(ownText, kind, localTypes);
   // Career and learning products sell to people directly and to the
   // colleges and institutes that prepare them.
@@ -295,7 +298,7 @@ export function assessFit(ev: FitEvidence): BusinessFit {
       : size === "large" || size === "mid-sized"
         ? `${ev.name} has about ${team!.count.toLocaleString("en-US")} employees (${team!.source}).`
         : `${ev.name} is a ${size === "small" ? "small " : ""}${kind} selling to ${sellsTo.join(" and ")}${team ? ` (${team.label}, ${team.source})` : ""}.`;
-  return { inSegment, kind: physical ? "physical business" : kind, sellsTo, localTypes, team, size, listed, outlets, place, reason, facts, sources: ev.sources };
+  return { inSegment, kind: physical ? "physical business" : kind, sellsTo, localTypes, statedLocalTypes, team, size, listed, outlets, place, reason, facts, sources: ev.sources };
 }
 
 // ---- Gathering the evidence --------------------------------------------------------

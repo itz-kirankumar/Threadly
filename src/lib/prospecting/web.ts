@@ -271,7 +271,7 @@ export function searchAvailable(): boolean {
 
 // Searches in flight from this instance; more wait, so a wide run stays
 // under the search provider's rate limit.
-const SEARCH_SLOTS = 8;
+const SEARCH_SLOTS = 12;
 let searchesInFlight = 0;
 const searchQueue: Array<() => void> = [];
 
@@ -309,7 +309,9 @@ async function searchOnce(query: string, maxResults: number, options: { includeD
       api_key: apiKey,
       query,
       max_results: Math.min(20, maxResults),
-      search_depth: "basic",
+      // The owner chose result quality over search credits (4 Nov 2026):
+      // advanced depth unless TAVILY_SEARCH_DEPTH says otherwise.
+      search_depth: process.env.TAVILY_SEARCH_DEPTH === "basic" ? "basic" : "advanced",
       include_answer: false,
       ...(options.includeDomains?.length ? { include_domains: options.includeDomains } : {}),
       ...(options.timeRange ? { time_range: options.timeRange } : {}),
