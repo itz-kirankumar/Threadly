@@ -16,8 +16,11 @@ export interface PublicPerson {
   // "team page" when the company names them on its own site, "public
   // search" when they come only from a profile search result.
   via?: "team page" | "public search";
-  // The headshot the company publishes next to their name, if any.
+  // Their picture: the headshot on the company's own page, else the avatar
+  // of their public X profile.
   photoUrl?: string | null;
+  // Their public X profile, when its bio names the company.
+  xUrl?: string | null;
 }
 
 export interface CompanyPeople {
@@ -224,6 +227,70 @@ export function profileTitle(p: ProfileResult): string | null {
 }
 
 type Search = (q: string, max: number, options: { includeDomains: string[] }) => Promise<Array<{ title: string; url: string; content: string }>>;
+
+const X_RESERVED = new Set(["home", "search", "explore", "i", "intent", "share", "hashtag", "login", "signup", "settings", "messages", "notifications"]);
+
+// A person's public X profile from a search result: "Marie (@MarieMartens) /
+// X", kept only when the name matches and the bio or page names the company
+// or its domain. Its avatar is their public profile picture.
+export function xProfileFromResult(hit: { title: string; url: string; content: string }, person: string, company: { name: string; domain: string }): { handle: string; url: string } | null {
+  let u: URL;
+  try {
+    u = new URL(hit.url);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)(x|twitter)\.com$/.test(u.hostname)) return null;
+  const parts = u.pathname.split("/").filter(Boolean);
+  if (parts.length !== 1 || X_RESERVED.has(parts[0].toLowerCase()) || !/^[A-Za-z0-9_]{1,15}$/.test(parts[0])) return null;
+  const m = invisible(hit.title).match(/^(.+?)\s*\(@([A-Za-z0-9_]{1,15})\)/);
+  if (!m || m[2].toLowerCase() !== parts[0].toLowerCase()) return null;
+  const words = squashWords(person).split(" ");
+  const shown = squashWords(m[1]);
+  const handle = m[2].toLowerCase();
+  const sameName = shown === squashWords(person) || (words.length >= 2 && shown.includes(words[0]) && (shown.includes(words[words.length - 1]) || handle.includes(words[words.length - 1])));
+  const firstOnly = words.length >= 2 && shown === words[0] && (handle.includes(words[0]) || handle.includes(words[words.length - 1]));
+  if (!sameName && !firstOnly) return null;
+  const text = ` ${squashWords(`${hit.content}`)} `;
+  const label = company.domain.split(".")[0].toLowerCase();
+  const named = hit.content.toLowerCase().includes(company.domain) || text.includes(` ${squashWords(company.name)} `) || (label.length >= 4 && text.includes(` ${label}`));
+  return named ? { handle: m[2], url: `https://x.com/${m[2]}` } : null;
+}
+
+// Apollo's people search, used only as a fallback when the company's own
+// pages and public profiles name nobody. Needs APOLLO_API_KEY; names, titles,
+// LinkedIn links and photos only, never emails.
+export async function apolloPeople(domain: string, roles: string[], max = 3): Promise<PublicPerson[]> {
+  const key = process.env.APOLLO_API_KEY;
+  if (!key) return [];
+  const body = JSON.stringify({ q_organization_domains_list: [domain], person_titles: roles.length ? roles : ["founder", "ceo"], page: 1, per_page: max });
+  for (const path of ["mixed_people/search", "mixed_people/api_search"]) {
+    try {
+      const res = await fetch(`https://api.apollo.io/api/v1/${path}`, { method: "POST", headers: { "Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": key }, body, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) continue;
+      const data = (await res.json()) as { people?: Array<{ name?: string; first_name?: string; last_name?: string; title?: string; linkedin_url?: string; photo_url?: string }> };
+      const people = (data.people ?? [])
+        .map((p) => ({ name: (p.name ?? [p.first_name, p.last_name].filter(Boolean).join(" ")).trim(), title: (p.title ?? "").trim(), profileUrl: p.linkedin_url ?? null, photoUrl: p.photo_url && /^https:/.test(p.photo_url) ? p.photo_url : null, via: "public search" as const }))
+        .filter((p) => PERSON.test(p.name) && p.title);
+      if (people.length) return people.slice(0, max);
+    } catch {
+      // try the next endpoint
+    }
+  }
+  return [];
+}
+
+// Real pictures and a second channel: each person's public X profile when a
+// search finds one that names the company. LinkedIn photos are not fetched.
+export async function withXProfiles(team: CompanyPeople, search: Search, max = 2): Promise<CompanyPeople> {
+  const people = await Promise.all(team.people.map(async (person, i) => {
+    if (i >= max || person.xUrl) return person;
+    const hits = await search(`"${person.name}" ${team.company}`, 6, { includeDomains: ["x.com", "twitter.com"] }).catch(() => []);
+    const x = hits.map((h) => xProfileFromResult(h, person.name, { name: team.company, domain: team.domain })).find(Boolean);
+    return x ? { ...person, xUrl: x.url, photoUrl: person.photoUrl ?? `https://unavatar.io/x/${x.handle}?fallback=false` } : person;
+  }));
+  return { ...team, people };
+}
 
 // Adds public profile links: each person a team page named is looked up by
 // name and company; a company with no team page is searched by role. Only

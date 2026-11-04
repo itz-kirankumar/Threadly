@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { parseAuditDomain, parseRobotsGroups, robotsAllowsPath } from "../geo/openseo-engine.ts";
@@ -7,6 +8,17 @@ import type { PageSnapshot } from "./types.ts";
 export const BOT_UA = "ThreadlyBot/1.0 (+https://www.gothreadly.live/security)";
 const MAX_BYTES = 1_500_000;
 const MAX_REDIRECTS = 3;
+
+// Public sources read during one run (searches, search results, pages),
+// for showing the visitor how much the run read.
+export const runCounter = new AsyncLocalStorage<{ searches: number; sources: number }>();
+const counted = (searches: number, sources: number) => {
+  const c = runCounter.getStore();
+  if (c) {
+    c.searches += searches;
+    c.sources += sources;
+  }
+};
 
 export class FetchRefused extends Error {
   constructor(message: string) {
@@ -120,6 +132,7 @@ export async function fetchPage(domainOrUrl: string, timeoutMs = 8000): Promise<
     throw new FetchRefused("not an HTML page");
   }
   let page = extractPage(await readCapped(res));
+  counted(0, 1);
   // JavaScript-rendered sites ship almost no text in their HTML. When the
   // owner has configured Firecrawl, its hosted renderer reads the page
   // instead (robots.txt was already checked above).
@@ -256,16 +269,46 @@ export function searchAvailable(): boolean {
   return Boolean(process.env.TAVILY_API_KEY);
 }
 
+// Searches in flight from this instance; more wait, so a wide run stays
+// under the search provider's rate limit.
+const SEARCH_SLOTS = 8;
+let searchesInFlight = 0;
+const searchQueue: Array<() => void> = [];
+
+async function withSearchSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (searchesInFlight >= SEARCH_SLOTS) await new Promise<void>((r) => searchQueue.push(r));
+  searchesInFlight++;
+  try {
+    return await fn();
+  } finally {
+    searchesInFlight--;
+    searchQueue.shift()?.();
+  }
+}
+
 export async function search(query: string, maxResults = 8, options: { includeDomains?: string[]; timeRange?: "month" | "year" } = {}): Promise<SearchHit[]> {
+  if (!process.env.TAVILY_API_KEY) return [];
+  return withSearchSlot(async () => {
+    try {
+      return await searchOnce(query, maxResults, options);
+    } catch (error) {
+      // One retry after a short pause when rate limited.
+      if (!(error instanceof Error) || error.message !== "search_failed:429") throw error;
+      await new Promise((r) => setTimeout(r, 2500));
+      return searchOnce(query, maxResults, options);
+    }
+  });
+}
+
+async function searchOnce(query: string, maxResults: number, options: { includeDomains?: string[]; timeRange?: "month" | "year" }): Promise<SearchHit[]> {
   const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) return [];
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       api_key: apiKey,
       query,
-      max_results: maxResults,
+      max_results: Math.min(20, maxResults),
       search_depth: "basic",
       include_answer: false,
       ...(options.includeDomains?.length ? { include_domains: options.includeDomains } : {}),
@@ -275,7 +318,7 @@ export async function search(query: string, maxResults = 8, options: { includeDo
   });
   if (!response.ok) throw new Error(`search_failed:${response.status}`);
   const payload = (await response.json()) as { results?: Array<{ url?: unknown; title?: unknown; content?: unknown; published_date?: unknown }> };
-  return (payload.results ?? [])
+  const hits = (payload.results ?? [])
     .filter((r): r is { url: string; title?: unknown; content?: unknown; published_date?: unknown } => typeof r?.url === "string")
     .map((r) => {
       let domain = "";
@@ -293,6 +336,8 @@ export async function search(query: string, maxResults = 8, options: { includeDo
       };
     })
     .filter((r) => r.domain);
+  counted(1, hits.length);
+  return hits;
 }
 
 // Runs async work with bounded concurrency, preserving input order.
@@ -320,6 +365,7 @@ export async function fetchHtml(url: string, timeoutMs = 7000): Promise<{ html: 
     await res.body?.cancel().catch(() => {});
     throw new FetchRefused(`site answered ${res.status}`);
   }
+  counted(0, 1);
   return { html: await readCapped(res), finalUrl };
 }
 

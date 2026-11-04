@@ -208,6 +208,7 @@ export interface CompetitorQuery {
   q: string;
   // Results must be shown to be about this company before they count.
   brand: boolean;
+  includeDomains?: string[];
 }
 
 export function competitorQueries(name: string, domain: string, phrases: string[], keywords: string[], tracked: string[], areas: string[] = []): CompetitorQuery[] {
@@ -227,13 +228,15 @@ export function competitorQueries(name: string, domain: string, phrases: string[
   }
   if (tracked[0]) qs.push({ q: `${tracked[0]} alternatives`, brand: false });
   if (!brand) qs.push({ q: `${domain} alternatives`, brand: true });
+  // Directories list alternatives even for small products with no articles.
+  if (brand) qs.push({ q: `${brand} alternatives`, brand: true, includeDomains: ["alternativeto.net", "saashub.com", "g2.com", "capterra.com", "producthunt.com"] }, { q: `sites like ${brand}`, brand: true });
   const seen = new Set<string>();
   return qs.filter((x) => {
-    const k = x.q.toLowerCase();
+    const k = `${x.q.toLowerCase()}|${x.includeDomains?.join(",") ?? ""}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
-  }).slice(0, 6);
+  }).slice(0, 9);
 }
 
 // A brand-query result is about this company when it names the company and
@@ -318,7 +321,7 @@ export function rankCompetitorCandidates(
 // alternatives: HubSpot, Salesforce, Odoo, Freshsales...". Review sites'
 // snippets count here even though their pages cannot be read. Returns each
 // name with the number of distinct results naming it, most first.
-const NOT_A_NAME = new Set(("The This That These Those Best Top Free Pricing Price Plans Plan Features Feature Pros Cons Rating Ratings Reviews Review Alternatives Alternative Competitors Competitor Compare Comparison Software Tools Tool Platform Platforms App Apps CRM ERP AI API SaaS SMB B2B B2C Small Business Businesses Enterprise Teams Team Sales Marketing Support Finance Customer Customers Service Services Our We You Your It Its In For How What Why Who When Which Is Are Can And Or With Without Get See Learn Read More Start Try Sign Log Book Demo Overview Summary Conclusion Introduction Table Contents Updated Published January February March April May June July August September October November December Monday Tuesday Wednesday Thursday Friday Saturday Sunday Google Microsoft Apple Amazon Facebook LinkedIn Twitter Reddit YouTube Gmail Outlook Excel Windows Mac Android iOS Chrome ChatGPT Gemini Claude Perplexity Copilot Grok Llama OpenAI Anthropic Open While Email Legal Cloud Insights Data Teams Agents Agent Search Workspace Visibility Prospecting USA US UK India Europe One Two Three Four Five Six Seven Eight Nine Ten FAQ FAQs Key Main Final Bottom Line Verdict Option Options Choice Choices Vs Versus").split(" "));
+const NOT_A_NAME = new Set(("The This That These Those Best Top Free Pricing Price Plans Plan Features Feature Pros Cons Rating Ratings Reviews Review Alternatives Alternative Competitors Competitor Compare Comparison Software Tools Tool Platform Platforms App Apps CRM ERP AI API SaaS SMB B2B B2C Small Business Businesses Enterprise Teams Team Sales Marketing Support Finance Customer Customers Service Services Our We You Your It Its In For How What Why Who When Which Is Are Can And Or With Without Get See Learn Read More Start Try Sign Log Book Demo Overview Summary Conclusion Introduction Table Contents Updated Published January February March April May June July August September October November December Monday Tuesday Wednesday Thursday Friday Saturday Sunday Google Microsoft Apple Amazon Facebook LinkedIn Twitter Reddit YouTube Gmail Outlook Excel Windows Mac Android iOS Chrome ChatGPT Gemini Claude Perplexity Copilot Grok Llama OpenAI Anthropic Open While Email Legal Cloud Insights Data Teams Agents Agent Search Workspace Visibility Prospecting USA US UK India Europe One Two Three Four Five Six Seven Eight Nine Ten FAQ FAQs Key Main Final Bottom Line Verdict Option Options Choice Choices Vs Versus SEO SMS United States Kingdom Internet Request Requests Reputation Local Listings Review Pricing").split(" "));
 
 export function namesInResults(results: Array<Pick<SearchHit, "title" | "content">>, ownName: string, exclude: string[] = [], min = 3): Array<{ name: string; count: number }> {
   const own = ownName.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -380,15 +383,18 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
   const { phrases, primary, related } = researchTerms(research, ctx.brand.category);
   const allTerms = [...primary, ...related];
   const queries = competitorQueries(research.name, research.domain, phrases, research.keywords, tracked, research.categoryAreas ?? []);
+  // A namesake shares the name, not the vocabulary: the site's own keyword
+  // words ("reputation", "reviews") also show a result is about it.
+  const brandTerms = [...new Set([...allTerms, ...research.keywords.flatMap((k) => k.toLowerCase().split(/\s+/)).filter((w) => w.length >= 5)])];
   const hits: Array<SearchHit & { query: string }> = [];
   const brandUrls = new Set<string>();
   if (searchAvailable()) {
-    const batches = await mapLimit(queries, 3, async ({ q, brand }) => {
-      ctx.log(`searching the web: "${q}"`);
+    const batches = await mapLimit(queries, 4, async ({ q, brand, includeDomains }) => {
+      ctx.log(`searching the web: "${q}"${includeDomains ? " on comparison directories" : ""}`);
       try {
-        const results = await search(q, 10);
+        const results = await search(q, 20, includeDomains ? { includeDomains } : {});
         // Brand results must be about this company, not a namesake.
-        const kept = brand ? results.filter((r) => aboutCompany(r, research.name, research.domain, allTerms)) : results;
+        const kept = brand ? results.filter((r) => aboutCompany(r, research.name, research.domain, brandTerms)) : results;
         if (brand) for (const r of kept) brandUrls.add(r.url);
         ctx.log(`  "${q}": ${results.length} results${brand && kept.length < results.length ? `, ${results.length - kept.length} about a different product with the same name` : ""}`);
         return kept.map((r) => ({ ...r, query: q }));
@@ -407,7 +413,7 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
     .filter((h) => !isHomepage(h.url) && !UNREADABLE_ARTICLES.test(rootDomain(h.domain)) && !isProfileSite(rootDomain(h.domain)) && rootDomain(h.domain) !== research.domain)
     .filter((h, i, all) => all.findIndex((x) => x.url === h.url) === i)
     .sort((a, b) => Number(brandUrls.has(b.url)) - Number(brandUrls.has(a.url)) || Number(LIST_TITLE.test(b.title) || /alternative|competitor|\bvs\b/i.test(b.title)) - Number(LIST_TITLE.test(a.title) || /alternative|competitor|\bvs\b/i.test(a.title)))
-    .slice(0, 12);
+    .slice(0, 24);
   if (articles.length) ctx.log(`reading ${articles.length} comparison articles for the companies they link to`);
   const articleLinks = (
     await mapLimit(articles, 6, async (a) => {
@@ -460,7 +466,7 @@ export async function runCompetitors(state: ProspectingState, ctx: StepContext):
   const offTopic: string[] = [];
   const unreachable: string[] = [];
   const audienceTally = new Map<string, { phrase: string; count: number; quote: string; url: string }>();
-  const checked = await mapLimit(items, 6, async (c): Promise<(Competitor & { matched: number }) | null> => {
+  const checked = await mapLimit(items, 10, async (c): Promise<(Competitor & { matched: number }) | null> => {
     if (pastDeadline(ctx) && !c.tracked) return null;
     try {
       const page = await fetchPage(c.domain, 6000);
@@ -557,8 +563,9 @@ export function rolesFor(terms: string[]): string[] {
   return ROLE_RULES.find(([re]) => re.test(text))?.[1] ?? DEFAULT_ROLES;
 }
 
-function titleCase(s: string): string {
-  return s.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+// "india's fastest growing" becomes "India's Fastest Growing", not "India'S".
+export function titleCase(s: string): string {
+  return s.replace(/(^|[\s(/-])([a-z])/g, (_m, pre: string, c: string) => pre + c.toUpperCase());
 }
 
 export function campaignsFromAudiences(audiences: Array<{ phrase: string; quote: string }>, url: string | undefined, at: string, roles: string[] = DEFAULT_ROLES): Campaign[] {
@@ -636,22 +643,8 @@ export async function runCampaigns(state: ProspectingState, ctx: StepContext): P
     });
     ctx.log(`your homepage names no audience; using "${theirs.phrase}", which your competitors name`);
   }
-  // Still nothing: propose one campaign from the site's own top keyword
-  // phrase, labelled as such, so the run can continue.
-  const phrase = phrases[0] || research.keywords.find((k) => k.includes(" ")) || research.keywords[0];
-  if (!items.length && phrase) {
-    items.push({
-      id: `cmp_${randomUUID().slice(0, 8)}`,
-      name: titleCase(`Companies that need ${phrase}`),
-      description: `Suggested from "${phrase}" on your homepage. Edit it to describe who you sell to.`,
-      searchQuery: `companies investing in ${phrase}`,
-      roles,
-      source: "homepage",
-      evidence: [{ kind: "page", url: page?.finalUrl, quote: `keyword: ${phrase}`, at }],
-      selected: true,
-    });
-    ctx.log(`no audience named on the homepage; suggested one campaign from "${phrase}"`);
-  }
+  // Nothing named on the site or by competitors: no campaign is invented
+  // from a tagline; the visitor can enter the audience instead.
   items = items.slice(0, 6);
   if (!items.length) ctx.log("no audience statements found; add a campaign describing who you sell to");
   else ctx.log(`prepared ${items.length} campaign${items.length === 1 ? "" : "s"}; edit, remove or add your own before continuing`);
@@ -883,7 +876,7 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
       queries.push(q);
       ctx.log(`searching the web for ${campaign.name}: "${q}"`);
       try {
-        const results = await search(q, 10);
+        const results = await search(q, 20);
         let added = 0;
         const add = (domain: string, ev: Evidence) => {
           const d = rootDomain(domain);
@@ -899,7 +892,7 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
           if (isHomepage(r.url)) add(r.domain, { kind: "search", query: q, url: r.url, at });
           // Only pages that look like company lists are mined for links;
           // news and opinion articles link to everything.
-          else if (lists.length < 3 && !exclude.has(rootDomain(r.domain)) && LIST_TITLE.test(r.title)) lists.push(r);
+          else if (lists.length < 6 && !exclude.has(rootDomain(r.domain)) && LIST_TITLE.test(r.title)) lists.push(r);
         }
         const linked = await mapLimit(lists, 3, async (list) => {
           try {
@@ -927,7 +920,7 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
   ctx.log(`reading ${limited.length} company homepages (robots.txt respected)`);
 
   const skipped: Array<{ domain: string; reason: string }> = [];
-  const read = await mapLimit(limited, 6, async (c): Promise<ProspectCompany | null> => {
+  const read = await mapLimit(limited, 10, async (c): Promise<ProspectCompany | null> => {
     if (pastDeadline(ctx)) {
       skipped.push({ domain: c.domain, reason: "not read in time" });
       return null;

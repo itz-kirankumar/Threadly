@@ -10,7 +10,7 @@ const PRIORITY_STYLE: Record<Priority, string> = {
   Warm: "bg-[#EEEBFF] text-[#2F1FA8]",
   Cold: "bg-[#F3F2EE] text-[#4A4950]",
 };
-const KIND_COLOR: Record<LeadKind, string> = { "Person asking": "#5B3DF5", "Decision maker": "#111114", Company: "#A3A1AB" };
+const KIND_COLOR: Record<LeadKind, string> = { "Person asking": "#5B3DF5", "Decision maker": "#111114", Company: "#A3A1AB", "Local business": "#0E9F6E" };
 
 // Map coordinates: fit across, intent up, quadrants split at 50.
 const W = 420;

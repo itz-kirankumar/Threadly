@@ -1,17 +1,20 @@
 // Shared by the landing-page live demo route and its client.
 
-export const DEMO_STEPS = ["research", "crawler", "competitors", "campaigns", "companies", "social", "contacts", "pitch"] as const;
+// Every step a run can take. Each run takes only the steps its plan picks
+// for the business (a "plan" event), in this order.
+export const DEMO_STEPS = ["research", "crawler", "competitors", "campaigns", "companies", "local", "social", "contacts", "pitch"] as const;
 export type DemoStep = (typeof DEMO_STEPS)[number];
 
 export const DEMO_STEP_LABELS: Record<DemoStep, string> = {
-  research: "Research your company",
+  research: "Read your business",
   crawler: "AI readiness audit",
   competitors: "Map competitors",
-  campaigns: "Define a campaign",
+  campaigns: "Choose who to target",
   companies: "Find potential customers",
-  social: "Reddit, X and LinkedIn leads",
+  local: "Local businesses to serve",
+  social: "People asking online",
   contacts: "Decision makers",
-  pitch: "Write the first email",
+  pitch: "Write first messages",
 };
 
 export interface DemoResearch {
@@ -23,6 +26,44 @@ export interface DemoResearch {
   keywords: string[];
   iconDataUrl: string | null;
   readHomepage: boolean;
+  fit?: DemoFit;
+}
+// Whether Threadly serves this business (small digital businesses only),
+// what it is, who it sells to, and the evidence behind each conclusion.
+export interface DemoFit {
+  inSegment: boolean;
+  kind: string;
+  sellsTo: string[];
+  localTypes: string[];
+  team: { count: number; label: string; source: string; url: string | null } | null;
+  size: "small" | "mid-sized" | "large" | "unknown";
+  place: { city: string | null; country: string | null };
+  reason: string;
+  facts: Array<{ label: string; value: string; source: string; url: string | null }>;
+  sources: number;
+}
+export interface DemoPlan {
+  steps: DemoStep[];
+  plays: Array<{ step: DemoStep; why: string }>;
+}
+export interface DemoLocalBusiness {
+  name: string;
+  category: string | null;
+  address: string | null;
+  phone: string | null;
+  website: string | null;
+  rating: number | null;
+  reviews: number | null;
+  mapsUrl: string | null;
+  source: "Google Maps" | "OpenStreetMap";
+  needs: string[];
+  sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
+}
+export interface DemoLocal {
+  provider: string;
+  city: string;
+  types: string[];
+  businesses: DemoLocalBusiness[];
 }
 // Can AI assistants read the site, and does the homepage say clearly what
 // the business is? Weighted checks out of 100 (lib/geo/site-audit.ts); a
@@ -90,8 +131,10 @@ export interface DemoPerson {
   // Their public profile, from a search result whose headline names the company.
   profileUrl?: string | null;
   via?: "team page" | "public search";
-  // The headshot on the company's own team page, if any.
+  // Their picture: the company's own headshot, else their X avatar.
   photoUrl?: string | null;
+  // Their public X profile, when its bio names the company.
+  xUrl?: string | null;
   // Drafted first message and follow-ups; nothing is sent.
   sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
 }
@@ -115,6 +158,7 @@ export interface DemoResults {
   competitors?: DemoCompany[];
   campaigns?: DemoCampaign[];
   companies?: DemoCompany[];
+  local?: DemoLocal;
   social?: DemoSocial;
   contacts?: DemoContacts;
   pitch?: DemoDraft[];
@@ -127,5 +171,8 @@ export type DemoEvent =
   // One item found while the step is still running (a competitor, company
   // or social post), streamed so the visitor watches it arrive.
   | { type: "item"; step: DemoStep; data: unknown }
+  | { type: "plan"; data: DemoPlan }
+  // Public sources read so far: searches, results and pages.
+  | { type: "stats"; data: { searches: number; sources: number } }
   | { type: "error"; step: DemoStep | null; message: string }
   | { type: "end" };

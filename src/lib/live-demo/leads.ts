@@ -10,10 +10,10 @@
 // every number comes from what the run read, and "why" lists it.
 
 import { clampScore as clamp, combineScore as combine, companyFitIntent, priorityOf, rightRole, type Priority } from "../leads/score.ts";
-import type { DemoCompany, DemoPerson, DemoResults, DemoSocialLead } from "./types";
+import type { DemoCompany, DemoLocalBusiness, DemoPerson, DemoResults, DemoSocialLead } from "./types";
 
 export { priorityOf, type Priority };
-export type LeadKind = "Person asking" | "Decision maker" | "Company";
+export type LeadKind = "Person asking" | "Decision maker" | "Company" | "Local business";
 
 export interface ScoredLead {
   id: string;
@@ -104,8 +104,8 @@ export function scorePerson(person: DemoPerson, company: DemoCompany | undefined
     detail: person.title,
     source: person.via === "public search" ? "Public profile" : "Team page",
     platform: null,
-    profileUrl: person.profileUrl ?? null,
-    sourceUrl: person.source ?? person.profileUrl ?? null,
+    profileUrl: person.profileUrl ?? person.xUrl ?? null,
+    sourceUrl: person.source ?? person.profileUrl ?? person.xUrl ?? null,
     photoUrl: person.photoUrl ?? null,
     fit: clamp(base.fit),
     intent: clamp(intent),
@@ -144,6 +144,36 @@ export function scoreCompany(company: DemoCompany): ScoredLead {
   };
 }
 
+// A local business from the map: fit from what its listing lacks that the
+// visitor sells, reach from a phone or website on the listing.
+export function scoreLocal(b: DemoLocalBusiness): ScoredLead {
+  const gaps = b.needs.filter((n) => !/^Listed on/.test(n));
+  const fit = 50 + Math.min(40, gaps.length * 20);
+  const intent = 30 + (gaps.length ? 15 : 0);
+  const reach = b.phone ? 75 : b.website ? 60 : 35;
+  const score = combine(fit, intent, reach);
+  return {
+    id: `local:${b.name}:${b.address ?? ""}`,
+    kind: "Local business",
+    name: b.name,
+    company: b.name,
+    detail: [b.category, b.address].filter(Boolean).join(" · "),
+    source: b.source,
+    platform: null,
+    profileUrl: b.mapsUrl,
+    sourceUrl: b.website ?? b.mapsUrl,
+    photoUrl: null,
+    fit,
+    intent,
+    reach,
+    score,
+    priority: priorityOf(score),
+    why: [...gaps, ...(b.phone ? ["phone on the listing"] : [])],
+    reply: null,
+    sequence: b.sequence ?? null,
+  };
+}
+
 // All leads in the run, best first. A company appears as its decision makers
 // when any were found, and as itself otherwise, so nothing is counted twice.
 export function buildLeads(results: DemoResults, now = Date.now()): ScoredLead[] {
@@ -156,6 +186,7 @@ export function buildLeads(results: DemoResults, now = Date.now()): ScoredLead[]
     ...(results.social?.leads ?? []).filter((l) => l.intent !== "discussing the topic").map((l) => scoreAsk(l, competitors, now)),
     ...people.map((p) => scorePerson(p, companies.find((c) => c.domain === p.domain), roles)),
     ...companies.filter((c) => !withPeople.has(c.domain)).map(scoreCompany),
+    ...(results.local?.businesses ?? []).map(scoreLocal),
   ];
   return leads.sort((a, b) => b.score - a.score || b.intent - a.intent || a.name.localeCompare(b.name));
 }

@@ -4,11 +4,14 @@ import type { BrandProfile } from "@/lib/geo/types";
 import { reserveDemoRun } from "@/lib/live-demo/quota";
 import type { DemoEvent, DemoStep } from "@/lib/live-demo/types";
 import { contactProvider } from "@/lib/prospecting/contacts";
-import { findDecisionMakers, withProfiles } from "@/lib/prospecting/people";
+import { assessFit, gatherFitEvidence, planFor } from "@/lib/prospecting/fit";
+import { draftLocalMessage, findLocalBusinesses, mapsProvider, serviceNeed } from "@/lib/prospecting/local";
+import { apolloPeople, findDecisionMakers, withProfiles, withXProfiles } from "@/lib/prospecting/people";
+import { extractPage } from "@/lib/prospecting/text";
 import { researchTerms, runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
 import { draftCompanyEmail, draftMessageSequence, draftPersonSequence, draftSocialReply, findSocialLeads, leadTopics, socialTopic, type Sender } from "@/lib/prospecting/social";
 import type { ProspectingState } from "@/lib/prospecting/types";
-import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, search, searchAvailable } from "@/lib/prospecting/web";
+import { fetchHomepageRaw, fetchPreview, fetchSiteIcon, mapLimit, runCounter, search, searchAvailable } from "@/lib/prospecting/web";
 import { auditSite, organizationFacts } from "@/lib/geo/site-audit";
 
 export const runtime = "nodejs";
@@ -17,7 +20,7 @@ export const maxDuration = 300;
 
 // When each step stops starting new searches and page reads, counted from
 // the start of the run, so the whole run streams inside maxDuration.
-const STEP_BUDGET_MS = { competitors: 60_000, companies: 135_000, social: 185_000, contacts: 215_000 };
+const STEP_BUDGET_MS = { competitors: 80_000, companies: 160_000, local: 170_000, social: 200_000, contacts: 240_000 };
 
 // The landing-page live demo: runs the prospecting pipeline for one website
 // and streams each step as it happens (newline-delimited JSON). Nothing is
@@ -46,8 +49,13 @@ export async function POST(request: Request) {
   const target = domain;
   const started = Date.now();
   const encoder = new TextEncoder();
+  const counter = { searches: 0, sources: 0 };
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
+    start(controller) {
+      return runCounter.run(counter, () => run(controller));
+    },
+  });
+  async function run(controller: ReadableStreamDefaultController<Uint8Array>) {
       let closed = false;
       const send = (event: DemoEvent) => {
         if (closed) return;
@@ -64,6 +72,8 @@ export async function POST(request: Request) {
         send({ type: "step", step });
       };
       const log = (text: string) => send({ type: "log", step: current, text });
+      const logAs = (step: DemoStep) => (text: string) => send({ type: "log", step, text });
+      const stats = () => send({ type: "stats", data: { ...counter } });
 
       try {
         begin("research");
@@ -83,16 +93,45 @@ export async function POST(request: Request) {
         state = await runResearch(state, ctx);
         const r = state.research!;
         const phrases = r.categoryPhrases ?? [];
-        send({ type: "result", step: "research", data: { name: r.name, domain: r.domain, summary: r.summary, category: r.category ?? null, keywords: [...new Set([...phrases.filter((p) => !/\s(and|&)\s/i.test(p)), ...r.keywords])].slice(0, 8), iconDataUrl: preview?.iconDataUrl ?? null, readHomepage: Boolean(r.page) } });
+        // Who this business is and how big: Threadly serves small digital
+        // businesses, and a run for anything else stops here with the reason.
+        const home = await fetchHomepageRaw(target).catch(() => ({ html: "", finalUrl: `https://${target}/`, status: 0, ms: 0 }));
+        const terms = researchTerms(r, brand.category);
+        const evidence = await gatherFitEvidence({
+          name: r.name,
+          domain: r.domain,
+          category: r.category ?? null,
+          terms: [...terms.primary, ...terms.related],
+          home: r.page ? { ...r.page, links: extractPage(home.html).links } : null,
+          html: home.html,
+          location: organizationFacts(home.html).location,
+          log,
+        });
+        const fit = assessFit(evidence);
+        for (const f of fit.facts.slice(0, 6)) log(`  ${f.label}: ${f.value} (${f.source})`);
+        log(fit.inSegment ? `fits: ${fit.reason}` : `not served yet: ${fit.reason}`);
+        const plays = fit.inSegment ? planFor(fit, mapsProvider()) : [];
+        send({ type: "result", step: "research", data: { name: r.name, domain: r.domain, summary: r.summary, category: r.category ?? null, keywords: [...new Set([...phrases.filter((p) => !/\s(and|&)\s/i.test(p)), ...r.keywords])].slice(0, 8), iconDataUrl: preview?.iconDataUrl ?? null, readHomepage: Boolean(r.page), fit } });
+        send({ type: "plan", data: { steps: ["research", ...plays.map((p) => p.step)], plays } });
+        stats();
+        if (!fit.inSegment) {
+          send({ type: "end" });
+          return;
+        }
+        const planned = new Set<DemoStep>(plays.map((p) => p.step));
         if (stopped()) return;
+        const sender: Sender = { name: r.name, domain: r.domain, summary: r.summary, category: r.category ?? brand.category, keywords: r.keywords };
+        // Local businesses from the map start now, in the background: a
+        // scraper job can take a minute or two.
+        const localTypes = fit.localTypes.length ? fit.localTypes.slice(0, 3) : ["restaurants", "clinics"];
+        const localRun = planned.has("local") && fit.place.city
+          ? findLocalBusinesses(localTypes, fit.place.city, serviceNeed(`${r.category ?? ""} ${r.summary} ${r.keywords.join(" ")}`), { deadline: started + STEP_BUDGET_MS.local, log: logAs("local"), limit: 40 })
+          : null;
 
         begin("crawler");
         log(`reading https://${target}/robots.txt`);
         log(`checking https://${target}/llms.txt`);
-        const [audit, home] = await Promise.all([
-          runOpenSeoAudit(target),
-          fetchHomepageRaw(target).catch(() => ({ html: "", finalUrl: `https://${target}/`, status: 0, ms: 0 })),
-        ]);
+        const audit = await runOpenSeoAudit(target);
         for (const b of audit.crawlerStatuses) log(`${b.userAgent}: ${b.status === "blocked" ? "blocked" : "can crawl"}`);
         log(`reading homepage markup: title, description, schema.org, Open Graph (${home.ms} ms)`);
         const site = auditSite({
@@ -130,8 +169,19 @@ export async function POST(request: Request) {
           return item;
         });
         send({ type: "result", step: "competitors", data: competitorList });
+        stats();
         if (stopped()) return;
 
+        // People asking online, searched in the background meanwhile.
+        const { primary, related } = researchTerms(r, brand.category);
+        const [topic, ...also] = leadTopics(phrases, related, socialTopic(brand.category, r.keywords, brand.name), r.categoryAreas ?? []);
+        const rivals = state.competitors!.items.slice(0, 8).map((c) => c.name);
+        const toLead = (lead: Awaited<ReturnType<typeof findSocialLeads>>[number], reply: string | null, sequence: ReturnType<typeof draftMessageSequence> | null = null) => ({ platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, authorName: lead.authorName, profileUrl: lead.profileUrl, community: lead.community, intent: lead.intent, matched: lead.matched, reply, sequence, postedAt: lead.postedAt, window: lead.window });
+        const socialRun = findSocialLeads({ topic, also, competitors: rivals, primary, related, brand: r.name }, logAs("social"), 60, (lead) => send({ type: "item", step: "social", data: toLead(lead, null) }));
+
+        let campaigns = [] as NonNullable<ProspectingState["campaigns"]>["items"];
+        let firstAudience = -1;
+        if (planned.has("campaigns")) {
         begin("campaigns");
         state = await runCampaigns(state, ctx);
         if (audience) {
@@ -150,12 +200,16 @@ export async function POST(request: Request) {
         }
         // The demo runs two campaigns: the first audience the site names (or
         // the visitor entered), and the competitors' customers.
-        const firstAudience = state.campaigns!.items.findIndex((c) => c.source !== "competitors");
-        const campaigns = state.campaigns!.items.map((c, i) => ({ ...c, selected: i === firstAudience || c.source === "competitors" }));
+        firstAudience = state.campaigns!.items.findIndex((c) => c.source !== "competitors");
+        campaigns = state.campaigns!.items.map((c, i) => ({ ...c, selected: i === firstAudience || c.source === "competitors" }));
         state = { ...state, campaigns: { ...state.campaigns!, items: campaigns } };
-        send({ type: "result", step: "campaigns", data: campaigns.slice(0, 4).map((c) => ({ name: c.name, description: c.description, searchQuery: c.searchQuery, roles: c.roles, selected: c.selected })) });
+        const local = planned.has("local") ? localTypes.map((t) => ({ name: `${t.charAt(0).toUpperCase()}${t.slice(1)} in ${fit.place.city}`, description: fit.localTypes.includes(t) ? `Your site says you serve ${t}.` : "Local businesses that often need what you sell.", searchQuery: `${t} in ${fit.place.city}`, roles: ["Owner"], selected: true })) : [];
+        send({ type: "result", step: "campaigns", data: [...(planned.has("companies") ? campaigns.slice(0, 4).map((c) => ({ name: c.name, description: c.description, searchQuery: c.searchQuery, roles: c.roles, selected: c.selected })) : []), ...local] });
         if (stopped()) return;
+        }
 
+        let companies: NonNullable<ProspectingState["companies"]>["items"] = [];
+        if (planned.has("companies")) {
         begin("companies");
         ctx.deadline = started + STEP_BUDGET_MS.companies;
         if (campaigns.some((c) => c.selected)) state = await runCompanies(state, ctx);
@@ -174,23 +228,28 @@ export async function POST(request: Request) {
             state = await runCompanies({ ...state, campaigns: { ...state.campaigns!, items } }, ctx);
           }
         }
-        const companies = state.companies!.items;
+        companies = state.companies!.items;
         const companyList = await mapLimit(companies, 6, async (c) => {
           const item = { domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms, signal: c.signal ?? null, iconDataUrl: await fetchSiteIcon(c.domain) };
           send({ type: "item", step: "companies", data: item });
           return item;
         });
         send({ type: "result", step: "companies", data: companyList });
+        stats();
         if (stopped()) return;
+        }
 
-        const sender: Sender = { name: r.name, domain: r.domain, summary: r.summary, category: r.category ?? brand.category, keywords: r.keywords };
+        if (localRun) {
+          begin("local");
+          const found = await localRun;
+          const businesses = found.items.map((b, i) => ({ ...b, sequence: i < 10 ? draftLocalMessage(sender, b) : null }));
+          send({ type: "result", step: "local", data: { provider: found.provider, city: fit.place.city, types: localTypes, businesses } });
+          stats();
+          if (stopped()) return;
+        }
 
         begin("social");
-        const { primary, related } = researchTerms(r, brand.category);
-        const [topic, ...also] = leadTopics(phrases, related, socialTopic(brand.category, r.keywords, brand.name), r.categoryAreas ?? []);
-        const rivals = state.competitors!.items.slice(0, 8).map((c) => c.name);
-        const toLead = (lead: Awaited<ReturnType<typeof findSocialLeads>>[number], reply: string | null, sequence: ReturnType<typeof draftMessageSequence> | null = null) => ({ platform: lead.platform, url: lead.url, title: lead.title, snippet: lead.snippet, author: lead.author, authorName: lead.authorName, profileUrl: lead.profileUrl, community: lead.community, intent: lead.intent, matched: lead.matched, reply, sequence, postedAt: lead.postedAt, window: lead.window });
-        const leads = await findSocialLeads({ topic, also, competitors: rivals, primary, related, brand: r.name }, log, 60, (lead) => send({ type: "item", step: "social", data: toLead(lead, null) }));
+        const leads = await socialRun;
         const asking = leads.filter((l) => l.intentScore > 0).length;
         log(`kept ${leads.length} posts about your market, ${asking} of them people asking; drafting replies to the top ${Math.min(5, asking)}`);
         // The top asks get a public reply and a direct message with two
@@ -200,7 +259,12 @@ export async function POST(request: Request) {
           return toLead(lead, top ? (await draftSocialReply(sender, lead)).body : null, top ? draftMessageSequence(sender, lead) : null);
         }));
         send({ type: "result", step: "social", data: { topic, leads: withReplies } });
+        stats();
         if (stopped()) return;
+        if (!planned.has("contacts")) {
+          send({ type: "end" });
+          return;
+        }
 
         begin("contacts");
         const roles = campaigns.find((c) => c.selected && c.source === "competitors")?.roles ?? campaigns.find((c) => c.selected)?.roles ?? [];
@@ -215,7 +279,13 @@ export async function POST(request: Request) {
         const found = await mapLimit(companies.slice(0, 12), 6, async (c) => {
           if (Date.now() > contactsBy) return null;
           const team = await findDecisionMakers(c, roles);
-          const linked = Date.now() > contactsBy ? team : await withProfiles(team, roles, search);
+          let linked = Date.now() > contactsBy ? team : await withProfiles(team, roles, search);
+          // Apollo only as a fallback, when public sources name nobody.
+          if (!linked.people.length && Date.now() < contactsBy) {
+            const backup = await apolloPeople(c.domain, roles);
+            if (backup.length) linked = { ...linked, people: backup };
+          }
+          if (linked.people.length && Date.now() < contactsBy) linked = await withXProfiles(linked, search);
           log(linked.people.length ? `  ${c.name}: ${linked.people.map((p) => `${p.name} (${p.title})${p.profileUrl ? " with profile" : ""}`).join(", ")}` : `  ${c.name}: no team page or matching public profile`);
           return linked;
         });
@@ -229,6 +299,7 @@ export async function POST(request: Request) {
             source: p.via === "public search" ? null : f.source,
             profileUrl: p.profileUrl ?? null,
             photoUrl: p.photoUrl ?? null,
+            xUrl: p.xUrl ?? null,
             via: p.via ?? "team page",
             // A drafted first message and follow-ups; nothing is sent.
             sequence: draftPersonSequence(sender, p, { name: f.company, description: company?.description ?? null }),
@@ -239,6 +310,7 @@ export async function POST(request: Request) {
           ? `verified emails come from ${provider.label}, a licensed provider, inside a workspace`
           : "verified emails come only from a licensed contact provider inside a workspace; none are guessed here");
         send({ type: "result", step: "contacts", data: { roles, companies: companies.slice(0, 12).map((c) => ({ name: c.name, domain: c.domain })), people } });
+        stats();
         if (stopped()) return;
 
         begin("pitch");
@@ -249,6 +321,7 @@ export async function POST(request: Request) {
           drafts.push({ company: company.name, domain: company.domain, subject: d.subject, body: d.body, sources: d.sources, engine: d.engine });
         }
         send({ type: "result", step: "pitch", data: drafts });
+        stats();
         send({ type: "end" });
       } catch (error) {
         const message = error instanceof StepBlocked
@@ -264,7 +337,6 @@ export async function POST(request: Request) {
           // already closed by the client
         }
       }
-    },
-  });
+  }
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
 }

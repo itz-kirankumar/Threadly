@@ -14,6 +14,9 @@ import {
   type DemoCrawler,
   type DemoDraft,
   type DemoEvent,
+  type DemoFit,
+  type DemoLocal,
+  type DemoPlan,
   type DemoResearch,
   type DemoResults,
   type DemoSocial,
@@ -50,7 +53,7 @@ const OnboardContext = createContext<() => void>(() => {});
 function ActionButton({ label, tone = "dark" }: { label: string; tone?: "dark" | "green" }) {
   const open = useContext(OnboardContext);
   return (
-    <button type="button" onClick={open} className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-px ${tone === "green" ? "bg-violet-600 hover:bg-violet-500" : "bg-zinc-900 hover:bg-violet-700"}`}>
+    <button type="button" onClick={open} style={tone === "green" ? undefined : { background: "#111114", color: "#fff" }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-px ${tone === "green" ? "bg-violet-600 hover:bg-violet-500" : "hover:opacity-90"}`}>
       {label}
     </button>
   );
@@ -84,12 +87,13 @@ function CountUp({ value, className }: { value: number; className?: string }) {
 // How long a visitor can look back at an earlier step before the story
 // returns to the live one.
 const RETURN_MS = 4000;
-// The run's eight steps, plus the report the visitor ends on.
+// The steps this run's plan picked, plus the report the visitor ends on.
 type View = DemoStep | "report";
-const VIEWS: View[] = [...DEMO_STEPS, "report"];
+const DEFAULT_VIEWS: View[] = [...DEMO_STEPS.filter((s) => s !== "local"), "report"];
 const VIEW_LABELS: Record<View, string> = { ...DEMO_STEP_LABELS, report: "Research report" };
 const RECENT_KEY = "threadly-recent-searches";
-const EXAMPLE_DOMAINS = ["stripe.com", "notion.so", "linear.app"];
+// Small digital businesses, the businesses Threadly serves.
+const EXAMPLE_DOMAINS = ["tally.so", "plausible.io", "senja.io"];
 
 const PLATFORM_STYLE: Record<string, string> = {
   Reddit: "bg-orange-50 text-orange-800 ring-orange-200",
@@ -114,6 +118,9 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   const [readAt, setReadAt] = useState("");
   // Set when the run cannot start: free runs used, or the demo is busy.
   const [blocked, setBlocked] = useState<null | "busy">(null);
+  const [plan, setPlan] = useState<DemoPlan | null>(null);
+  const [stats, setStats] = useState({ searches: 0, sources: 0 });
+  const VIEWS: View[] = useMemo(() => (plan ? (plan.steps.length > 1 ? [...plan.steps, "report"] : ["research"]) : DEFAULT_VIEWS), [plan]);
   const lastSwitch = useRef(0);
   const resultAt = useRef<Partial<Record<DemoStep, number>>>({});
   const abortRef = useRef<AbortController | null>(null);
@@ -188,7 +195,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     if (!follow || phase === "idle") return;
     if (viewing === "report") return;
     const next = VIEWS[VIEWS.indexOf(viewing) + 1];
-    if (!results[viewing]) return;
+    if (!next || !results[viewing]) return;
     if (next === "report" ? phase !== "done" : status[next] === "pending") return;
     const shownSince = Math.max(resultAt.current[viewing] ?? 0, lastSwitch.current);
     const timer = setTimeout(() => {
@@ -196,7 +203,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
       lastSwitch.current = Date.now();
     }, Math.max(0, shownSince + DWELL_MS - Date.now()));
     return () => clearTimeout(timer);
-  }, [follow, phase, viewing, results, status]);
+  }, [follow, phase, viewing, results, status, VIEWS]);
 
   const start = useCallback(async () => {
     const domain = normalizeDomain(input) ?? preview?.domain;
@@ -225,6 +232,8 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     setPhase("running");
     setError("");
     setResults({});
+    setPlan(null);
+    setStats({ searches: 0, sources: 0 });
     setStreamed(EMPTY_STREAM);
     setLogs([]);
     setFollow(true);
@@ -279,6 +288,10 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
           } else if (event.type === "result") {
             resultAt.current[event.step] = Date.now();
             setResults((prev) => ({ ...prev, [event.step]: event.data }));
+          } else if (event.type === "plan") {
+            setPlan(event.data);
+          } else if (event.type === "stats") {
+            setStats(event.data);
           } else if (event.type === "error") {
             setError(event.message);
             setPhase("error");
@@ -299,20 +312,11 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   }, [input, preview?.domain]);
 
   const runningStep = DEMO_STEPS.find((s) => status[s] === "running");
-  const counters = useMemo(() => {
-    let searches = 0;
-    let pages = 0;
-    for (const l of logs) {
-      if (/^searching/.test(l.text)) searches++;
-      const m = l.text.match(/read(?:ing)? (\d+)/);
-      if (m) pages += Number(m[1]);
-      else if (/^(fetching|reading https)/.test(l.text)) pages++;
-    }
-    return { searches, pages };
-  }, [logs]);
+  const counters = useMemo(() => ({ searches: stats.searches, pages: stats.sources }), [stats]);
   const brandName = results.research?.name ?? preview?.name ?? runDomain;
   const brandIcon = results.research?.iconDataUrl ?? preview?.iconDataUrl ?? null;
   const statusOf = (view: View): StepStatus => (view === "report" ? (phase === "done" ? "done" : "pending") : status[view]);
+  const fit = results.research?.fit;
   const goTo = (step: View) => {
     if (statusOf(step) === "pending") return;
     setFollow(false);
@@ -320,7 +324,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
   };
   // The step the story should be on: the one running, else the last one
   // with results.
-  const liveStep: View = runningStep ?? (phase === "done" ? "report" : [...DEMO_STEPS].reverse().find((s) => results[s]) ?? "research");
+  const liveStep: View = runningStep ?? (phase === "done" && VIEWS.includes("report") ? "report" : [...DEMO_STEPS].reverse().find((s) => results[s]) ?? "research");
   // While the run is live, looking back pauses the story briefly, then it
   // returns to the live step. Once finished, every step stays open to browse.
   useEffect(() => {
@@ -332,6 +336,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
     }, RETURN_MS);
     return () => clearTimeout(timer);
   }, [follow, phase, viewing, liveStep]);
+  const planned = (step: DemoStep) => VIEWS.includes(step);
   // At the end of the run, after the emails have been on screen a while,
   // offer onboarding once.
   useEffect(() => {
@@ -490,7 +495,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
             </button>
           </div>
-          <StoryBars viewing={viewing} ready={viewing !== "report" && Boolean(results[viewing])} follow={follow} finished={viewing === "report"} />
+          <StoryBars views={VIEWS} viewing={viewing} ready={viewing !== "report" && Boolean(results[viewing])} follow={follow} finished={viewing === "report"} />
 
           <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[300px_minmax(0,1fr)]">
             {/* Findings rail */}
@@ -508,10 +513,10 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                   </div>
                 )}
               </RailStep>
-              <RailStep n={2} step="crawler" status={status.crawler}>
+              {planned("crawler") && <RailStep n={VIEWS.indexOf("crawler") + 1} step="crawler" status={status.crawler}>
                 {results.crawler && <p className="demo-pop-in text-xs text-zinc-700"><span className="font-semibold">{results.crawler.score}/100</span> AI readiness · {results.crawler.bots.filter((b) => b.status === "blocked").length} crawlers blocked</p>}
-              </RailStep>
-              <RailStep n={3} step="competitors" status={status.competitors}>
+              </RailStep>}
+              {planned("competitors") && <RailStep n={VIEWS.indexOf("competitors") + 1} step="competitors" status={status.competitors}>
                 {competitorsShown.length > 0 && (
                   <div className="grid grid-cols-2 gap-1.5">
                     {competitorsShown.slice(0, 6).map((c) => (
@@ -523,33 +528,36 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                     {competitorsShown.length > 6 && <button type="button" onClick={() => goTo("competitors")} className="col-span-2 text-left text-xs text-zinc-500 hover:text-zinc-900">+{competitorsShown.length - 6} more</button>}
                   </div>
                 )}
-              </RailStep>
-              <RailStep n={4} step="campaigns" status={status.campaigns}>
+              </RailStep>}
+              {planned("campaigns") && <RailStep n={VIEWS.indexOf("campaigns") + 1} step="campaigns" status={status.campaigns}>
                 {results.campaigns?.[0] && <p className="demo-pop-in truncate rounded-lg border border-zinc-900 bg-white px-2.5 py-1.5 text-xs">{results.campaigns[0].name}</p>}
-              </RailStep>
-              <RailStep n={5} step="companies" status={status.companies}>
+              </RailStep>}
+              {planned("companies") && <RailStep n={VIEWS.indexOf("companies") + 1} step="companies" status={status.companies}>
                 {companiesShown.length > 0 && (
                   <div className="flex -space-x-1.5">
                     {companiesShown.slice(0, 8).map((c) => <span key={c.domain} className="demo-pop-in" title={c.domain}><Logo name={c.name} icon={c.iconDataUrl} size="h-6 w-6" /></span>)}
                   </div>
                 )}
-              </RailStep>
-              <RailStep n={6} step="social" status={status.social}>
+              </RailStep>}
+              {planned("local") && <RailStep n={VIEWS.indexOf("local") + 1} step="local" status={status.local}>
+                {results.local && <p className="demo-pop-in text-xs text-zinc-700">{results.local.businesses.length} businesses in {results.local.city} from {results.local.provider}</p>}
+              </RailStep>}
+              {planned("social") && <RailStep n={VIEWS.indexOf("social") + 1} step="social" status={status.social}>
                 {socialShown.length > 0 && (
                   <p className="text-xs text-zinc-700">
                     {(["Reddit", "X", "LinkedIn"] as const).map((p) => `${socialShown.filter((l) => l.platform === p).length} ${p}`).join(" · ")}
                   </p>
                 )}
-              </RailStep>
-              <RailStep n={7} step="contacts" status={status.contacts}>
-                {results.contacts && <p className="demo-pop-in text-xs text-zinc-700">{results.contacts.people.length} people named on company sites</p>}
-              </RailStep>
-              <RailStep n={8} step="pitch" status={status.pitch} />
-              <RailStep n={9} step="report" status={statusOf("report")} />
+              </RailStep>}
+              {planned("contacts") && <RailStep n={VIEWS.indexOf("contacts") + 1} step="contacts" status={status.contacts}>
+                {results.contacts && <p className="demo-pop-in text-xs text-zinc-700">{results.contacts.people.length} decision makers with profiles</p>}
+              </RailStep>}
+              {planned("pitch") && <RailStep n={VIEWS.indexOf("pitch") + 1} step="pitch" status={status.pitch} />}
+              {VIEWS.includes("report") && <RailStep n={VIEWS.length} step="report" status={statusOf("report")} />}
               <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3">
                 <p className="flex items-center gap-2 text-xs font-semibold">
                   {phase === "running" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />}
-                  {phase === "running" && runningStep ? `Working on step ${DEMO_STEPS.indexOf(runningStep) + 1} of ${VIEWS.length}` : phase === "done" ? "Run complete" : "Stopped"}
+                  {phase === "running" && runningStep ? `Working on step ${VIEWS.indexOf(runningStep) + 1} of ${VIEWS.length}` : phase === "done" ? (fit && !fit.inSegment ? "Stopped: not a fit yet" : "Run complete") : "Stopped"}
                 </p>
                 <ol ref={logBox} className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-600" aria-live="polite">
                   {logs.slice(-14).map((l, i, arr) => {
@@ -562,13 +570,14 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                     );
                   })}
                 </ol>
+                {stats.sources > 0 && <p className="mt-2 border-t border-zinc-100 pt-2 text-[11px] text-zinc-600"><span className="font-semibold tabular-nums">{stats.sources.toLocaleString()}</span> public sources read · {stats.searches} searches</p>}
               </div>
             </aside>
 
             {/* Stage */}
             <div key={viewing} className="demo-scroll min-h-0 min-w-0 overflow-y-auto px-4 py-5 sm:px-7">
               <div className="demo-story-in">
-                <StepHeader view={viewing} results={results} streamed={streamed} done={statusOf(viewing) === "done"} readAt={readAt} />
+                <StepHeader views={VIEWS} view={viewing} results={results} streamed={streamed} done={statusOf(viewing) === "done"} readAt={readAt} />
                 {viewing === "report" ? (
                   <ResearchReport
                     results={results}
@@ -577,7 +586,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
                     emails={results.pitch?.length ? <PitchStage drafts={results.pitch} /> : null}
                   />
                 ) : (
-                  <Stage step={viewing} status={status[viewing]} results={results} streamed={streamed} logs={logs.filter((l) => l.step === viewing)} counters={counters} brandIcon={brandIcon} />
+                  <Stage step={viewing} status={status[viewing]} results={results} streamed={streamed} logs={logs.filter((l) => l.step === viewing)} counters={counters} brandIcon={brandIcon} plan={plan} onRetry={() => { setFocusOpen(false); setPhase("idle"); setInput(""); setPreview(null); }} />
                 )}
               </div>
               {phase === "error" && (
@@ -594,7 +603,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
               {!follow && phase === "running" ? (
                 <button type="button" onClick={() => { setFollow(true); setViewing(liveStep); }} className="font-semibold text-zinc-900 underline underline-offset-4">Back to the live step</button>
               ) : (
-                phase === "done" ? "Run complete. Use the steps above to look back through it." : "Real public web data. Nothing is stored and nothing is sent."
+                phase === "done" ? (fit && !fit.inSegment ? "Threadly is built for small digital businesses." : "Run complete. Use the steps above to look back through it.") : "Real public web data. Nothing is stored and nothing is sent."
               )}
             </p>
             <ActionButton tone="green" label={phase === "done" ? "Get leads like these every week" : "Start with Threadly"} />
@@ -635,11 +644,11 @@ function OutOfRuns({ onEligibility }: { onEligibility: () => void }) {
 
 // Story-style progress: one bar per step. The bar of the step on screen
 // fills while its results are shown, then the story moves on.
-function StoryBars({ viewing, ready, follow, finished }: { viewing: View; ready: boolean; follow: boolean; finished: boolean }) {
-  const at = VIEWS.indexOf(viewing);
+function StoryBars({ views, viewing, ready, follow, finished }: { views: View[]; viewing: View; ready: boolean; follow: boolean; finished: boolean }) {
+  const at = views.indexOf(viewing);
   return (
     <div className="flex gap-1 bg-white/70 px-4 pb-2 sm:px-6" aria-hidden>
-      {VIEWS.map((s, i) => (
+      {views.map((s, i) => (
         <span key={s} className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200">
           {i < at || finished ? (
             <span className="block h-full w-full bg-violet-600" />
@@ -657,14 +666,15 @@ function StoryBars({ viewing, ready, follow, finished }: { viewing: View; ready:
 }
 
 // Sits at the top of every step: where you are and what the step found.
-function StepHeader({ view, results, streamed, done, readAt }: { view: View; results: DemoResults; streamed: Streamed; done: boolean; readAt: string }) {
+function StepHeader({ views, view, results, streamed, done, readAt }: { views: View[]; view: View; results: DemoResults; streamed: Streamed; done: boolean; readAt: string }) {
   const social = results.social?.leads ?? streamed.social;
   const summary: Record<View, string> = {
-    research: results.research ? `Read ${results.research.name} and pulled ${results.research.keywords.length} themes from its own words.` : "Reading the homepage.",
+    research: results.research?.fit ? (results.research.fit.inSegment ? `${results.research.fit.reason} Decided from ${results.research.fit.sources} public sources.` : `Checked against ${results.research.fit.sources} public sources.`) : results.research ? `Read ${results.research.name}; checking what it is and how big it is.` : "Reading the homepage.",
     crawler: results.crawler ? `${results.crawler.passed} of ${results.crawler.total} checks passed.` : "Checking what AI assistants can read.",
     competitors: `${(results.competitors ?? streamed.competitors).length} competitors, named by independent comparison sources.`,
     campaigns: results.campaigns ? `${results.campaigns.length} audience${results.campaigns.length === 1 ? "" : "s"} to prospect.` : "Choosing who to target.",
     companies: `${(results.companies ?? streamed.companies).length} potential customers, each with the reason it was found.`,
+    local: results.local ? `${results.local.businesses.length} local businesses in ${results.local.city} from ${results.local.provider}, ranked by how much they need you.` : "Searching the map for local businesses that need you.",
     social: `${social.filter((l) => l.intent !== "discussing the topic").length} people asking${social.some((l) => l.intent === "discussing the topic") ? `, ${social.filter((l) => l.intent === "discussing the topic").length} related conversations` : ""} on Reddit, X and LinkedIn.`,
     contacts: results.contacts ? `${results.contacts.people.length} decision makers from company team pages and public profiles, each with a message flow.` : "Reading each company's team page and public profiles.",
     pitch: results.pitch ? `${results.pitch.length} first emails written from each company's own words.` : "Writing first emails.",
@@ -674,7 +684,7 @@ function StepHeader({ view, results, streamed, done, readAt }: { view: View; res
     <header className="mb-4">
       <p className="flex items-center gap-1.5 text-xs text-[#6B6A72]">
         {!done && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#5B3DF5]" aria-hidden />}
-        Step {VIEWS.indexOf(view) + 1} of {VIEWS.length}{done ? (readAt ? ` · read live at ${readAt}` : "") : " · working"}
+        Step {views.indexOf(view) + 1} of {views.length}{done ? (readAt ? ` · read live at ${readAt}` : "") : " · working"}
       </p>
       <h3 className="mt-0.5 text-2xl font-medium tracking-tight text-[#111114]">{VIEW_LABELS[view]}</h3>
       <p className="mt-0.5 text-sm text-[#6B6A72]">{summary[view]}</p>
@@ -717,8 +727,8 @@ function LiveCard({ step, logs, counters }: { step: DemoStep; logs: LogLine[]; c
   );
 }
 
-function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults; streamed: Streamed; logs: LogLine[]; counters: { searches: number; pages: number }; brandIcon: string | null }) {
-  const { step, status, results, streamed, logs, counters, brandIcon } = props;
+function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults; streamed: Streamed; logs: LogLine[]; counters: { searches: number; pages: number }; brandIcon: string | null; plan: DemoPlan | null; onRetry: () => void }) {
+  const { step, status, results, streamed, logs, counters, brandIcon, plan, onRetry } = props;
   // Steps with live items show them as they arrive, before the final result.
   if (step === "competitors" && !results.competitors && streamed.competitors.length) return <CompetitorStage list={streamed.competitors} live summary={results.research} />;
   if (step === "companies" && !results.companies && streamed.companies.length) return <CompanyTable list={streamed.companies} live />;
@@ -728,6 +738,7 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
   switch (step) {
     case "research": {
       const r = data as DemoResearch;
+      if (r.fit && !r.fit.inSegment) return <NotServed name={r.name} fit={r.fit} onRetry={onRetry} />;
       return (
         <div className="mx-auto mt-4 max-w-xl rounded-2xl border border-zinc-200 bg-white p-7 shadow-sm">
           <div className="flex items-start gap-3">
@@ -748,6 +759,7 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
               </div>
             </>
           )}
+          {r.fit && <FitCard fit={r.fit} plan={plan} />}
         </div>
       );
     }
@@ -780,6 +792,8 @@ function Stage(props: { step: DemoStep; status: StepStatus; results: DemoResults
     }
     case "contacts":
       return <ContactsStage contacts={data as DemoContacts} />;
+    case "local":
+      return <LocalStage local={data as DemoLocal} />;
     case "pitch":
       return <PitchStage drafts={data as DemoDraft[]} />;
   }
@@ -808,30 +822,33 @@ function ContactsStage({ contacts }: { contacts: DemoContacts }) {
             <ul className="grid gap-2 sm:grid-cols-2">
               {c.people.map((p) => {
                 const key = `${c.domain}-${p.name}`;
+                const main = p.profileUrl ?? p.xUrl ?? p.source;
                 return (
                   <li key={key} className="demo-pop-in rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
                     <div className="flex items-start gap-3">
                       <Avatar name={p.name} src={p.photoUrl} size={44} />
                       <div className="min-w-0 flex-1">
-                        {p.profileUrl
-                          ? <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className="block truncate font-semibold text-zinc-900 hover:text-violet-700">{p.name}</a>
-                          : <p className="truncate font-semibold">{p.name}</p>}
+                        <p className="flex items-center gap-1.5">
+                          {main
+                            ? <a href={main} target="_blank" rel="noopener noreferrer" title={`Open ${p.name}'s ${p.profileUrl ? "LinkedIn" : p.xUrl ? "X" : "team page"} profile`} className="truncate font-semibold text-zinc-900 underline decoration-zinc-300 underline-offset-4 hover:text-violet-700 hover:decoration-violet-400">{p.name}</a>
+                            : <span className="truncate font-semibold">{p.name}</span>}
+                          {p.profileUrl && <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" aria-label={`${p.name} on LinkedIn`} className="shrink-0 rounded px-1 text-[10px] font-bold leading-4" style={{ background: "#0A66C2", color: "#fff" }}>in</a>}
+                          {p.xUrl && <a href={p.xUrl} target="_blank" rel="noopener noreferrer" aria-label={`${p.name} on X`} className="shrink-0 rounded px-1 text-[10px] font-bold leading-4" style={{ background: "#111114", color: "#fff" }}>X</a>}
+                        </p>
                         <p className="truncate text-xs text-zinc-600">{p.title}</p>
-                        <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
-                          {p.profileUrl && <a href={p.profileUrl} target="_blank" rel="noopener noreferrer" className={link}>LinkedIn profile</a>}
-                          {p.source && <a href={p.source} target="_blank" rel="noopener noreferrer" className={link}>Team page</a>}
-                          {p.via === "public search" && <span className="text-zinc-500">public profile search</span>}
+                        <p className="mt-1 text-[11px] text-zinc-500">
+                          {p.source ? <a href={p.source} target="_blank" rel="noopener noreferrer" className={link}>Named on their team page</a> : "From a public profile that names the company"}
                         </p>
                       </div>
                     </div>
                     {p.sequence && (
-                      <button type="button" aria-expanded={open === key} onClick={() => setOpen(open === key ? null : key)} className="mt-2 text-xs font-semibold text-violet-700">
+                      <button type="button" aria-expanded={open === key} onClick={() => setOpen(open === key ? null : key)} className="mt-3 w-full rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 hover:border-violet-400">
                         {open === key ? "Hide message flow" : "View message flow"}
                       </button>
                     )}
                     {open === key && p.sequence && (
                       <div className="mt-2">
-                        <MessageFlow to={p.name.split(/\s+/)[0]} sequence={p.sequence} profileUrl={p.profileUrl ?? p.source} openLabel={p.profileUrl ? "Open LinkedIn profile" : "Open team page"} action={<ActionButton label="Send from your workspace" />} />
+                        <MessageFlow to={p.name.split(/\s+/)[0]} sequence={p.sequence} action={<ActionButton label="Send from your workspace" />} />
                       </div>
                     )}
                   </li>
@@ -1033,6 +1050,104 @@ function PitchStage({ drafts }: { drafts: DemoDraft[] }) {
           <ActionButton tone="green" label="Find the decision maker and send" />
         </div>
       </div>
+    </div>
+  );
+}
+
+// Shown when the business is not one Threadly serves yet: the reason, with
+// the public facts it rests on, instead of leads that would not fit.
+function NotServed({ name, fit, onRetry }: { name: string; fit: DemoFit; onRetry: () => void }) {
+  return (
+    <div className="demo-pop-in mx-auto mt-4 max-w-xl rounded-2xl border border-zinc-200 bg-white p-7 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-700">Not a fit yet</p>
+      <h4 className="mt-1 text-xl font-semibold tracking-tight">We&apos;re starting with small digital businesses</h4>
+      <p className="mt-3 text-[15px] leading-relaxed text-zinc-700">
+        Threadly is initially serving small digital businesses: software and app makers, agencies, online stores, online courses and other online services, with a team of up to about 200 people. {fit.reason} So this run stops here, rather than finding leads that would not fit {name}.
+      </p>
+      {fit.facts.length > 0 && (
+        <ul className="mt-4 space-y-1.5 rounded-xl bg-zinc-50 p-3 text-sm">
+          {fit.facts.slice(0, 5).map((f) => (
+            <li key={`${f.label}-${f.value}`} className="flex flex-wrap gap-x-2">
+              <span className="font-semibold text-zinc-900">{f.label}</span>
+              <span className="text-zinc-700">{f.value}</span>
+              <span className="text-zinc-500">· {f.url ? <a href={f.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-violet-700">{f.source}</a> : f.source}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-xs text-zinc-500">Checked against {fit.sources} public sources: the site&apos;s own pages, Wikidata and public company profiles.</p>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button type="button" onClick={onRetry} className="rounded-lg px-3 py-1.5 text-xs font-semibold" style={{ background: "#111114", color: "#fff" }}>Try another website</button>
+        <ActionButton tone="green" label="Tell us about your business" />
+      </div>
+    </div>
+  );
+}
+
+const SELLS_LABEL: Record<string, string> = { businesses: "Businesses", "local businesses": "Local businesses", consumers: "Consumers" };
+
+// What the run concluded about the business, and the plays it chose.
+function FitCard({ fit, plan }: { fit: DemoFit; plan: DemoPlan | null }) {
+  return (
+    <div className="mt-6 border-t border-zinc-100 pt-5">
+      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+        <div><p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Business</p><p className="mt-0.5 font-semibold capitalize">{fit.kind}</p></div>
+        <div><p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Sells to</p><p className="mt-0.5 font-semibold">{fit.sellsTo.map((s) => SELLS_LABEL[s] ?? s).join(", ")}</p></div>
+        <div><p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Team</p><p className="mt-0.5 font-semibold">{fit.team ? fit.team.label : "Small (no public count)"}</p>{fit.team && <p className="text-[11px] text-zinc-500">{fit.team.url ? <a href={fit.team.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{fit.team.source}</a> : fit.team.source}</p>}</div>
+      </div>
+      {plan && plan.plays.length > 0 && (
+        <>
+          <p className="mt-5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Plan for this business</p>
+          <ol className="mt-2 space-y-1.5">
+            {plan.plays.map((p, i) => (
+              <li key={p.step} className="demo-pop-in flex gap-2 text-sm" style={{ animationDelay: `${i * 80}ms` }}>
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[11px] font-semibold text-white">{i + 2}</span>
+                <span><span className="font-semibold">{VIEW_LABELS[p.step]}</span> <span className="text-zinc-600">{p.why}</span></span>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Local businesses from the map that may need what the visitor sells, with
+// the listing facts behind each and a first message to send.
+function LocalStage({ local }: { local: DemoLocal }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (!local.businesses.length) return <p className="mt-16 text-center text-sm text-zinc-600">No listings found for {local.types.join(" or ")} in {local.city}.</p>;
+  return (
+    <div>
+      <div className="max-h-[52vh] overflow-auto rounded-2xl border border-black/[0.08] bg-white demo-scroll">
+        <table className="w-full min-w-[620px] border-separate border-spacing-0 text-sm">
+          <thead><tr>{["Business", "Why it may need you", "Contact"].map((h) => <th key={h} className="sticky top-0 z-10 bg-white px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[#6B6A72]">{h}</th>)}</tr></thead>
+          <tbody>
+            {local.businesses.map((b, i) => {
+              const key = `${b.name}-${i}`;
+              return (
+                <tr key={key} className="demo-row-in align-top" style={{ animationDelay: `${Math.min(i, 10) * 45}ms` }}>
+                  <td className="border-t border-black/[0.06] px-4 py-3">
+                    {b.mapsUrl ? <a href={b.mapsUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-[#111114] underline decoration-zinc-300 underline-offset-4 hover:text-[#5B3DF5]">{b.name}</a> : <p className="font-medium">{b.name}</p>}
+                    <p className="text-xs text-[#6B6A72]">{[b.category, b.address].filter(Boolean).join(" · ")}</p>
+                    {b.rating !== null && <p className="text-xs text-[#4A4950]">{b.rating.toFixed(1)} ★ · {b.reviews ?? 0} reviews</p>}
+                    {b.sequence && (
+                      <button type="button" aria-expanded={open === key} onClick={() => setOpen(open === key ? null : key)} className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800 hover:border-violet-400">{open === key ? "Hide message flow" : "View message flow"}</button>
+                    )}
+                    {open === key && b.sequence && <div className="mt-2"><MessageFlow to={b.name} sequence={b.sequence} action={<ActionButton label="Send from your workspace" />} /></div>}
+                  </td>
+                  <td className="border-t border-black/[0.06] px-4 py-3"><div className="flex flex-wrap gap-1">{b.needs.map((n) => <span key={n} className="rounded bg-[#EEEBFF] px-1.5 py-0.5 text-xs font-medium text-[#2F1FA8]">{n}</span>)}</div></td>
+                  <td className="border-t border-black/[0.06] px-4 py-3 text-xs text-[#4A4950]">
+                    {b.phone && <p>{b.phone}</p>}
+                    {b.website ? <a href={b.website} target="_blank" rel="noopener noreferrer" className="block max-w-[11rem] truncate text-[#5B3DF5] hover:underline">{b.website.replace(/^https?:\/\/(www\.)?/, "")}</a> : <p className="text-[#6B6A72]">No website listed</p>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-zinc-500">{local.provider === "OpenStreetMap" ? "Listings © OpenStreetMap contributors. Google Maps listings, with ratings and reviews, appear once your Maps source is connected." : `Listings from ${local.provider}.`} Drafts only: nothing is sent from the demo.</p>
     </div>
   );
 }

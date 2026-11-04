@@ -78,7 +78,7 @@ export function classifyIntent(text: string, title = text, platform: Platform = 
 
 // Brand names that are also ordinary words only count next to a category
 // word ("Clay" in a pottery thread is not the company).
-const COMMON_WORD_NAMES = new Set(["notion", "slack", "clay", "dust", "coda", "square", "monday", "pipeline", "glean", "cursor", "apollo", "mercury", "linear", "loom", "front", "close", "bolt", "wave", "craft", "bear", "things", "basecamp", "asana", "copper", "folk", "capsule", "nimble", "streak", "instantly", "reply", "outreach", "gong", "profound", "hunter", "kaspr", "affine", "obsidian"]);
+const COMMON_WORD_NAMES = new Set(["notion", "slack", "clay", "dust", "coda", "square", "monday", "pipeline", "glean", "cursor", "apollo", "mercury", "linear", "loom", "front", "close", "bolt", "wave", "craft", "bear", "things", "basecamp", "asana", "copper", "folk", "capsule", "nimble", "streak", "instantly", "reply", "outreach", "gong", "profound", "hunter", "podium", "birdeye", "tally", "senja", "plausible", "kaspr", "affine", "obsidian"]);
 
 function nameRegex(name: string): RegExp {
   const core = name.replace(/\.(com|io|ai|co|app|so)$/i, "").trim();
