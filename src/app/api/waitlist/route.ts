@@ -37,7 +37,14 @@ export async function POST(request: Request) {
 
   const existing = await loadApplication(email).catch(() => null);
   if (existing?.status === "invited") {
-    return Response.json({ status: "invited", score: existing.score, reasons: existing.reasons, tests: existing.tests ?? [], already: true });
+    // An invite that never reached the inbox is sent again.
+    let emailSent = existing.email_status?.sent ?? false;
+    if (!emailSent) {
+      const result = await sendLifecycleEmail("beta-invite", email, { company: existing.domain });
+      emailSent = result.sent;
+      await saveApplication({ ...existing, email_status: { kind: "beta-invite", sent: result.sent, at: new Date().toISOString(), ...(result.error ? { error: result.error } : {}) } }).catch(() => {});
+    }
+    return Response.json({ status: "invited", score: existing.score, reasons: existing.reasons, tests: existing.tests ?? [], already: true, emailSent });
   }
   // A few tries only, so answers cannot be tuned until they pass.
   const attempts = (existing?.attempts ?? 0) + 1;
@@ -95,15 +102,16 @@ export async function POST(request: Request) {
     appliedAt: existing?.appliedAt ?? now,
     ...(fit.qualified ? { invitedAt: now } : {}),
   };
+  // Every decision is emailed, invited or not, and the result is kept
+  // with the application so a failed send is visible and retried.
+  const kind = fit.qualified ? ("beta-invite" as const) : ("beta-waitlisted" as const);
+  const sent = await sendLifecycleEmail(kind, email, { company });
+  application.email_status = { kind, sent: sent.sent, at: new Date().toISOString(), ...(sent.error ? { error: sent.error } : {}) };
   try {
     await saveApplication(application);
   } catch (error) {
     console.error("[waitlist] save failed", error);
     return Response.json({ error: "Your request could not be saved. Try again shortly." }, { status: 503 });
   }
-  // Only the first waitlist email is sent; re-applying does not resend it.
-  if (fit.qualified || !existing) {
-    await sendLifecycleEmail(fit.qualified ? "beta-invite" : "beta-waitlisted", email, { company });
-  }
-  return Response.json({ status: application.status, score: fit.score, threshold: QUALIFY_SCORE, reasons: fit.reasons, tests: fit.tests, blockers: fit.blockers, attemptsLeft: MAX_APPLICATIONS - attempts, company });
+  return Response.json({ status: application.status, score: fit.score, threshold: QUALIFY_SCORE, reasons: fit.reasons, tests: fit.tests, blockers: fit.blockers, attemptsLeft: MAX_APPLICATIONS - attempts, company, emailSent: sent.sent });
 }

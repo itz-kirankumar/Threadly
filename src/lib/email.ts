@@ -9,8 +9,10 @@ export type LifecycleKind = "welcome-trial" | "trial-scan-complete" | "plan-upgr
 const PORTAL_URL = "https://www.gothreadly.live/portal";
 const PRICING_URL = "https://www.gothreadly.live/pricing";
 
+// The sender must be on a domain verified in Resend. EMAIL_FROM and
+// RESEND_FROM_EMAIL are both read, so either setting works.
 function sender(): string {
-  return process.env.EMAIL_FROM || "Threadly <hello@gothreadly.live>";
+  return process.env.EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "Threadly <hello@gothreadly.live>";
 }
 
 function shell(title: string, body: string, cta?: { label: string; url: string }, footnote = "you created a Threadly workspace at"): string {
@@ -80,8 +82,8 @@ function template(kind: LifecycleKind, ctx: { name?: string; plan?: string; comp
         html: shell(
           "Your invite is ready",
           `<p style="margin:0 0 12px;">Hi,</p>
-           <p style="margin:0 0 12px;">Thanks for requesting access${ctx.company ? ` for ${escapeHtml(ctx.company)}` : ""}. Your application qualified, so your account is approved for the Threadly beta.</p>
-           <p style="margin:0;">Sign in with Google using this email address to open your workspace. You pay only for what you use, and your first credits are on us.</p>`,
+           <p style="margin:0 0 12px;">Thanks for requesting access${ctx.company ? ` for ${escapeHtml(ctx.company)}` : ""}. Your application qualified, so your account is approved for Threadly.</p>
+           <p style="margin:0;">Sign in with Google, or with this email address and the one-time code we send you. Your workspace starts with 200 free credits a month, and credits you buy never expire.</p>`,
           { label: "Sign in to Threadly", url: PORTAL_URL },
           "you requested early access at",
         ),
@@ -113,20 +115,27 @@ export async function sendLifecycleEmail(
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { sent: false, error: "RESEND_API_KEY not configured" };
   const { subject, html } = template(kind, ctx);
-  try {
-    const response = await fetch(RESEND_ENDPOINT, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: sender(), to: [to], subject, html }),
-    });
-    if (!response.ok) {
+  const replyTo = process.env.RESEND_REPLY_TO;
+  let last = "send failed";
+  // One retry when Resend is rate limited or briefly down.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(RESEND_ENDPOINT, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: sender(), to: [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.ok) return { sent: true };
       const text = (await response.text()).slice(0, 300);
-      console.warn(`[email] lifecycle ${kind} to ${to} failed: ${response.status} ${text}`);
-      return { sent: false, error: `${response.status}: ${text}` };
+      last = `${response.status}: ${text}`;
+      console.error(`[email] lifecycle ${kind} to ${to} failed: ${last}`);
+      if (response.status !== 429 && response.status < 500) break;
+    } catch (error) {
+      last = error instanceof Error ? error.message : "send failed";
+      console.error(`[email] lifecycle ${kind} to ${to} error:`, error);
     }
-    return { sent: true };
-  } catch (error) {
-    console.warn(`[email] lifecycle ${kind} to ${to} error:`, error);
-    return { sent: false, error: error instanceof Error ? error.message : "send failed" };
+    await new Promise((r) => setTimeout(r, 1200));
   }
+  return { sent: false, error: last };
 }

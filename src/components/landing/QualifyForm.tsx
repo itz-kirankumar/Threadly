@@ -23,6 +23,8 @@ interface Outcome {
   locked?: boolean;
   company?: string;
   already?: boolean;
+  // Whether the decision email reached Resend.
+  emailSent?: boolean;
 }
 
 const TEAM_SIZES = ["1", "2-10", "11-50", "51-200", "200+"];
@@ -83,7 +85,7 @@ export default function QualifyForm({ defaultDomain = "", defaultEmail = "", pac
         <h3 className="mt-3 text-2xl font-semibold tracking-tight">{invited ? "You qualify. Welcome to Threadly." : "Sorry, we are unable to onboard you right now."}</h3>
         <p className="mt-2 text-sm leading-relaxed text-zinc-600">
           {invited
-            ? onQualified ? "Your account is approved and ready." : `${outcome.already ? "This email is already approved." : "Your invite is in your inbox."} Sign in with Google as ${form.email || "the email you applied with"}${pack ? ` and pick the ${pack} pack` : ""} to start.`
+            ? onQualified ? "Your account is approved and ready." : `${outcome.already ? "This email is already approved." : outcome.emailSent === false ? "You're approved. Your invite email could not be sent just now, but you can sign in already." : "Your invite is in your inbox."} Sign in as ${form.email || "the email you applied with"} with Google or the one-time code we email you${pack ? `, then pick the ${pack} pack` : ""}.`
             : outcome.locked ? "You have used all your applications for this email. We keep your application on file." : "Threadly is invite-only and onboards teams that pass our lead-generation checks. Your application is kept on file."}
         </p>
         {outcome.blockers && outcome.blockers.length > 0 && (

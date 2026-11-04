@@ -17,6 +17,9 @@ export interface WaitlistApplication {
   status: "invited" | "waitlisted";
   appliedAt: string;
   invitedAt?: string;
+  // The last eligibility email: which one, whether Resend accepted it, and
+  // why not when it did not.
+  email_status?: { kind: "beta-invite" | "beta-waitlisted"; sent: boolean; at: string; error?: string };
 }
 
 const memory = (globalThis as { __threadlyWaitlist?: Map<string, WaitlistApplication> }).__threadlyWaitlist ??= new Map();
