@@ -216,7 +216,6 @@ export default function ProspectingFlow({ authedFetch, getToken, brand, onOpenTa
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="ui-page-title">Prospecting</h2>
           <p className="ui-page-subtitle">
             From your website to researched prospects and draft emails. Every result links to the page or search it came from. Nothing is sent from here.
           </p>

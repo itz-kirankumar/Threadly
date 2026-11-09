@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSuiteSignal } from "@/lib/suite/signals";
 import { priorityOf } from "@/lib/leads/score";
 import type { CrmLead, CrmActivity, OutreachTemplate, CrmStats, LeadStage } from "@/lib/crm/types";
 
@@ -141,6 +142,28 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
     }
   }, [authedFetch, loadDraft, templates.length]);
 
+  // Search and "+ New" from the suite: open a lead, or the add-lead form.
+  const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
+  useSuiteSignal((signal) => {
+    if (signal.name === "new" && signal.action === "lead") {
+      setShowAdd(true);
+      return true;
+    }
+    if (signal.name === "open-record" && signal.kind === "Lead") {
+      setPendingLeadId(signal.id);
+      return true;
+    }
+    return false;
+  });
+  useEffect(() => {
+    if (!pendingLeadId) return;
+    const lead = leads.find((l) => l.id === pendingLeadId);
+    if (lead) {
+      setPendingLeadId(null);
+      void openLead(lead);
+    }
+  }, [pendingLeadId, leads, openLead]);
+
   async function discover() {
     setDiscovering(true);
     setNotice("");
@@ -271,7 +294,6 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="ui-page-title">Leads</h2>
           <p className="ui-page-subtitle">
             Candidate accounts and their history. Drafts here are for review; sending runs through approved Outbound campaigns.
           </p>

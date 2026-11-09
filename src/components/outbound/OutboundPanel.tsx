@@ -132,7 +132,6 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   return (
     <div className="grid gap-4">
       <div>
-        <h2 className="ui-page-title">Outbound</h2>
         <p className="ui-page-subtitle">
           Approval-gated campaign workflow, in preview. Nothing is sent from this surface: planning creates drafted intents only.
         </p>
@@ -287,7 +286,20 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
       </div>
 
       <div className={card}>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Import contacts (CSV)</h3>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Import contacts (CSV)</h3>
+          <button className={btn} disabled={busy} onClick={() => act(async () => {
+            // Leads with an email, as import rows. The rights checkbox below
+            // still has to be ticked before anything is committed.
+            const data = (await authedFetch("/api/crm/leads")) as { leads: { name: string; email: string; company: string; domain: string }[] };
+            const cell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+            const rows = (data.leads ?? []).filter((l) => l.email && l.name);
+            if (!rows.length) throw new Error("No saved lead has both a name and an email yet. Save leads from Prospecting first.");
+            setImportForm({ ...importForm, csv: ["email,fullName,accountName,accountDomain", ...rows.map((l) => [l.email, l.name, l.company, l.domain].map(cell).join(","))].join("\n"), sourceName: importForm.sourceName || "Threadly Leads" });
+            setImportPreview(null);
+            setImportResult(null);
+          })}>Load from Leads</button>
+        </div>
         <p className="mb-2 text-xs text-zinc-500">
           Columns required: email, fullName, accountName, accountDomain. Commit is blocked unless you confirm the source permits B2B marketing use; suppressed and previously imported contacts are reconciled, never resurrected.
         </p>

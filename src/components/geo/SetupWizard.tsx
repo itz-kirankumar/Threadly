@@ -85,12 +85,13 @@ export default function SetupWizard({ busy, error, onSave, initial, onCancel }: 
   const label = "mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-400";
 
   return (
-    <form onSubmit={submit} className="mx-auto max-w-xl space-y-5">
+    <form onSubmit={submit} className={`space-y-5 ${initial ? "" : "mx-auto max-w-xl"}`}>
       <div>
-        <h2 className="text-xl font-semibold text-white">{initial ? "Brand settings" : "Set up your brand"}</h2>
+        <h2 className={initial ? "text-base font-semibold text-white" : "text-xl font-semibold text-white"}>{initial ? "Brand profile" : "Set up your brand"}</h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Threadly asks ChatGPT, Claude and Gemini the questions your buyers ask, then measures whether
-          those answers mention and cite you versus your competitors.
+          {initial
+            ? "Who you are, what you sell and who you compete with. Prospecting, Leads, Social search and AI visibility scans all read this profile."
+            : "Threadly asks ChatGPT, Claude and Gemini the questions your buyers ask, then measures whether those answers mention and cite you versus your competitors."}
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">

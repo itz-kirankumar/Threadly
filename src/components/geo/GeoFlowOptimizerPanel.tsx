@@ -157,7 +157,6 @@ export default function GeoFlowOptimizerPanel({ brand, queries, authedFetch, rea
     <div className="space-y-6">
       <div className="flex flex-col gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="ui-page-title">Optimization</h2>
           <p className="ui-page-subtitle">
             Brand facts to publish, what your scans show for a question, the sources AI answers cite, and crawler access for your site.
           </p>

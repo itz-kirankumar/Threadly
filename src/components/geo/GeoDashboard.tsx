@@ -1,9 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { signOut, type User } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase-client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { User } from "firebase/auth";
 import type { GeoProviderId, MetricsSnapshot, QueryResult, ScanRun, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
 import { PROVIDER_ERROR_LABELS, type ProviderErrorClass } from "@/lib/geo/provider-error";
 import SetupWizard from "./SetupWizard";
@@ -16,7 +14,6 @@ import TeamPanel from "./TeamPanel";
 import BillingPanel from "./BillingPanel";
 import CreditsPanel from "./CreditsPanel";
 import ActivityPanel from "./ActivityPanel";
-import PipelineSummary from "./PipelineSummary";
 import ApiKeysPanel from "./ApiKeysPanel";
 import Tour, { TOUR_KEY } from "./Tour";
 import CrmOutreachPanel from "@/components/crm/CrmOutreachPanel";
@@ -24,7 +21,15 @@ import ProspectingFlow from "@/components/prospecting/ProspectingFlow";
 import CrmAccountsPanel from "@/components/crm/CrmAccountsPanel";
 import OutboundPanel from "@/components/outbound/OutboundPanel";
 import GeoFlowOptimizerPanel from "./GeoFlowOptimizerPanel";
-import ThemeToggle from "./ThemeToggle";
+import SuiteTopBar, { type NewAction } from "@/components/suite/SuiteTopBar";
+import SearchPalette, { type PaletteCommand } from "@/components/suite/SearchPalette";
+import PageHeader from "@/components/suite/PageHeader";
+import SuiteHome from "@/components/suite/SuiteHome";
+import BrandConnections from "@/components/suite/BrandConnections";
+import { APP_ICONS, ShellIcon } from "@/components/suite/icons";
+import { GROUP_LABELS, SETTINGS_SECTIONS, SUITE_APPS, type AppGroup, type AppId, type SettingsSection } from "@/lib/suite/apps";
+import type { SearchHit } from "@/lib/suite/search";
+import { sendSignal } from "@/lib/suite/signals";
 import {
   buildCitationLeaderboard,
   buildCompetitorComparison,
@@ -43,7 +48,7 @@ function providerErrorTitle(run: ScanRun, id: string): string {
   return `Scan failed for this provider: ${label}`;
 }
 
-type Tab = "prospect" | "overview" | "queries" | "citations" | "runs" | "optimizer" | "outreach" | "crm" | "enterprise" | "social" | "settings";
+type Tab = AppId;
 
 interface Props {
   user: User | null;
@@ -53,25 +58,8 @@ interface Props {
   demoRunDetails?: Record<string, { queries: TrackedQuery[]; results: QueryResult[] }>;
 }
 
-function displayNameOf(user: User): string {
-  if (user.displayName?.trim()) return user.displayName.trim();
-  return (user.email ?? "Account").split("@")[0];
-}
-
-function initialsOf(user: User): string {
-  const name = displayNameOf(user);
-  const parts = name.split(/\s+/).filter(Boolean);
-  return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : name.slice(0, 2)).toUpperCase();
-}
-
-type NavGroup = "overview" | "revenue" | "intelligence" | "workspace";
 const INTELLIGENCE_TABS: Tab[] = ["overview", "queries", "citations", "optimizer", "runs"];
-const NAV_GROUPS: Array<{ id: NavGroup; label: string | null }> = [
-  { id: "overview", label: null },
-  { id: "revenue", label: "Revenue" },
-  { id: "intelligence", label: "Intelligence" },
-  { id: "workspace", label: "Workspace" },
-];
+const RAIL_GROUPS: AppGroup[] = ["home", "sales", "visibility"];
 
 function MetricCard({ label, value, suffix, change }: { label: string; value: string; suffix?: string; change: number | null }) {
   return (
@@ -120,18 +108,10 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   const [showTour, setShowTour] = useState(false);
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"brand" | "keys" | "team" | "activity" | "api" | "billing">("brand");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("brand");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
-  const PANEL_TOGGLE_ICON = (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
-      <rect x="3.5" y="4.5" width="17" height="15" rx="3.5" />
-      <path d="M9.75 4.5v15" />
-    </svg>
-  );
-
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [runDetails, setRunDetails] = useState<Record<string, { queries: TrackedQuery[]; results: QueryResult[] } | "loading" | "error">>({});
 
   const authedFetch = useCallback(
@@ -279,41 +259,35 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     });
   }, []);
 
-  // Command palette (Cmd/Ctrl+K) and sidebar toggle (Cmd/Ctrl+B).
+  // Search palette (Cmd/Ctrl+K) and side rail toggle (Cmd/Ctrl+B).
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [paletteQuery, setPaletteQuery] = useState("");
-  const [paletteIndex, setPaletteIndex] = useState(0);
 
-  const paletteCommands = useMemo(() => {
-    const commands: { id: string; label: string; hint: string; run: () => void }[] = [];
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const commands: PaletteCommand[] = SUITE_APPS.filter((app) => !readOnly || !["prospect", "outreach", "crm", "enterprise", "social", "settings"].includes(app.id)).map((app) => ({
+      id: `app:${app.id}`,
+      label: `Open ${app.name}`,
+      hint: "App",
+      run: () => setTab(app.id),
+    }));
     if (!readOnly) {
       commands.push(
-        { id: "tab-overview", label: "Go to Overview", hint: "Section", run: () => setTab("overview") },
-        { id: "tab-queries", label: "Go to Questions", hint: "Section", run: () => setTab("queries") },
-        { id: "tab-citations", label: "Go to Citations", hint: "Section", run: () => setTab("citations") },
-        { id: "tab-optimizer", label: "Go to Optimization", hint: "Section", run: () => setTab("optimizer") },
-        { id: "tab-runs", label: "Go to Scans", hint: "Section", run: () => setTab("runs") },
-        { id: "tab-prospect", label: "Go to Prospecting", hint: "Section", run: () => setTab("prospect") },
-        { id: "tour", label: "Take the Intelligence tour", hint: "Help", run: () => { setTab("overview"); setShowTour(true); } },
-        { id: "tab-outreach", label: "Go to Leads", hint: "Section", run: () => setTab("outreach") },
-        { id: "tab-crm", label: "Go to CRM", hint: "Section", run: () => setTab("crm") },
-        { id: "tab-enterprise", label: "Go to Outbound", hint: "Section", run: () => setTab("enterprise") },
-        { id: "tab-social", label: "Go to Social search", hint: "Section", run: () => setTab("social") },
-        { id: "tab-settings", label: "Go to Workspace settings", hint: "Section", run: () => setTab("settings") },
-        { id: "account", label: "Open Account settings", hint: "Page", run: () => { window.location.href = "/portal/account"; } },
-        { id: "scan", label: "Run scan now", hint: "Action", run: () => void runScan() },
+        { id: "new-lead", label: "New lead", hint: "Create", run: () => newThing("lead") },
+        { id: "new-company", label: "New CRM company", hint: "Create", run: () => newThing("company") },
+        { id: "new-deal", label: "New deal", hint: "Create", run: () => newThing("deal") },
+        { id: "new-question", label: "New buyer question", hint: "Create", run: () => newThing("question") },
+        { id: "scan", label: "Run AI visibility scan now", hint: "Action", run: () => void runScan() },
+        { id: "prospecting", label: "Start a prospecting run", hint: "Action", run: () => setTab("prospect") },
+        { id: "brand", label: "Edit brand profile and competitors", hint: "Settings", run: () => openSettings("brand") },
+        { id: "team", label: "Invite a teammate", hint: "Settings", run: () => openSettings("team") },
+        { id: "billing", label: "Billing and credits", hint: "Settings", run: () => openSettings("billing") },
+        { id: "tour", label: "Take the AI visibility tour", hint: "Help", run: () => { setTab("overview"); setShowTour(true); } },
+        { id: "account", label: "Open my account", hint: "Page", run: () => { window.location.href = "/portal/account"; } },
       );
     }
-    commands.push({ id: "sidebar", label: "Toggle sidebar", hint: "Ctrl/Cmd+B", run: () => toggleSidebar() });
+    commands.push({ id: "sidebar", label: "Toggle side rail", hint: "Ctrl/Cmd+B", run: () => toggleSidebar() });
     return commands;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readOnly, toggleSidebar]);
-
-  const filteredCommands = useMemo(() => {
-    const q = paletteQuery.trim().toLowerCase();
-    if (!q) return paletteCommands;
-    return paletteCommands.filter((command) => command.label.toLowerCase().includes(q));
-  }, [paletteCommands, paletteQuery]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -321,8 +295,6 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       if (mod && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setPaletteOpen((open) => !open);
-        setPaletteQuery("");
-        setPaletteIndex(0);
       } else if (mod && event.key.toLowerCase() === "b") {
         event.preventDefault();
         toggleSidebar();
@@ -334,54 +306,38 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleSidebar]);
 
-  function runPaletteCommand(index: number) {
-    const command = filteredCommands[index];
-    if (!command) return;
-    setPaletteOpen(false);
-    command.run();
+  function openSettings(section: SettingsSection) {
+    setTab("settings");
+    setSettingsSection(section);
   }
 
-  const commandPalette = paletteOpen ? (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-24"
-      onClick={() => setPaletteOpen(false)}
-    >
-      <div
-        className="w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <input
-          autoFocus
-          value={paletteQuery}
-          onChange={(event) => { setPaletteQuery(event.target.value); setPaletteIndex(0); }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") { event.preventDefault(); setPaletteIndex((i) => Math.min(i + 1, filteredCommands.length - 1)); }
-            else if (event.key === "ArrowUp") { event.preventDefault(); setPaletteIndex((i) => Math.max(i - 1, 0)); }
-            else if (event.key === "Enter") { event.preventDefault(); runPaletteCommand(paletteIndex); }
-          }}
-          placeholder="Type a command or section name…"
-          className="w-full border-b border-white/10 bg-transparent px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none"
-        />
-        <div className="max-h-72 overflow-y-auto p-1.5">
-          {filteredCommands.length === 0 && <p className="px-3 py-4 text-sm text-zinc-600">No matching commands.</p>}
-          {filteredCommands.map((command, index) => (
-            <button
-              key={command.id}
-              type="button"
-              onClick={() => runPaletteCommand(index)}
-              onMouseEnter={() => setPaletteIndex(index)}
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
-                index === paletteIndex ? "bg-violet-500/20 text-white" : "text-zinc-300"
-              }`}
-            >
-              <span>{command.label}</span>
-              <span className="text-xs text-zinc-600">{command.hint}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  ) : null;
+  const openRecord = useCallback((hit: SearchHit) => {
+    setTab(hit.app);
+    sendSignal({ name: "open-record", kind: hit.kind, id: hit.id });
+  }, []);
+
+  // "+ New" from anywhere: open the app that owns the record with its form.
+  function newThing(action: NewAction) {
+    if (action === "scan") {
+      setTab("runs");
+      void runScan();
+      return;
+    }
+    if (action === "invite") return openSettings("team");
+    const app: Record<Exclude<NewAction, "scan" | "invite">, Tab> = { lead: "outreach", company: "crm", deal: "crm", question: "queries", prospecting: "prospect", campaign: "enterprise" };
+    setTab(app[action]);
+    sendSignal({ name: "new", action });
+  }
+
+  const commandPalette = (
+    <SearchPalette
+      open={paletteOpen}
+      onClose={() => setPaletteOpen(false)}
+      commands={paletteCommands}
+      onOpenRecord={openRecord}
+      authedFetch={readOnly ? null : authedFetch}
+    />
+  );
 
   const latest = state?.snapshots.length ? state.snapshots[state.snapshots.length - 1] : null;
   const citations = useMemo(() => (state ? buildCitationLeaderboard(state) : []), [state]);
@@ -414,7 +370,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   // The product tour explains the Intelligence (GEO) tabs, so it starts the
   // first time one of them is opened rather than over the prospecting flow.
   useEffect(() => {
-    if (readOnly || !state?.brand || !INTELLIGENCE_TABS.includes(tab)) return;
+    if (readOnly || !state?.brand || tab === "overview" || !INTELLIGENCE_TABS.includes(tab)) return;
     try {
       if (!window.localStorage.getItem(TOUR_KEY)) setShowTour(true);
     } catch {
@@ -425,7 +381,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   useEffect(() => {
     if (readOnly) return;
     const handler = (event: Event) => {
-      const section = (event as CustomEvent<{ section?: "brand" | "keys" | "team" }>).detail?.section;
+      const section = (event as CustomEvent<{ section?: SettingsSection }>).detail?.section;
       setTab("settings");
       if (section) setSettingsSection(section);
     };
@@ -543,33 +499,33 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     );
   }
 
-  // Canonical information architecture (docs/enterprise-information-architecture.md):
-  // Overview, Revenue, Intelligence, Workspace.
-  const tabs: Array<{ id: Tab; label: string; group: NavGroup }> = [
-    { id: "overview", label: "Overview", group: "overview" },
-    ...(!readOnly
-      ? [
-          { id: "prospect" as Tab, label: "Prospecting", group: "revenue" as NavGroup },
-          { id: "outreach" as Tab, label: "Leads", group: "revenue" as NavGroup },
-          { id: "crm" as Tab, label: "CRM", group: "revenue" as NavGroup },
-          { id: "enterprise" as Tab, label: "Outbound", group: "revenue" as NavGroup },
-        ]
-      : []),
-    { id: "queries", label: `Questions (${state.queries.length})`, group: "intelligence" },
-    { id: "citations", label: "Citations", group: "intelligence" },
-    { id: "optimizer", label: "Optimization", group: "intelligence" },
-    { id: "runs", label: `Scans (${state.runs.length})`, group: "intelligence" },
-    ...(!readOnly
-      ? [
-          { id: "social" as Tab, label: "Social search", group: "intelligence" as NavGroup },
-          { id: "settings" as Tab, label: "Settings", group: "workspace" as NavGroup },
-        ]
-      : []),
-  ];
+  // The suite's apps in rail order (src/lib/suite/apps.ts): Home, Sales,
+  // AI visibility, Admin. The public demo shows the AI visibility apps only.
+  const counts: Partial<Record<Tab, number>> = { queries: state.queries.length, runs: state.runs.length };
+  const tabs = SUITE_APPS.filter((app) => !readOnly || ["overview", "queries", "citations", "optimizer", "runs"].includes(app.id)).map((app) => ({
+    id: app.id,
+    label: readOnly && app.id === "overview" ? "Overview" : app.name,
+    group: app.group,
+    count: counts[app.id],
+  }));
 
-  // The brand header and scan action belong to the Intelligence (GEO) area;
-  // Revenue and Workspace tabs carry their own titles.
   const geoContext = readOnly || INTELLIGENCE_TABS.includes(tab);
+  const canAdmin = state.team?.role !== "member";
+  const scanButton = (
+    <button
+      type="button"
+      data-tour="run-scan"
+      onClick={runScan}
+      disabled={scanning || !state.queries.length}
+      className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
+    >
+      {scanning ? "Scanning AI providers…" : "Run scan now"}
+    </button>
+  );
+  const trialBadge = state.plan === "trial" ? (
+    <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200">7-day trial · 1 scan included</span>
+  ) : null;
+  const settingsLabel = SETTINGS_SECTIONS.find((item) => item.id === settingsSection)?.label;
 
   const body = (
     <>
@@ -579,43 +535,22 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         </div>
       )}
 
-      <div className={`flex flex-wrap items-center gap-3 ${geoContext ? "justify-between" : "justify-end"}`}>
-        {geoContext && (
+      {readOnly ? (
         <div>
-          <h1 className="flex items-center gap-2.5 text-xl font-semibold text-white">
-            {state.brand.logoDataUrl ? (
-              // eslint-disable-next-line
-              <img src={state.brand.logoDataUrl} alt="" className="h-7 w-7 rounded-md border border-white/10 object-cover" />
-            ) : null}
-            {state.brand.name}
-          </h1>
+          <h1 className="flex items-center gap-2.5 text-xl font-semibold text-white">{state.brand.name}</h1>
           <p className="text-sm text-zinc-500">
             {state.brand.domain} · vs {state.brand.competitors.map((c) => c.name).join(", ") || "no competitors set"}
           </p>
         </div>
-        )}
-        {!readOnly && (
-          <div className="flex items-center gap-3">
-            {state.plan === "trial" && (
-              <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200">
-                7-day trial - 1 scan included
-              </span>
-            )}
-            <ThemeToggle theme={theme} onToggle={toggleTheme} />
-            {geoContext && (
-            <button
-              type="button"
-              data-tour="run-scan"
-              onClick={runScan}
-              disabled={scanning || !state.queries.length}
-              className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
-            >
-              {scanning ? "Scanning AI providers…" : "Run scan now"}
-            </button>
-            )}
-          </div>
-        )}
-      </div>
+      ) : tab !== "overview" ? (
+        <PageHeader
+          app={tab}
+          crumb={tab === "settings" ? settingsLabel : undefined}
+          subtitle={geoContext ? `${state.brand.domain} · vs ${state.brand.competitors.map((c) => c.name).join(", ") || "no competitors set"}` : undefined}
+          onOpenApp={setTab}
+          actions={geoContext ? <>{trialBadge}{scanButton}</> : trialBadge}
+        />
+      ) : null}
 
       {error && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
@@ -632,9 +567,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         {readOnly && (
         <nav
           aria-label="Workspace sections"
-          className={`sticky top-20 hidden shrink-0 flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-2 transition-all md:flex ${
-            sidebarCollapsed ? "md:w-12" : "md:w-48"
-          }`}
+          className="sticky top-20 hidden w-48 shrink-0 flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-2 md:flex"
         >
           {tabs.map((item) => (
             <button
@@ -646,36 +579,26 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
               aria-current={tab === item.id ? "page" : undefined}
               className="nav-item flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition"
             >
-              <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
-              <span className={`whitespace-nowrap ${sidebarCollapsed ? "hidden" : "hidden md:inline"}`}>{item.label}</span>
+              <span aria-hidden className="shrink-0">{APP_ICONS[item.id]}</span>
+              <span className="whitespace-nowrap">{item.label}</span>
             </button>
           ))}
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="mt-1 hidden items-center gap-2.5 rounded-lg border-t border-white/5 px-2.5 py-2 text-xs text-zinc-600 transition hover:text-zinc-300 md:flex"
-          >
-            <span aria-hidden className="shrink-0">{PANEL_TOGGLE_ICON}</span>
-            <span className={sidebarCollapsed ? "hidden" : ""}>Collapse</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => { setPaletteOpen(true); setPaletteQuery(""); setPaletteIndex(0); }}
-            title="Command palette (Ctrl/Cmd+K)"
-            className={`mt-1 hidden items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-zinc-600 transition hover:text-zinc-300 md:flex ${sidebarCollapsed ? "justify-center" : ""}`}
-          >
-            <span aria-hidden className="shrink-0 rounded border border-white/10 px-1 py-0.5 text-[10px]">⌘K</span>
-            <span className={sidebarCollapsed ? "hidden" : ""}>Commands</span>
-          </button>
         </nav>
         )}
         <div className="min-w-0 flex-1 space-y-6">
 
       {tab === "overview" && (
         <div className="space-y-6">
-          {!readOnly && <PipelineSummary authedFetch={authedFetch} onNavigate={(t) => setTab(t)} />}
-          {!readOnly && <h2 className="text-sm font-semibold text-white">AI visibility</h2>}
+          {!readOnly && <SuiteHome user={user} state={state} authedFetch={authedFetch} onOpenApp={setTab} canAdmin={canAdmin} />}
+          {!readOnly && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] pt-6">
+              <div>
+                <h2 className="text-base font-semibold text-white">AI visibility</h2>
+                <p className="text-xs text-zinc-500">{state.brand.domain} · vs {state.brand.competitors.map((c) => c.name).join(", ") || "no competitors set"}</p>
+              </div>
+              <div className="flex items-center gap-2">{trialBadge}{scanButton}</div>
+            </div>
+          )}
           <div data-tour="metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricCard label="Mention rate" value={latest ? String(latest.mentionRate) : "—"} suffix="%" change={latest ? delta(latest.mentionRate, state.snapshots, "mentionRate") : null} />
             <MetricCard label="Citation share" value={latest ? String(latest.citationShare) : "—"} suffix="%" change={latest ? delta(latest.citationShare, state.snapshots, "citationShare") : null} />
@@ -957,7 +880,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         <CrmOutreachPanel authedFetch={authedFetch} />
       )}
       {tab === "crm" && !readOnly && (
-        <CrmAccountsPanel authedFetch={authedFetch} />
+        <CrmAccountsPanel authedFetch={authedFetch} onOpenApp={setTab} />
       )}
       {tab === "enterprise" && !readOnly && (
         <OutboundPanel authedFetch={authedFetch} />
@@ -967,38 +890,29 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       )}
 
       {tab === "settings" && !readOnly && (
-        <div className="grid gap-6 md:grid-cols-[200px_1fr]">
-          <nav className="flex gap-1 overflow-x-auto md:flex-col">
-            {(
-              [
-                ...(state.team?.role !== "member"
-                  ? ([
-                      { id: "brand", label: "Brand profile", hint: "Name, domain, logo, competitors" },
-                      { id: "keys", label: "AI provider keys", hint: "Your own keys, custom providers" },
-                    ] as const)
-                  : []),
-                { id: "team", label: "Team", hint: "Members, roles, invite links" },
-                { id: "activity", label: "Activity log", hint: "Audit trail of workspace events" },
-                { id: "api", label: "API access", hint: "Programmatic access keys" },
-                { id: "billing", label: "Billing", hint: "Plan and subscription" },
-              ] as const
-            ).map((item) => (
+        <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+          <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto md:sticky md:top-[76px] md:flex-col md:self-start">
+            {SETTINGS_SECTIONS.filter((item) => canAdmin || !item.adminOnly).map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setSettingsSection(item.id)}
-                className={`rounded-lg px-3.5 py-2.5 text-left transition md:w-full ${
-                  settingsSection === item.id ? "bg-violet-500/10 text-white" : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
-                }`}
+                aria-current={settingsSection === item.id ? "page" : undefined}
+                className="nav-item rounded-lg px-3.5 py-2.5 text-left transition md:w-full"
               >
                 <span className="block whitespace-nowrap text-sm font-medium">{item.label}</span>
-                <span className="mt-0.5 hidden text-[11px] text-zinc-600 md:block">{item.hint}</span>
+                <span className="mt-0.5 hidden text-[11px] text-zinc-500 md:block">{item.hint}</span>
               </button>
             ))}
           </nav>
-          <div>
+          <div className="min-w-0 max-w-5xl">
             {settingsSection === "brand" && (
-              <SetupWizard busy={busy} error={error} onSave={saveBrand} initial={state.brand} />
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
+                  <SetupWizard busy={busy} error={error} onSave={saveBrand} initial={state.brand} />
+                </div>
+                <BrandConnections brand={state.brand} queries={state.queries.length} onOpenApp={setTab} />
+              </div>
             )}
             {settingsSection === "team" && user && (
               <TeamPanel authedFetch={authedFetch} currentUid={user.uid} />
@@ -1054,7 +968,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
               aria-current={tab === item.id ? "page" : undefined}
               className="nav-item nav-item-compact flex min-w-[68px] flex-none flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition"
             >
-              <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
+              <span aria-hidden className="shrink-0">{APP_ICONS[item.id]}</span>
               <span className="whitespace-nowrap">{item.label}</span>
             </button>
           ))}
@@ -1066,7 +980,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   const railLabel = sidebarCollapsed ? "hidden" : "hidden md:block";
   const railName = sidebarCollapsed ? "hidden" : "hidden md:inline";
 
-  const navButton = (item: { id: Tab; label: string }) => (
+  const navButton = (item: { id: Tab; label: string; count?: number }) => (
     <button
       key={item.id}
       type="button"
@@ -1074,138 +988,94 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       onClick={() => setTab(item.id)}
       title={item.label}
       aria-current={tab === item.id ? "page" : undefined}
-      className="nav-item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition"
+      className="nav-item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13.5px] font-medium transition"
     >
-      <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
-      <span className={`whitespace-nowrap ${railName}`}>{item.label}</span>
+      <span aria-hidden className="shrink-0">{APP_ICONS[item.id]}</span>
+      <span className={`flex-1 truncate text-left ${railName}`}>{item.label}</span>
+      {item.count !== undefined && <span className={`rounded-full bg-white/5 px-1.5 text-[10px] tabular-nums text-zinc-500 ${railName}`}>{item.count}</span>}
     </button>
   );
 
+  const settingsTab = tabs.find((item) => item.id === "settings");
+
   return (
-    <div className="portal flex min-h-screen">
-      <aside
-        aria-label="Workspace navigation"
-        className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-white/[0.08] bg-zinc-950/60 transition-all md:flex ${sidebarCollapsed ? "md:w-14" : "md:w-60"}`}
-      >
-        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-3">
+    <div className="portal suite flex min-h-screen flex-col">
+      {commandPalette}
+      <SuiteTopBar
+        user={user}
+        app={tab}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onOpenApp={setTab}
+        onOpenSearch={() => setPaletteOpen(true)}
+        onNew={newThing}
+        onToggleRail={toggleSidebar}
+        authedFetch={authedFetch}
+        canAdmin={canAdmin}
+        plan={state.plan ? `${state.plan[0].toUpperCase()}${state.plan.slice(1)} plan` : undefined}
+      />
+      <div className="flex min-h-0 flex-1">
+        <aside
+          aria-label="Workspace navigation"
+          className={`suite-rail sticky top-[52px] hidden h-[calc(100vh-52px)] shrink-0 flex-col border-r border-white/[0.08] transition-all md:flex ${sidebarCollapsed ? "md:w-[60px]" : "md:w-60"}`}
+        >
           <button
             type="button"
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="group relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"
+            onClick={() => openSettings("brand")}
+            title={`${state.brand.name} · ${state.brand.domain}`}
+            className="mx-2 mt-3 flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2 text-left transition hover:border-white/20"
           >
             {state.brand.logoDataUrl ? (
               // eslint-disable-next-line
-              <img src={state.brand.logoDataUrl} alt="" className={`h-8 w-8 shrink-0 rounded-md border border-white/10 object-cover transition ${sidebarCollapsed ? "group-hover:opacity-0" : ""}`} />
+              <img src={state.brand.logoDataUrl} alt="" className="h-8 w-8 shrink-0 rounded-lg border border-white/10 object-cover" />
             ) : (
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-xs font-semibold text-violet-300 transition ${sidebarCollapsed ? "group-hover:opacity-0" : ""}`}>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/20 text-xs font-semibold text-violet-300">
                 {state.brand.name.slice(0, 1).toUpperCase()}
               </span>
             )}
-            {sidebarCollapsed && (
-              <span aria-hidden className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
-                {PANEL_TOGGLE_ICON}
-              </span>
-            )}
+            <span className={`min-w-0 flex-1 ${railLabel}`}>
+              <span className="block truncate text-sm font-semibold leading-tight text-white">{state.brand.name}</span>
+              <span className="block truncate text-xs text-zinc-500">{state.brand.domain}</span>
+            </span>
           </button>
-          <div className={`min-w-0 ${railLabel}`}>
-            <p className="truncate text-sm font-semibold leading-tight text-white" title={state.brand.name}>{state.brand.name}</p>
-            <p className="truncate text-xs text-zinc-500" title={state.brand.domain}>{state.brand.domain}</p>
-          </div>
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
-            className={`ml-auto hidden h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white/[0.06] hover:text-white ${sidebarCollapsed ? "" : "md:flex"}`}
-          >
-            {PANEL_TOGGLE_ICON}
-          </button>
-        </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-          {NAV_GROUPS.map((group) => {
-            const items = tabs.filter((item) => item.group === group.id);
-            if (!items.length) return null;
-            return (
-              <div key={group.id} className={group.label ? "pt-4 first:pt-0" : ""}>
-                {group.label && (
-                  <p className={`nav-label px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest ${railLabel}`}>{group.label}</p>
-                )}
-                <div className="space-y-0.5">{items.map(navButton)}</div>
-              </div>
-            );
-          })}
-        </nav>
-
-        <div className="shrink-0 border-t border-white/[0.06] p-2">
-          {user && (
-            <div className="relative mt-1">
-              <button
-                type="button"
-                onClick={() => setUserMenuOpen((open) => !open)}
-                title={user.email ?? "Account"}
-                className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 transition hover:bg-white/[0.04]"
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-[11px] font-semibold text-violet-300">
-                  {initialsOf(user)}
-                </span>
-                <span className={`min-w-0 flex-1 text-left ${railLabel}`}>
-                  <span className="block truncate text-[13px] font-medium text-zinc-200">{displayNameOf(user)}</span>
-                  <span className="block truncate text-[11px] text-zinc-500">{user.email}</span>
-                </span>
-                <svg width="10" height="6" viewBox="0 0 10 6" className={`shrink-0 text-zinc-500 transition ${railName} ${userMenuOpen ? "rotate-180" : ""}`}>
-                  <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-                </svg>
-              </button>
-              {userMenuOpen && (
-                <div className="absolute bottom-full left-0 z-50 mb-2 w-60 rounded-xl border border-white/10 bg-zinc-900 p-1.5 shadow-2xl">
-                  <div className="border-b border-white/[0.06] px-3 py-2.5">
-                    <p className="truncate text-[13px] font-medium text-white">{displayNameOf(user)}</p>
-                    <p className="truncate text-xs text-zinc-500">{user.email}</p>
-                  </div>
-                  <div className="py-1">
-                    <Link
-                      href="/portal/account"
-                      className="block w-full rounded-md px-3 py-2 text-left text-[13px] text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      Account settings
-                    </Link>
-                    <button
-                      type="button"
-                      className="block w-full rounded-md px-3 py-2 text-left text-[13px] text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        setTab("settings");
-                      }}
-                    >
-                      Workspace settings
-                    </button>
-                  </div>
-                  <div className="border-t border-white/[0.06] py-1">
-                    <button
-                      type="button"
-                      className="block w-full rounded-md px-3 py-2 text-left text-[13px] text-zinc-500 transition hover:bg-white/[0.06] hover:text-rose-300"
-                      onClick={() => void signOut(getFirebaseAuth())}
-                    >
-                      Sign out
-                    </button>
-                  </div>
+          <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+            {RAIL_GROUPS.map((group) => {
+              const items = tabs.filter((item) => item.group === group);
+              if (!items.length) return null;
+              return (
+                <div key={group} className={group === "home" ? "" : "pt-4"}>
+                  {group !== "home" && (
+                    <p className={`nav-label px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest ${railLabel}`}>{GROUP_LABELS[group]}</p>
+                  )}
+                  <div className="space-y-0.5">{items.map(navButton)}</div>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      </aside>
+              );
+            })}
+          </nav>
 
-      <main className="min-w-0 flex-1 px-4 pb-24 pt-6 md:px-8 md:py-8">
-        <div className="mx-auto max-w-6xl space-y-6">{commandPalette}{body}</div>
-      </main>
+          <div className="shrink-0 space-y-0.5 border-t border-white/[0.06] p-2">
+            {settingsTab && navButton(settingsTab)}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              title="Search and commands (Ctrl/Cmd+K)"
+              className="nav-item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition"
+            >
+              <span aria-hidden className="shrink-0">{ShellIcon.search}</span>
+              <span className={`flex-1 text-left ${railName}`}>Search</span>
+              <kbd className={`rounded border border-white/10 px-1 text-[10px] text-zinc-500 ${railName}`}>Ctrl K</kbd>
+            </button>
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-10 md:pt-7">
+          <div className="mx-auto max-w-[1240px] space-y-6">{body}</div>
+        </main>
+      </div>
 
       {/* Mobile tab bar: the desktop rail is hidden below md, so navigation
-          moves to a fixed bottom bar (same tabs, same icons). */}
+          moves to a fixed bottom bar (same apps, same icons). */}
       <nav
         aria-label="Workspace navigation"
         className="fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 overflow-x-auto border-t border-white/[0.08] bg-zinc-950/95 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden"
@@ -1219,7 +1089,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
             aria-current={tab === item.id ? "page" : undefined}
             className="nav-item nav-item-compact flex min-w-[68px] flex-none flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition"
           >
-            <span aria-hidden className="shrink-0">{TAB_ICONS[item.id]}</span>
+            <span aria-hidden className="shrink-0">{APP_ICONS[item.id]}</span>
             <span className="whitespace-nowrap">{item.label}</span>
           </button>
         ))}
@@ -1229,66 +1099,3 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
     </div>
   );
 }
-
-const TAB_ICONS: Record<Tab, React.ReactNode> = {
-  prospect: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2.5 4h11M4.5 8h7M6.5 12h3" />
-    </svg>
-  ),
-  crm: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <rect x="2" y="5" width="12" height="8.5" rx="1.5" /><path d="M5.5 5V3.8A1.3 1.3 0 0 1 6.8 2.5h2.4a1.3 1.3 0 0 1 1.3 1.3V5" /><path d="M2 8.5h12" />
-    </svg>
-  ),
-  enterprise: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <path d="M2 13.5h12" /><path d="M3.5 13.5V6.5l4.5-3 4.5 3v7" /><path d="M6.5 13.5v-4h3v4" />
-    </svg>
-  ),
-  overview: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" /><rect x="9" y="1.5" width="5.5" height="5.5" rx="1" />
-      <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" /><rect x="9" y="9" width="5.5" height="5.5" rx="1" />
-    </svg>
-  ),
-  queries: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <circle cx="8" cy="8" r="6" /><path d="M6.2 6.2c.3-1 1-1.6 1.9-1.6 1 0 1.8.7 1.8 1.6 0 1.2-1.4 1.5-1.8 2.4" /><circle cx="8" cy="11.2" r="0.4" fill="currentColor" />
-    </svg>
-  ),
-  citations: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.1-2.1a3 3 0 1 0-4.2-4.2l-1 1" /><path d="M9.5 6.5a3 3 0 0 0-4.2 0l-2.1 2.1a3 3 0 1 0 4.2 4.2l1-1" />
-    </svg>
-  ),
-  runs: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" /><path d="M13.5 2.5v2.6h-2.6" />
-    </svg>
-  ),
-  optimizer: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8.5 1.5 3 9h5l-.5 5.5L13 7H8l.5-5.5z" />
-    </svg>
-  ),
-  outreach: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <circle cx="8" cy="8" r="3" />
-      <circle cx="8" cy="8" r="0.8" fill="currentColor" />
-    </svg>
-  ),
-  social: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" />
-    </svg>
-  ),
-  settings: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <circle cx="8" cy="8" r="2" />
-      <path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M12.4 3.6l-1.2 1.2M4.8 11.2l-1.2 1.2" />
-    </svg>
-  ),
-};
-

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AuditEntry } from "@/lib/geo/types";
 
-const ACTION_LABELS: Record<string, string> = {
+export const ACTION_LABELS: Record<string, string> = {
   "question.added": "Question added",
   "question.removed": "Question removed",
   "brand.updated": "Brand profile updated",

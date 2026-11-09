@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
+import { useSuiteSignal } from "@/lib/suite/signals";
 import type { BrandProfile, GeoProviderId, ProviderResult, QueryResult, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
 import { colorForProvider, labelForProvider } from "./helpers";
 
@@ -267,6 +268,20 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
   const canDelete = !readOnly && Boolean(onDelete);
   const [newQuery, setNewQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // "+ New > Buyer question" and search results from the suite.
+  useSuiteSignal((signal) => {
+    if (readOnly) return false;
+    if (signal.name === "new" && signal.action === "question") {
+      window.setTimeout(() => inputRef.current?.focus(), 30);
+      return true;
+    }
+    if (signal.name === "open-record" && signal.kind === "Question") {
+      setOpen(signal.id);
+      return true;
+    }
+    return false;
+  });
   const resultsByQuery = new Map(state.results.map((r) => [r.queryId, r]));
   const scannedProviders = providerOrder.filter((id) =>
     state.results.some((r) => r.results.some((cell) => cell.provider === id && cell.status === "scanned")),
@@ -287,6 +302,7 @@ export default function QueryTable({ state, readOnly, busy, onAdd, onDelete, onS
             className="flex gap-2"
           >
             <input
+              ref={inputRef}
               value={newQuery}
               onChange={(e) => setNewQuery(e.target.value)}
               placeholder="Add a buyer question, e.g. “best async video tools for remote teams”"
