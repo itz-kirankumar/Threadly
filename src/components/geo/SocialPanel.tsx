@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import RedditPanel from "./RedditPanel";
+import type { AppId } from "@/lib/suite/apps";
+import { notifyDataChanged, sendSignal } from "@/lib/suite/signals";
 
 type SourceId = "reddit" | "x" | "linkedin" | "web";
 
@@ -39,7 +41,33 @@ function sourceLabel(id: SourceId): string {
   return SOURCE_META.find((s) => s.id === id)?.label ?? id;
 }
 
-export default function SocialPanel({ authedFetch }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown> }) {
+export default function SocialPanel({ authedFetch, onOpenApp }: { authedFetch: (path: string, init?: RequestInit) => Promise<unknown>; onOpenApp?: (id: AppId) => void }) {
+  // Posts saved to Leads in this session: url -> lead id.
+  const [saved, setSaved] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+
+  async function saveToLeads(item: SocialResult) {
+    setSaving(item.url);
+    setError("");
+    try {
+      const res = (await authedFetch("/api/crm/leads/social", {
+        method: "POST",
+        body: JSON.stringify({ url: item.url, title: item.title, snippet: item.snippet, source: item.source }),
+      })) as { lead: { id: string } };
+      setSaved((prev) => ({ ...prev, [item.url]: res.lead.id }));
+      notifyDataChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The post could not be saved to Leads.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  function openLead(id: string) {
+    onOpenApp?.("outreach");
+    sendSignal({ name: "open-record", kind: "Lead", id });
+  }
+
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SourceId[]>(["reddit", "x"]);
   const [open, setOpen] = useState(false);
@@ -167,12 +195,9 @@ export default function SocialPanel({ authedFetch }: { authedFetch: (path: strin
           )}
           <div className="space-y-3">
             {result.results.map((item, index) => (
-              <a
+              <div
                 key={`${item.url}-${index}`}
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 hover:border-violet-400/40"
+                className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 hover:border-violet-400/40"
               >
                 <div className="flex items-center gap-2">
                   <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${BADGE[item.source]}`}>
@@ -180,9 +205,19 @@ export default function SocialPanel({ authedFetch }: { authedFetch: (path: strin
                   </span>
                   {item.published && <span className="text-[11px] text-zinc-600">{item.published.slice(0, 10)}</span>}
                 </div>
-                <p className="mt-2 text-sm font-medium text-white">{item.title}</p>
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="mt-2 block text-sm font-medium text-white hover:underline">{item.title}</a>
                 {item.snippet && <p className="mt-1 text-sm text-zinc-500">{item.snippet}</p>}
-              </a>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {saved[item.url] ? (
+                    <button type="button" onClick={() => openLead(saved[item.url])} className="ui-btn-secondary rounded-lg px-3 py-1.5 text-xs">Saved · open in Leads</button>
+                  ) : (
+                    <button type="button" onClick={() => void saveToLeads(item)} disabled={saving === item.url} className="ui-btn-primary rounded-lg px-3 py-1.5 text-xs">
+                      {saving === item.url ? "Saving…" : "Save to Leads"}
+                    </button>
+                  )}
+                  <a href={item.url} target="_blank" rel="noopener noreferrer" className="ui-btn-secondary rounded-lg px-3 py-1.5 text-xs">Reply in thread</a>
+                </div>
+              </div>
             ))}
           </div>
         </div>

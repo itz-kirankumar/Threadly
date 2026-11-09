@@ -14,7 +14,8 @@ export type LeadSource =
   | "crawler_audit"
   | "competitor_analysis"
   | "inbound"
-  | "manual";
+  | "manual"
+  | "social_search";
 
 export interface GeoGapSummary {
   queryText?: string;

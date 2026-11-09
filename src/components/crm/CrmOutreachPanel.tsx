@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSuiteSignal } from "@/lib/suite/signals";
+import { notifyDataChanged, sendSignal, useSuiteSignal } from "@/lib/suite/signals";
+import type { AppId } from "@/lib/suite/apps";
+import type { CrmAccountsState } from "@/lib/crm/types";
 import { priorityOf } from "@/lib/leads/score";
 import type { CrmLead, CrmActivity, OutreachTemplate, CrmStats, LeadStage } from "@/lib/crm/types";
 
 interface Props {
   authedFetch: (path: string, init?: RequestInit) => Promise<any>;
+  onOpenApp?: (id: AppId) => void;
 }
 
 type ReplySentiment = "interested" | "question" | "not_interested" | "booked";
@@ -29,6 +32,7 @@ const SOURCE_LABELS: Record<string, string> = {
   competitor_analysis: "Competitor analysis",
   inbound: "Inbound",
   manual: "Added manually",
+  social_search: "Social search",
 };
 
 const inputCls = "ui-input w-full";
@@ -50,7 +54,7 @@ function ScoreBadge({ score }: { score: number }) {
   return <span title={`${band} lead: score ${score} of 100`} className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${tone}`}>{band} {score}</span>;
 }
 
-export default function CrmOutreachPanel({ authedFetch }: Props) {
+export default function CrmOutreachPanel({ authedFetch, onOpenApp }: Props) {
   const [leads, setLeads] = useState<CrmLead[]>([]);
   const [stats, setStats] = useState<CrmStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -149,6 +153,10 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
       setShowAdd(true);
       return true;
     }
+    if (signal.name === "new" && signal.action === "discover") {
+      void discover();
+      return true;
+    }
     if (signal.name === "open-record" && signal.kind === "Lead") {
       setPendingLeadId(signal.id);
       return true;
@@ -174,6 +182,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
         ? `${n} lead${n === 1 ? "" : "s"} added from scan results. Each lead records what was observed; add a verified contact before outreach.`
         : "No new leads found. Leads are added only for tracked competitors or web results that appear in completed scans.");
       await refreshData();
+      notifyDataChanged();
     } catch (e) {
       setNotice(errorMessage(e, "Lead discovery failed. Retry, or contact hello@gothreadly.live."));
     } finally {
@@ -201,6 +210,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
       setAddForm({ name: "", email: "", company: "", domain: "", title: "", dealValue: "" });
       setNotice("Lead added.");
       await refreshData();
+      notifyDataChanged();
     } catch (err) {
       setNotice(errorMessage(err, "The lead could not be added."));
     } finally {
@@ -213,9 +223,64 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
       const res = await authedFetch(`/api/crm/leads/${leadId}`, { method: "PATCH", body: JSON.stringify({ stage }) });
       if (selectedLead?.id === leadId && res.lead) setSelectedLead(res.lead);
       await refreshData();
+      notifyDataChanged();
     } catch (e) {
       setDetailNotice(errorMessage(e, "The stage could not be updated."));
     }
+  }
+
+  // The lead's account in CRM (created when the lead was saved), found by
+  // domain, so a lead can be opened, converted to a deal or sent to Outbound.
+  async function accountFor(lead: CrmLead): Promise<{ companyId: string | null; deals: number }> {
+    const crm = (await authedFetch("/api/crm/accounts")) as CrmAccountsState;
+    const company = crm.companies.find((c) => c.domain && c.domain.toLowerCase() === lead.domain.toLowerCase()) ?? null;
+    return { companyId: company?.id ?? null, deals: company ? crm.deals.filter((d) => d.companyId === company.id).length : 0 };
+  }
+
+  async function openInCrm(lead: CrmLead) {
+    try {
+      const { companyId } = await accountFor(lead);
+      if (!companyId) {
+        setDetailNotice("This lead has no CRM account yet. Convert it to a deal to create one.");
+        return;
+      }
+      setSelectedLead(null);
+      onOpenApp?.("crm");
+      sendSignal({ name: "open-record", kind: "Company", id: companyId });
+    } catch (e) {
+      setDetailNotice(errorMessage(e, "The CRM account could not be opened."));
+    }
+  }
+
+  async function convertToDeal(lead: CrmLead) {
+    setDetailNotice("");
+    try {
+      let { companyId, deals } = await accountFor(lead);
+      if (!companyId) {
+        const res = (await authedFetch("/api/crm/accounts", { method: "POST", body: JSON.stringify({ entity: "company", name: lead.company, domain: lead.domain, source: "lead" }) })) as { company?: { id: string } };
+        companyId = res.company?.id ?? null;
+      }
+      if (deals && !confirm(`${lead.company} already has ${deals} deal${deals === 1 ? "" : "s"} in CRM. Create another?`)) return;
+      await authedFetch("/api/crm/accounts", {
+        method: "POST",
+        body: JSON.stringify({ entity: "deal", name: `${lead.company}${lead.name ? ` · ${lead.name}` : ""}`, companyId, value: lead.dealValue ?? 0, stage: "qualification" }),
+      });
+      if (lead.stage === "new" || lead.stage === "contacted" || lead.stage === "replied") await updateStage(lead.id, "qualified");
+      notifyDataChanged();
+      setDetailNotice(`Deal created in CRM for ${lead.company}.`);
+    } catch (e) {
+      setDetailNotice(errorMessage(e, "The deal could not be created."));
+    }
+  }
+
+  function sendToOutbound(lead: CrmLead) {
+    if (!lead.email) {
+      setDetailNotice("Outbound needs an email address for this lead. Add one, or find the decision maker in Prospecting first.");
+      return;
+    }
+    setSelectedLead(null);
+    onOpenApp?.("enterprise");
+    sendSignal({ name: "new", action: "import-leads", id: lead.id });
   }
 
   async function deleteLead(leadId: string) {
@@ -225,6 +290,7 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
       setSelectedLead(null);
       setNotice("Lead deleted.");
       await refreshData();
+      notifyDataChanged();
     } catch (e) {
       setNotice(errorMessage(e, "The lead could not be deleted."));
     }
@@ -510,6 +576,12 @@ export default function CrmOutreachPanel({ authedFetch }: Props) {
                 </select>
                 <button onClick={() => setShowReply(true)} className={secondaryBtn}>Record reply</button>
                 <button onClick={() => setSelectedLead(null)} className={secondaryBtn}>Close</button>
+              </div>
+              <div className="flex w-full flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Continue in</span>
+                <button onClick={() => void openInCrm(selectedLead)} className={secondaryBtn}>CRM account</button>
+                <button onClick={() => void convertToDeal(selectedLead)} className={secondaryBtn}>Convert to deal</button>
+                <button onClick={() => sendToOutbound(selectedLead)} className={primaryBtn}>Add to Outbound</button>
               </div>
             </div>
 

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { recordsFrom, searchRecords } from "../src/lib/suite/search.ts";
+import { buildSummary } from "../src/lib/suite/summary.ts";
+import { countryFromLanguages, countryFromZone, detectCountry } from "../src/lib/billing/country.ts";
 import { BRAND_PROFILE_USES, SETTINGS_SECTIONS, SUITE_APPS, appById } from "../src/lib/suite/apps.ts";
 
 const sources = {
@@ -49,4 +51,41 @@ test("the app registry is consistent", () => {
   for (const use of BRAND_PROFILE_USES) assert.ok(ids.includes(use.app));
   assert.equal(appById("crm").name, "CRM");
   assert.deepEqual(SETTINGS_SECTIONS.filter((s) => s.adminOnly).map((s) => s.id), ["brand", "keys"]);
+});
+
+test("rail badges flag what is waiting in each app", () => {
+  const now = Date.parse("2026-11-09T12:00:00Z");
+  const s = buildSummary({
+    leads: [
+      { domain: "a.io", stage: "follow_up_due", score: 40 },
+      { domain: "b.io", stage: "new", score: 82 },
+      { domain: "c.io", stage: "contacted", score: 50, nextFollowUpAt: "2026-11-08T00:00:00Z" },
+      { domain: "d.io", stage: "won", score: 90 },
+    ],
+    deals: [{ stage: "proposal" }, { stage: "won" }, { stage: "discovery" }],
+    prospecting: { selected: ["a.io", "E.io", "f.io"] },
+    questions: 4,
+    runs: 21,
+    now,
+  });
+  assert.deepEqual(s.badges.outreach, { count: 3, alert: true, hint: "2 follow-ups due, 1 hot lead not contacted" });
+  assert.equal(s.badges.crm.count, 2);
+  assert.deepEqual(s.badges.prospect, { count: 2, alert: true, hint: "2 selected companies not saved to Leads" });
+  assert.equal(s.badges.queries.count, 4);
+  assert.equal(s.badges.runs.count, 21);
+  const calm = buildSummary({ leads: [{ domain: "x.io", stage: "contacted", score: 30 }], deals: null, prospecting: { selected: ["x.io"] }, questions: null, runs: null, now });
+  assert.deepEqual(calm.badges.outreach, { count: 1, alert: false, hint: "1 open lead" });
+  assert.equal(calm.badges.prospect, undefined);
+  assert.equal(calm.badges.crm, undefined);
+});
+
+test("billing country is recognised from the best signal available", () => {
+  assert.deepEqual(detectCountry({ saved: "us", hint: "IN" }), { code: "US", source: "saved" });
+  assert.deepEqual(detectCountry({ hint: "IN", zone: "Europe/London" }), { code: "IN", source: "location" });
+  // Unknown edge country falls through to the time zone, which beats an en-US browser in India.
+  assert.deepEqual(detectCountry({ hint: "XX", zone: "Asia/Kolkata", languages: ["en-US"] }), { code: "IN", source: "time zone" });
+  assert.deepEqual(detectCountry({ zone: "Mars/Base", languages: ["en", "de-DE"] }), { code: "DE", source: "browser language" });
+  assert.equal(detectCountry({}), null);
+  assert.equal(countryFromZone("Asia/Calcutta"), "IN");
+  assert.equal(countryFromLanguages(["fr"]), null);
 });

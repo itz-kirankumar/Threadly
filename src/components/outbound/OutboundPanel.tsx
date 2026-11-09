@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSuiteSignal } from "@/lib/suite/signals";
 
 type Campaign = {
   campaignId: string; version: number; expiresAt: string;
@@ -118,6 +119,34 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
   useEffect(() => {
     if (selected) refreshDetail(selected).catch((e) => setError(e instanceof Error ? e.message : "Failed to load."));
   }, [selected, refreshDetail]);
+
+  const importRef = useRef<HTMLDivElement>(null);
+  const campaignRef = useRef<HTMLDivElement>(null);
+  // Saved leads with a name and email, as import rows (all, or the ones
+  // handed over from Leads). The rights checkbox still has to be ticked
+  // before anything is committed.
+  const loadLeadsIntoImport = async (ids?: string[]) => {
+    const data = (await authedFetch("/api/crm/leads")) as { leads: { id: string; name: string; email: string; company: string; domain: string }[] };
+    const cell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const rows = (data.leads ?? []).filter((l) => l.email && l.name && (!ids || ids.includes(l.id)));
+    if (!rows.length) throw new Error(ids ? "That lead needs a name and an email before it can be imported." : "No saved lead has both a name and an email yet. Save leads from Prospecting first.");
+    setImportForm((f) => ({ ...f, csv: ["email,fullName,accountName,accountDomain", ...rows.map((l) => [l.email, l.name, l.company, l.domain].map(cell).join(","))].join("\n"), sourceName: f.sourceName || "Threadly Leads" }));
+    setImportPreview(null);
+    setImportResult(null);
+    window.setTimeout(() => importRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+  };
+  useSuiteSignal((signal) => {
+    if (signal.name !== "new") return false;
+    if (signal.action === "import-leads") {
+      void act(() => loadLeadsIntoImport(signal.id ? [signal.id] : undefined));
+      return true;
+    }
+    if (signal.action === "campaign") {
+      window.setTimeout(() => campaignRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+      return true;
+    }
+    return false;
+  });
 
   const act = async (fn: () => Promise<void>) => {
     setBusy(true); setError("");
@@ -285,20 +314,10 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
         </div>
       </div>
 
-      <div className={card}>
+      <div ref={importRef} className={card}>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Import contacts (CSV)</h3>
-          <button className={btn} disabled={busy} onClick={() => act(async () => {
-            // Leads with an email, as import rows. The rights checkbox below
-            // still has to be ticked before anything is committed.
-            const data = (await authedFetch("/api/crm/leads")) as { leads: { name: string; email: string; company: string; domain: string }[] };
-            const cell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-            const rows = (data.leads ?? []).filter((l) => l.email && l.name);
-            if (!rows.length) throw new Error("No saved lead has both a name and an email yet. Save leads from Prospecting first.");
-            setImportForm({ ...importForm, csv: ["email,fullName,accountName,accountDomain", ...rows.map((l) => [l.email, l.name, l.company, l.domain].map(cell).join(","))].join("\n"), sourceName: importForm.sourceName || "Threadly Leads" });
-            setImportPreview(null);
-            setImportResult(null);
-          })}>Load from Leads</button>
+          <button className={btn} disabled={busy} onClick={() => act(() => loadLeadsIntoImport())}>Load from Leads</button>
         </div>
         <p className="mb-2 text-xs text-zinc-500">
           Columns required: email, fullName, accountName, accountDomain. Commit is blocked unless you confirm the source permits B2B marketing use; suppressed and previously imported contacts are reconciled, never resurrected.
@@ -345,7 +364,7 @@ export default function OutboundPanel({ authedFetch }: { authedFetch: (path: str
         )}
       </div>
 
-      <div className={card}>
+      <div ref={campaignRef} className={card}>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Campaigns</h3>
         {!campaigns.length && <p className="text-sm text-zinc-500">None yet.</p>}
         <ul className="grid gap-1">

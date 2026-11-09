@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Campaign, EmailDraft, Evidence, ProspectingState, StepEvent, StepId } from "@/lib/prospecting/types";
 import { STEP_LABELS, STEP_ORDER } from "@/lib/prospecting/types";
+import { notifyDataChanged } from "@/lib/suite/signals";
 
 interface Capabilities {
   search: boolean;
@@ -79,6 +80,7 @@ export default function ProspectingFlow({ authedFetch, getToken, brand, onOpenTa
   const [liveLog, setLiveLog] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [savedToLeads, setSavedToLeads] = useState(false);
   const [loadError, setLoadError] = useState("");
   const logRef = useRef<HTMLOListElement>(null);
 
@@ -192,7 +194,9 @@ export default function ProspectingFlow({ authedFetch, getToken, brand, onOpenTa
     setError("");
     try {
       const res = await authedFetch("/api/prospecting/leads", { method: "POST", body: JSON.stringify({}) });
-      setNotice(`${res.created} compan${res.created === 1 ? "y" : "ies"} saved to Leads${res.skipped ? `; ${res.skipped} already there` : ""}.`);
+      setNotice(`${res.created} compan${res.created === 1 ? "y" : "ies"} saved to Leads and CRM${res.skipped ? `; ${res.skipped} already there` : ""}.`);
+      setSavedToLeads(true);
+      notifyDataChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Leads could not be saved.");
     }
@@ -238,7 +242,12 @@ export default function ProspectingFlow({ authedFetch, getToken, brand, onOpenTa
               {error}
             </div>
           )}
-          {notice && <p role="status" className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-300">{notice}</p>}
+          {notice && (
+            <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-300">
+              <span>{notice}</span>
+              {savedToLeads && onOpenTab && <button className={secondaryBtn} onClick={() => onOpenTab("outreach")}>Open Leads</button>}
+            </div>
+          )}
 
           {view === "research" && <ResearchPanel state={state} brand={brand} running={running} onRun={() => run("research")} onSaveSummary={(summary) => patch({ op: "research.summary", summary }, "Description updated.")} />}
           {view === "competitors" && <CompetitorsPanel state={state} running={running} onRun={() => run("competitors")} onToggle={(key, selected) => patch({ op: "select", step: "competitors", key, selected })} />}

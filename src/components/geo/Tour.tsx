@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export const TOUR_KEY = "threadly-tour-v2";
 
@@ -72,6 +72,10 @@ export default function Tour({ onNavigate, onDone }: Props) {
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
   const last = step === STEPS.length - 1;
+  // The tour moves between apps only when its step changes, never because
+  // the dashboard re-rendered (a new onNavigate each render).
+  const navigate = useRef(onNavigate);
+  navigate.current = onNavigate;
 
   const finish = useCallback(() => {
     try {
@@ -85,7 +89,7 @@ export default function Tour({ onNavigate, onDone }: Props) {
 
   useEffect(() => {
     const current = STEPS[step];
-    onNavigate(current.tab);
+    navigate.current(current.tab);
     let cancelled = false;
     let attempts = 0;
     const locate = () => {
@@ -108,7 +112,7 @@ export default function Tour({ onNavigate, onDone }: Props) {
       clearTimeout(timer);
       window.removeEventListener("resize", onResize);
     };
-  }, [step, onNavigate]);
+  }, [step]);
 
   const current = STEPS[step];
   const pad = 8;

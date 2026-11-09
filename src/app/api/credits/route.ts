@@ -20,6 +20,8 @@ export async function GET(request: Request) {
         rates: Object.entries(CREDIT_RATES).map(([id, credits]) => ({ id, label: CREDIT_LABELS[id as keyof typeof CREDIT_RATES], credits })),
         packs: Object.entries(CREDIT_PACKS).map(([id, p]) => ({ id, name: p.name, credits: p.credits, amount: p.amount, currency: p.currency })),
         isOwner: access.role === "owner",
+        // The buyer's country from the hosting edge, to preselect billing.
+        regionHint: request.headers.get("x-vercel-ip-country"),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

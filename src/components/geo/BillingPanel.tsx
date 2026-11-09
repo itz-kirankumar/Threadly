@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { countryName, type CountrySource } from "@/lib/billing/country";
+import { useBillingCountry } from "./useBillingCountry";
 
 interface BillingStatus {
   plan: "none" | "trial" | "pro" | "growth" | "enterprise";
@@ -66,6 +68,32 @@ export const BILLING_COUNTRIES = [
   { code: "KR", name: "South Korea" },
 ];
 
+// The billing-country picker both billing panels use: preselected from the
+// detected country, which is listed even when it is not in the short list,
+// with a note on where it came from.
+export function CountryPicker({ id, country, source, onChange }: { id: string; country: string; source: CountrySource | null; onChange: (code: string) => void }) {
+  const known = BILLING_COUNTRIES.some((c) => c.code === country);
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <select
+        id={id}
+        value={country}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-200"
+      >
+        <option value="">Choose…</option>
+        {country && !known && <option value={country}>{countryName(country)}</option>}
+        {BILLING_COUNTRIES.map((c) => (
+          <option key={c.code} value={c.code}>{c.name}</option>
+        ))}
+      </select>
+      {country && source && source !== "saved" && (
+        <span className="text-[11px] text-zinc-500">Detected from your {source}</span>
+      )}
+    </span>
+  );
+}
+
 const PLANS = [
   { id: "pro" as const, name: "Pro", monthly: 49, annualMonthly: 39, blurb: "50 tracked questions, unlimited scans, 5 seats." },
   { id: "growth" as const, name: "Growth", monthly: 149, annualMonthly: 119, blurb: "150 tracked questions, 25 seats, audit log, API access." },
@@ -79,7 +107,8 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
   const [error, setError] = useState<string | null>(null);
   const [annual, setAnnual] = useState(true);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
-  const [billingCountry, setBillingCountry] = useState<string>("");
+  const [regionHint, setRegionHint] = useState<string | null>(null);
+  const { country: billingCountry, source: countrySource, setCountry: setBillingCountry } = useBillingCountry(regionHint);
   const [notice, setNotice] = useState<string | null>(null);
 
   const [quote, setQuote] = useState<{ due: number; currency: string; credit: number; remainingDays: number } | null>(null);
@@ -91,7 +120,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
       // Region routing: prefill billing country from the server geo hint
       // (buyer can change it); the provider follows the country, never a
       // free choice - India -> Razorpay, everywhere else -> Dodo.
-      if (next.regionHint && /^[A-Z]{2}$/.test(next.regionHint)) setBillingCountry((c) => c || next.regionHint!);
+      setRegionHint(next.regionHint ?? null);
       if (next.billing?.provider === "razorpay" && next.billing.status === "active" && next.billing.plan === "pro" && next.billing.interval) {
         try {
           const q = (await authedFetch("/api/billing/razorpay/quote", {
@@ -323,19 +352,7 @@ export default function BillingPanel({ authedFetch }: { authedFetch: (path: stri
                 )}
                 <span className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
                   <label htmlFor="billing-country">Billing country:</label>
-                  <select
-                    id="billing-country"
-                    value={billingCountry}
-                    onChange={(e) => setBillingCountry(e.target.value)}
-                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-200"
-                  >
-                    <option value="">Choose…</option>
-                    {BILLING_COUNTRIES.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <CountryPicker id="billing-country" country={billingCountry} source={countrySource} onChange={setBillingCountry} />
                   {routedProvider === "razorpay" && status.providers?.razorpay && (
                     <span>Checkout uses Razorpay - one-time purchase in INR, each payment covers the selected term.</span>
                   )}

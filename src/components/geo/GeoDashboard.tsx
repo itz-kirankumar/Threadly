@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { GeoProviderId, MetricsSnapshot, QueryResult, ScanRun, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
 import { PROVIDER_ERROR_LABELS, type ProviderErrorClass } from "@/lib/geo/provider-error";
@@ -29,7 +29,8 @@ import BrandConnections from "@/components/suite/BrandConnections";
 import { APP_ICONS, ShellIcon } from "@/components/suite/icons";
 import { GROUP_LABELS, SETTINGS_SECTIONS, SUITE_APPS, type AppGroup, type AppId, type SettingsSection } from "@/lib/suite/apps";
 import type { SearchHit } from "@/lib/suite/search";
-import { sendSignal } from "@/lib/suite/signals";
+import { sendSignal, useDataChanged } from "@/lib/suite/signals";
+import type { SuiteSummary } from "@/lib/suite/summary";
 import {
   buildCitationLeaderboard,
   buildCompetitorComparison,
@@ -89,8 +90,8 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   const [tab, setTab] = useState<Tab>(() => {
     // Deep links such as /portal?tab=enterprise (used by the OAuth consent
     // callback redirect) land directly on the requested tab.
-    // Signed-in workspaces open on Prospecting; the public demo on Overview.
-    const fallback: Tab = readOnly ? "overview" : "prospect";
+    // Workspaces open on Home, where every app's work comes together.
+    const fallback: Tab = "overview";
     if (typeof window === "undefined") return fallback;
     const requested = new URLSearchParams(window.location.search).get("tab");
     const valid: Tab[] = ["prospect", "overview", "queries", "citations", "runs", "optimizer", "outreach", "crm", "enterprise", "social", "settings"];
@@ -108,7 +109,70 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   const [showTour, setShowTour] = useState(false);
   const [keyEncryption, setKeyEncryption] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("brand");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>(() => {
+    if (typeof window === "undefined") return "brand";
+    const requested = new URLSearchParams(window.location.search).get("section");
+    return SETTINGS_SECTIONS.some((item) => item.id === requested) ? (requested as SettingsSection) : "brand";
+  });
+
+  const urlSynced = useRef<string | null>(null);
+  // Set while Back/Forward moves between apps: the address is already right.
+  const fromHistory = useRef(false);
+  // Every app has its own address (/portal?tab=crm, ?tab=settings&section=team)
+  // so links can be shared, refresh keeps your place and Back works.
+  useEffect(() => {
+    if (readOnly || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const before = url.search;
+    url.searchParams.set("tab", tab);
+    if (tab === "settings") url.searchParams.set("section", settingsSection);
+    else url.searchParams.delete("section");
+    // The page you landed on keeps its address; later moves add history
+    // entries. Next.js keeps its router state in history.state, so it is
+    // carried over untouched (replacing it makes the router reload the page).
+    const key = `${tab}|${tab === "settings" ? settingsSection : ""}`;
+    const previous = urlSynced.current;
+    urlSynced.current = key;
+    const restoring = fromHistory.current;
+    fromHistory.current = false;
+    if (previous === null) {
+      // The page you landed on: name it in place once the Next.js router has
+      // written its own history state (its effects run after this one).
+      window.setTimeout(() => {
+        const state = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+        window.history.replaceState({ ...state, threadly: { tab, section: settingsSection } }, "", url);
+      }, 0);
+      return;
+    }
+    if (restoring || previous === key || url.search === before) return;
+    const current = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+    window.history.pushState({ ...current, threadly: { tab, section: settingsSection } }, "", url);
+  }, [tab, settingsSection, readOnly]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    // Back and Forward between apps are handled here. Entries this dashboard
+    // added are kept from the Next.js router, which would otherwise reload
+    // the page for a URL it did not navigate to itself.
+    const onPop = (event: PopStateEvent) => {
+      if (event.state && typeof event.state === "object" && "threadly" in event.state) event.stopImmediatePropagation();
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get("tab") as Tab | null;
+      const next: Tab = requested && SUITE_APPS.some((app) => app.id === requested) ? requested : "overview";
+      const section = params.get("section");
+      const nextSection = SETTINGS_SECTIONS.some((item) => item.id === section) ? (section as SettingsSection) : null;
+      const key = `${next}|${next === "settings" ? nextSection ?? "brand" : ""}`;
+      if (key !== urlSynced.current) fromHistory.current = true;
+      setTab(next);
+      if (nextSection) setSettingsSection(nextSection);
+    };
+    window.addEventListener("popstate", onPop, { capture: true });
+    return () => window.removeEventListener("popstate", onPop, { capture: true });
+  }, [readOnly]);
+
+  // Live badges in the side rail: what is waiting in each app. Refreshed when
+  // you switch apps, when any app changes shared records, and every minute.
+  const [summary, setSummary] = useState<SuiteSummary | null>(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
@@ -193,6 +257,19 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
       return next;
     });
   }, [authedFetch]);
+
+  const loadSummary = useCallback(() => {
+    if (readOnly || !user) return;
+    authedFetch("/api/suite/summary").then((x) => setSummary(x as SuiteSummary)).catch(() => undefined);
+  }, [authedFetch, readOnly, user]);
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary, tab]);
+  useEffect(() => {
+    const timer = window.setInterval(loadSummary, 60_000);
+    return () => window.clearInterval(timer);
+  }, [loadSummary]);
+  useDataChanged(loadSummary);
 
   // App shell: one mount request for workspace state, theme, key status and
   // the prospecting snapshot (previously four separate mount fetches plus
@@ -501,12 +578,16 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 
   // The suite's apps in rail order (src/lib/suite/apps.ts): Home, Sales,
   // AI visibility, Admin. The public demo shows the AI visibility apps only.
-  const counts: Partial<Record<Tab, number>> = { queries: state.queries.length, runs: state.runs.length };
+  const badges: SuiteSummary["badges"] = {
+    ...(summary?.badges ?? {}),
+    queries: { count: state.queries.length, alert: false, hint: `${state.queries.length} tracked questions` },
+    runs: { count: state.runs.length, alert: false, hint: `${state.runs.length} scans` },
+  };
   const tabs = SUITE_APPS.filter((app) => !readOnly || ["overview", "queries", "citations", "optimizer", "runs"].includes(app.id)).map((app) => ({
     id: app.id,
     label: readOnly && app.id === "overview" ? "Overview" : app.name,
     group: app.group,
-    count: counts[app.id],
+    badge: readOnly ? undefined : badges[app.id],
   }));
 
   const geoContext = readOnly || INTELLIGENCE_TABS.includes(tab);
@@ -524,6 +605,19 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   );
   const trialBadge = state.plan === "trial" ? (
     <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200">7-day trial · 1 scan included</span>
+  ) : null;
+  // Scan results feed Leads (competitors and sites AI cites) and Optimization.
+  const handOff = tab === "runs" || tab === "citations" ? (
+    <>
+      <button type="button" onClick={() => { setTab("outreach"); sendSignal({ name: "new", action: "discover" }); }} disabled={!state.runs.length} className="ui-btn-secondary rounded-lg px-3 py-2 text-sm">
+        Find leads in scan results
+      </button>
+      {tab === "citations" && (
+        <button type="button" onClick={() => setTab("optimizer")} className="ui-btn-secondary rounded-lg px-3 py-2 text-sm">
+          Get cited: Optimization
+        </button>
+      )}
+    </>
   ) : null;
   const settingsLabel = SETTINGS_SECTIONS.find((item) => item.id === settingsSection)?.label;
 
@@ -548,7 +642,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
           crumb={tab === "settings" ? settingsLabel : undefined}
           subtitle={geoContext ? `${state.brand.domain} · vs ${state.brand.competitors.map((c) => c.name).join(", ") || "no competitors set"}` : undefined}
           onOpenApp={setTab}
-          actions={geoContext ? <>{trialBadge}{scanButton}</> : trialBadge}
+          actions={geoContext ? <>{trialBadge}{handOff}{scanButton}</> : trialBadge}
         />
       ) : null}
 
@@ -877,7 +971,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         />
       )}
       {tab === "outreach" && !readOnly && (
-        <CrmOutreachPanel authedFetch={authedFetch} />
+        <CrmOutreachPanel authedFetch={authedFetch} onOpenApp={setTab} />
       )}
       {tab === "crm" && !readOnly && (
         <CrmAccountsPanel authedFetch={authedFetch} onOpenApp={setTab} />
@@ -886,7 +980,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         <OutboundPanel authedFetch={authedFetch} />
       )}
       {tab === "social" && !readOnly && (
-        <SocialPanel authedFetch={authedFetch} />
+        <SocialPanel authedFetch={authedFetch} onOpenApp={setTab} />
       )}
 
       {tab === "settings" && !readOnly && (
@@ -980,19 +1074,22 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   const railLabel = sidebarCollapsed ? "hidden" : "hidden md:block";
   const railName = sidebarCollapsed ? "hidden" : "hidden md:inline";
 
-  const navButton = (item: { id: Tab; label: string; count?: number }) => (
+  const navButton = (item: { id: Tab; label: string; badge?: { count: number; alert: boolean; hint: string } }) => (
     <button
       key={item.id}
       type="button"
       data-tour={`tab-${item.id}`}
       onClick={() => setTab(item.id)}
-      title={item.label}
+      title={item.badge ? `${item.label}: ${item.badge.hint}` : item.label}
       aria-current={tab === item.id ? "page" : undefined}
-      className="nav-item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13.5px] font-medium transition"
+      className="nav-item relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13.5px] font-medium transition"
     >
       <span aria-hidden className="shrink-0">{APP_ICONS[item.id]}</span>
       <span className={`flex-1 truncate text-left ${railName}`}>{item.label}</span>
-      {item.count !== undefined && <span className={`rounded-full bg-white/5 px-1.5 text-[10px] tabular-nums text-zinc-500 ${railName}`}>{item.count}</span>}
+      {item.badge && (item.badge.count > 0 || !item.badge.alert) && (
+        <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${item.badge.alert ? "bg-violet-500 text-white" : "bg-white/5 text-zinc-500"} ${railName}`}>{item.badge.count}</span>
+      )}
+      {item.badge?.alert && item.badge.count > 0 && sidebarCollapsed && <span aria-hidden className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-violet-500" />}
     </button>
   );
 
@@ -1095,7 +1192,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         ))}
       </nav>
 
-      {showTour && <Tour onNavigate={(next) => setTab(next)} onDone={() => setShowTour(false)} />}
+      {showTour && <Tour onNavigate={setTab} onDone={() => setShowTour(false)} />}
     </div>
   );
 }

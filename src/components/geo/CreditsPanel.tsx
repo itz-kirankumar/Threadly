@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BILLING_COUNTRIES, loadRazorpayScript } from "./BillingPanel";
+import { CountryPicker, loadRazorpayScript } from "./BillingPanel";
+import { useBillingCountry } from "./useBillingCountry";
 
 interface CreditEntry {
   at: string;
@@ -20,6 +21,7 @@ interface CreditsStatus {
   rates: Array<{ id: string; label: string; credits: number }>;
   packs: Array<{ id: string; name: string; credits: number; amount: number; currency: string }>;
   isOwner: boolean;
+  regionHint?: string | null;
 }
 
 const price = (amount: number) => `$${(amount / 100).toFixed(amount % 100 ? 2 : 0)}`;
@@ -30,11 +32,14 @@ export default function CreditsPanel({ authedFetch }: { authedFetch: (path: stri
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [country, setCountry] = useState("");
+  const [hint, setHint] = useState<string | null>(null);
+  const { country, source, setCountry } = useBillingCountry(hint);
 
   const load = useCallback(async () => {
     try {
-      setStatus((await authedFetch("/api/credits")) as CreditsStatus);
+      const next = (await authedFetch("/api/credits")) as CreditsStatus;
+      setStatus(next);
+      setHint(next.regionHint ?? null);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load credits.");
@@ -131,12 +136,9 @@ export default function CreditsPanel({ authedFetch }: { authedFetch: (path: stri
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-sm font-semibold text-white">Buy credits</h4>
-            <label className="flex items-center gap-2 text-[11px] text-zinc-400">
+            <label htmlFor="credits-country" className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
               Billing country
-              <select value={country} onChange={(e) => setCountry(e.target.value)} className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-200">
-                <option value="">Choose…</option>
-                {BILLING_COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
-              </select>
+              <CountryPicker id="credits-country" country={country} source={source} onChange={setCountry} />
             </label>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">

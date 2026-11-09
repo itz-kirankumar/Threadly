@@ -8,6 +8,7 @@ import type { AuditEntry, WorkspaceState } from "@/lib/geo/types";
 import { ACTION_LABELS } from "@/components/geo/ActivityPanel";
 import { appById, type AppId } from "@/lib/suite/apps";
 import { APP_ICONS, ShellIcon } from "./icons";
+import { useDataChanged } from "@/lib/suite/signals";
 
 interface Snapshot {
   leads: CrmLead[] | null;
@@ -15,7 +16,7 @@ interface Snapshot {
   accounts: CrmAccountsState | null;
   credits: { balance: number; granted: number; spent: number } | null;
   run: { companies: number; selected: string[]; contacts: number; competitors: number; ranAt: string | null } | null;
-  campaigns: number | "off" | null;
+  campaigns: number | "off" | "unavailable" | null;
   audit: AuditEntry[] | null;
 }
 
@@ -81,7 +82,9 @@ export default function SuiteHome({ user, state, authedFetch, onOpenApp, canAdmi
       get<CrmAccountsState>("/api/crm/accounts", "CRM"),
       get<{ balance: number; granted: number; spent: number }>("/api/credits", "credits"),
       get<{ state: { competitors?: { items: unknown[] }; companies?: { items: Array<{ selected: boolean; domain: string }>; ranAt: string }; contacts?: { items: unknown[] } } }>("/api/prospecting", "Prospecting"),
-      canAdmin ? get<{ campaigns: unknown[] }>("/api/outbound/campaigns", null) : Promise.resolve(null),
+      canAdmin
+        ? (authedFetch("/api/outbound/campaigns") as Promise<{ campaigns: unknown[] }>).then((x) => x.campaigns.length as number | "off" | "unavailable").catch((e: unknown) => (e instanceof Error && /not enabled/i.test(e.message) ? "off" : "unavailable"))
+        : Promise.resolve("off" as const),
       get<{ entries: AuditEntry[] }>("/api/geo/audit", null),
     ]);
     const companies = prospecting?.state.companies;
@@ -99,7 +102,7 @@ export default function SuiteHome({ user, state, authedFetch, onOpenApp, canAdmi
             ranAt: companies?.ranAt ?? null,
           }
         : null,
-      campaigns: campaigns ? campaigns.campaigns.length : "off",
+      campaigns,
       audit: audit?.entries ?? null,
     });
     setFailed(miss);
@@ -109,6 +112,7 @@ export default function SuiteHome({ user, state, authedFetch, onOpenApp, canAdmi
   useEffect(() => {
     void load();
   }, [load]);
+  useDataChanged(() => void load());
 
   const brand = state.brand!;
   const latest = state.snapshots.length ? state.snapshots[state.snapshots.length - 1] : null;
@@ -130,7 +134,7 @@ export default function SuiteHome({ user, state, authedFetch, onOpenApp, canAdmi
     { app: "prospect", title: "Prospecting", value: snap.run?.ranAt ? `${snap.run.companies} found` : "Not run", note: snap.run?.ranAt ? `${snap.run.contacts} decision makers · ${ago(snap.run.ranAt)}` : "Find customers from your site", state: snap.run?.ranAt ? (notSaved ? "next" : "done") : "next" },
     { app: "outreach", title: "Leads", value: snap.leads ? `${leads.length} saved` : "—", note: snap.leads ? `${bands.Hot} hot · ${snap.stats?.followUpsDue ?? 0} follow-ups due` : "Could not be read", state: leads.length ? (snap.stats?.followUpsDue || bands.Hot ? "next" : "done") : "waiting" },
     { app: "crm", title: "CRM", value: snap.accounts ? `${snap.accounts.companies.length} accounts` : "—", note: snap.accounts ? `${openDeals.length} open deal${openDeals.length === 1 ? "" : "s"}${openValue ? ` · ${openValue.toLocaleString()} ${currency}` : ""}` : "Could not be read", state: openDeals.length ? "done" : leads.length ? "next" : "waiting" },
-    { app: "enterprise", title: "Outbound", value: snap.campaigns === "off" ? (canAdmin ? "Off" : "Admins") : snap.campaigns === null ? "—" : `${snap.campaigns} campaign${snap.campaigns === 1 ? "" : "s"}`, note: snap.campaigns === "off" ? (canAdmin ? "Not enabled on this workspace" : "Run by workspace admins") : `${withEmail} lead${withEmail === 1 ? "" : "s"} with an email to import`, state: snap.campaigns === "off" ? "off" : snap.campaigns ? "done" : withEmail ? "next" : "waiting" },
+    { app: "enterprise", title: "Outbound", value: !canAdmin ? "Admins" : snap.campaigns === "off" ? "Off" : snap.campaigns === "unavailable" ? "—" : snap.campaigns === null ? "—" : `${snap.campaigns} campaign${snap.campaigns === 1 ? "" : "s"}`, note: !canAdmin ? "Run by workspace admins" : snap.campaigns === "off" ? "Not enabled on this deployment" : snap.campaigns === "unavailable" ? "Could not be read" : `${withEmail} lead${withEmail === 1 ? "" : "s"} with an email to import`, state: !canAdmin || snap.campaigns === "off" ? "off" : snap.campaigns === "unavailable" || snap.campaigns === null ? "waiting" : snap.campaigns ? "done" : withEmail ? "next" : "waiting" },
     { app: "overview", title: "AI visibility", value: latest ? `${latest.mentionRate}%` : "No scan", note: latest ? `mentioned · ${state.queries.length} questions · ${ago(lastScan)}` : `${state.queries.length} question${state.queries.length === 1 ? "" : "s"} ready`, state: latest && !scanStale ? "done" : "next" },
   ];
 
