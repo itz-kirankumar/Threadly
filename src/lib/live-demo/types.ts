@@ -61,7 +61,7 @@ export interface DemoLocalBusiness {
   // Decision makers there, searched by the roles that decide at this kind
   // of organisation.
   people?: Array<{ name: string; title: string; profileUrl: string | null }>;
-  sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
+  sequence?: { dm: string; followUps: Array<{ day: number; body: string; stage?: string }> } | null;
 }
 export interface DemoLocal {
   provider: string;
@@ -129,7 +129,7 @@ export interface DemoSocialLead {
   authorName?: string | null;
   profileUrl?: string | null;
   // Drafted direct message and follow-ups; drafts only, nothing is sent.
-  sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
+  sequence?: { dm: string; followUps: Array<{ day: number; body: string; stage?: string }> } | null;
 }
 export interface DemoSocial {
   topic: string;
@@ -149,8 +149,12 @@ export interface DemoPerson {
   photoUrl?: string | null;
   // Their public X profile, when its bio names the company.
   xUrl?: string | null;
+  // A likely work address in the company's own published format; never
+  // sent to before a licensed provider verifies it.
+  likelyEmail?: string | null;
+  emailBasis?: string | null;
   // Drafted first message and follow-ups; nothing is sent.
-  sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
+  sequence?: { dm: string; followUps: Array<{ day: number; body: string; stage?: string }> } | null;
 }
 export interface DemoContacts {
   roles: string[];

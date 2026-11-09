@@ -430,9 +430,11 @@ export async function draftCompanyEmail(sender: Sender, company: { name: string;
 // A first direct message and two follow-ups to one post's author, written
 // from what they asked. Drafts for a person to send from their own account:
 // the demo sends nothing.
+// A conversation in stages, after SalesGPT (github.com/filip-michalsky/
+// SalesGPT): introduce, add value, ask a qualifying question, then close.
 export interface MessageSequence {
   dm: string;
-  followUps: Array<{ day: number; body: string }>;
+  followUps: Array<{ day: number; body: string; stage?: string }>;
 }
 
 export function draftMessageSequence(sender: Sender, lead: Pick<SocialLead, "title" | "authorName" | "matched" | "platform">): MessageSequence {
@@ -449,8 +451,9 @@ export function draftMessageSequence(sender: Sender, lead: Pick<SocialLead, "tit
   return {
     dm,
     followUps: [
-      { day: 3, body: `${hi} following up on "${short}". Did you find what you needed? If not, ${sender.domain} has a two-minute overview.` },
-      { day: 7, body: `${hi} last note from me. If the search is still open, I can send a one-page comparison; otherwise, good luck with it.` },
+      { day: 3, stage: "Value", body: `${hi} following up on "${short}". Did you find what you needed? If not, ${sender.domain} has a two-minute overview.` },
+      { day: 5, stage: "Qualify", body: `${hi} quick question so I only send what helps: are you choosing something this month, and is it just you deciding?` },
+      { day: 9, stage: "Close", body: `${hi} last note from me. If the search is still open, I can send a one-page comparison; otherwise, good luck with it.` },
     ],
   };
 }
@@ -464,8 +467,9 @@ export function draftPersonSequence(sender: Sender, person: { name: string; titl
   return {
     dm: `Hi ${first}, ${opener} I work at ${sender.name}. ${whatWeDo(sender)} Would a two-line note on how this could apply to ${company.name} be useful?`,
     followUps: [
-      { day: 3, body: `Hi ${first}, following up in case my note got buried. Happy to send that short write-up for ${company.name} if it is useful.` },
-      { day: 7, body: `Hi ${first}, last note from me. If now is not the time, no problem; if it helps later, ${sender.domain} has the details.` },
+      { day: 3, stage: "Value", body: `Hi ${first}, following up in case my note got buried. Happy to send that short write-up for ${company.name} if it is useful.` },
+      { day: 5, stage: "Qualify", body: `Hi ${first}, one question so I don't waste your time: is this a priority for ${company.name} this quarter, and who else would weigh in?` },
+      { day: 9, stage: "Close", body: `Hi ${first}, last note from me. If now is not the time, no problem; if it helps later, ${sender.domain} has the details.` },
     ],
   };
 }

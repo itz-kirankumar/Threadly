@@ -104,3 +104,22 @@ test("published emails: only what the page shows, never guessed", async () => {
   const { publishedEmails } = await import("../src/lib/prospecting/text.ts");
   assert.deepEqual(publishedEmails('<a href="mailto:Hello@Tally.so?subject=x">x</a> sales@tally.so logo@2x.png noreply@tally.so'), ["hello@tally.so", "sales@tally.so"]);
 });
+
+test("likely emails come only from a format the company publishes for a named person", async () => {
+  const { likelyEmails, learnFormat } = await import("../src/lib/prospecting/email-pattern.ts");
+  const people = ["Marie Martens", "Filip Minev"];
+  assert.equal(learnFormat(["hello@tally.so", "sales@tally.so"], people, "tally.so"), null, "role addresses teach nothing");
+  const out = likelyEmails(["marie@tally.so"], people, "tally.so");
+  assert.equal(out.get("Filip Minev").email, "filip@tally.so");
+  assert.equal(out.get("Filip Minev").verified, false);
+  assert.match(out.get("Marie Martens").basis, /published/);
+  assert.equal(likelyEmails(["jane.doe@other.com"], people, "tally.so").size, 0, "another domain teaches nothing");
+});
+
+test("every lead carries BANT with evidence", async () => {
+  const { scorePerson, leadsCsv } = await import("../src/lib/live-demo/leads.ts");
+  const lead = scorePerson({ company: "Acme", domain: "acme.io", name: "Jane Doe", title: "Head of Sales", source: null, profileUrl: null }, { domain: "acme.io", name: "Acme", description: null, signal: "Hiring a Sales Development Representative" }, ["Head of Sales"]);
+  assert.equal(lead.bant.authority.met, true);
+  assert.equal(lead.bant.timing.met, true);
+  assert.match(leadsCsv([lead]), /budget\+authority\+need\+timing/);
+});

@@ -109,16 +109,16 @@ test("post authors link to their public profiles", () => {
   assert.deepEqual(social.authorProfile("Reddit", "https://www.reddit.com/r/CRM/comments/1abc/best_crm/", "Best CRM? : r/CRM"), { name: null, profileUrl: null }, "a Reddit thread URL has no author");
 });
 
-test("a message sequence is a disclosed DM and two follow-ups, drafts only", () => {
+test("a message sequence is a disclosed DM and staged follow-ups, drafts only", () => {
   const seq = social.draftMessageSequence({ name: "Acme", domain: "acme.io", summary: "The forecasting platform for revenue teams.", category: "", keywords: [] }, { title: "Best CRM for a small team?", authorName: "Jane Doe", matched: ["HubSpot", "crm"], platform: "LinkedIn" });
   assert.match(seq.dm, /^Hi Jane, I saw your post: "Best CRM for a small team"\. I work at Acme\./);
   assert.match(seq.dm, /compares with HubSpot/);
-  assert.deepEqual(seq.followUps.map((f) => f.day), [3, 7]);
+  assert.deepEqual(seq.followUps.map((f) => [f.day, f.stage]), [[3, "Value"], [5, "Qualify"], [9, "Close"]]);
 });
 
 test("a decision maker's message flow opens with their company's own words", () => {
   const seq = social.draftPersonSequence({ name: "Acme", domain: "acme.io", summary: "The forecasting platform for revenue teams.", category: "", keywords: [] }, { name: "Jane Doe", title: "VP Sales" }, { name: "Beta", description: "Beta helps finance teams close the books." });
   assert.match(seq.dm, /^Hi Jane, I was reading how Beta describes itself: "Beta helps finance teams close the books\."/);
   assert.match(seq.dm, /I work at Acme\./);
-  assert.deepEqual(seq.followUps.map((f) => f.day), [3, 7]);
+  assert.deepEqual(seq.followUps.map((f) => [f.day, f.stage]), [[3, "Value"], [5, "Qualify"], [9, "Close"]]);
 });

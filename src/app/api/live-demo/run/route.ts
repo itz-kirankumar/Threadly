@@ -7,6 +7,7 @@ import { contactProvider } from "@/lib/prospecting/contacts";
 import { assessFit, gatherFitEvidence, planFor } from "@/lib/prospecting/fit";
 import { keywordReport } from "@/lib/prospecting/keywords";
 import { draftLocalMessage, findLocalBusinesses, mapsProvider, serviceNeed } from "@/lib/prospecting/local";
+import { likelyEmails } from "@/lib/prospecting/email-pattern";
 import { apolloPeople, findDecisionMakers, withProfiles, withXProfiles } from "@/lib/prospecting/people";
 import { extractPage } from "@/lib/prospecting/text";
 import { researchTerms, rolesForCompany, runCampaigns, runCompanies, runCompetitors, runResearch, StepBlocked } from "@/lib/prospecting/steps";
@@ -333,6 +334,9 @@ export async function POST(request: Request) {
         });
         const people = found.filter((f): f is NonNullable<typeof f> => f !== null).flatMap((f) => {
           const company = companies.find((c) => c.domain === f.domain);
+          // The company's email format, learned from an address it publishes
+          // for a named person; nothing is produced without that example.
+          const likely = likelyEmails([...(company?.emails ?? []), ...(f.emails ?? [])], f.people.map((p) => p.name), f.domain);
           return f.people.map((p) => ({
             company: f.company,
             domain: f.domain,
@@ -342,6 +346,8 @@ export async function POST(request: Request) {
             profileUrl: p.profileUrl ?? null,
             photoUrl: p.photoUrl ?? null,
             xUrl: p.xUrl ?? null,
+            likelyEmail: likely.get(p.name)?.email ?? null,
+            emailBasis: likely.get(p.name)?.basis ?? null,
             via: p.via ?? "team page",
             // A drafted first message and follow-ups; nothing is sent.
             sequence: draftPersonSequence(sender, p, { name: f.company, description: company?.description ?? null }),

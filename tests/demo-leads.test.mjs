@@ -47,7 +47,7 @@ test("priorities follow the score bands", () => {
 test("the CSV escapes commas and quotes", () => {
   const csv = leads.leadsCsv(leads.buildLeads(results, NOW));
   const lines = csv.split("\n");
-  assert.equal(lines[0], "priority,score,fit,intent,reach,type,name,company,title_or_post,source,profile_url,source_url,why");
+  assert.equal(lines[0], "priority,score,fit,intent,reach,type,name,company,title_or_post,source,profile_url,source_url,bant,why");
   assert.equal(lines.length, 5);
   assert.ok(lines.some((l) => l.includes('"Moving off HubSpot, what next?"')));
 });

@@ -4,7 +4,7 @@
 // read, with the page they came from. Nothing else about a person is
 // collected: no profile is scraped and no email address is guessed.
 
-import { decodeEntities } from "./text.ts";
+import { decodeEntities, publishedEmails } from "./text.ts";
 import { fetchHtml } from "./web.ts";
 
 export interface PublicPerson {
@@ -29,6 +29,8 @@ export interface CompanyPeople {
   people: PublicPerson[];
   // The page the people were read from; null when none could be read.
   source: string | null;
+  // Addresses that page publishes, for learning the company's email format.
+  emails?: string[];
 }
 
 const TITLE_WORDS = /\b(principal|dean|registrar|vice[- ]chancellor|placement officer|head of placements?|career services|career counsell?or|centre head|center head|academic head|administrator|practice manager|program director|chief\s+[a-z]+(\s+officer)?|ceo|cto|cfo|coo|cmo|cro|cpo|ciso|cio|founder|co-?founder|president|vice\s+president|vp|svp|evp|head\s+of|director|managing\s+director|general\s+manager|partner|owner|principal|chair(man|woman|person)?)\b/i;
@@ -154,7 +156,7 @@ export async function findDecisionMakers(company: { domain: string; name: string
       const people = extractPeople(html, 12, company.name);
       if (people.length) {
         const ranked = rankForRoles(people, roles).slice(0, max).map((p) => ({ ...p, photoUrl: photoFor(html, p.name, finalUrl) }));
-        return { domain: company.domain, company: company.name, people: ranked, source: finalUrl };
+        return { domain: company.domain, company: company.name, people: ranked, source: finalUrl, emails: publishedEmails(html) };
       }
     } catch {
       // not readable; try the next page

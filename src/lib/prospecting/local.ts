@@ -199,14 +199,15 @@ export async function findLocalBusinesses(types: string[], city: string, need: S
 }
 
 // A first message to a local business, from facts on its own listing.
-export function draftLocalMessage(sender: { name: string; summary: string }, b: LocalBusiness): { dm: string; followUps: Array<{ day: number; body: string }> } {
+export function draftLocalMessage(sender: { name: string; summary: string }, b: LocalBusiness): { dm: string; followUps: Array<{ day: number; body: string; stage?: string }> } {
   const what = sender.summary.split(/(?<=[.!?])\s/)[0].replace(/\.$/, "");
   const fact = b.needs[0] && !/^Listed on/.test(b.needs[0]) ? ` I noticed: ${b.needs[0].charAt(0).toLowerCase()}${b.needs[0].slice(1)}.` : "";
   return {
     dm: `Hi ${b.name} team, I found you on ${b.source}${b.rating !== null ? ` (${b.rating.toFixed(1)} stars from ${b.reviews ?? 0} reviews)` : ""}.${fact} I'm with ${sender.name}: ${what}. Would a short, free suggestion for ${b.name} be useful?`,
     followUps: [
-      { day: 3, body: `Hi again, happy to send that suggestion for ${b.name} whenever suits you. One line back is enough.` },
-      { day: 7, body: `Last note from me. If now isn't the right time, no problem at all; wishing ${b.name} a great season.` },
+      { day: 3, stage: "Value", body: `Hi again, happy to send that suggestion for ${b.name} whenever suits you. One line back is enough.` },
+      { day: 5, stage: "Qualify", body: `Quick question: is getting more customers through ${b.source === "Google Maps" ? "Google" : "online search"} something ${b.name} is working on right now?` },
+      { day: 9, stage: "Close", body: `Last note from me. If now isn't the right time, no problem at all; wishing ${b.name} a great season.` },
     ],
   };
 }

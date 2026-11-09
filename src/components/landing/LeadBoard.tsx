@@ -154,6 +154,11 @@ export default function LeadBoard({ results, action }: { results: DemoResults; a
                 </td>
                 <td className="border-t border-black/[0.06] px-3 py-3">
                   <div className="flex max-w-[14rem] flex-wrap gap-1">{l.why.map((w) => <span key={w} className="rounded bg-[#F3F2EE] px-1.5 py-0.5 text-[11px] text-[#2B2A31]">{w}</span>)}</div>
+                  <div className="mt-1 flex gap-1" aria-label="BANT qualification">
+                    {(["budget", "authority", "need", "timing"] as const).map((k) => (
+                      <span key={k} title={`${k}: ${l.bant[k].why}`} className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase" style={l.bant[k].met ? { background: "#EEEBFF", color: "#2F1FA8" } : { background: "#F3F2EE", color: "#9A99A0" }}>{k[0]}</span>
+                    ))}
+                  </div>
                 </td>
                 <td className="border-t border-black/[0.06] px-3 py-3 text-xs">
                   {l.sourceUrl ? <a href={l.sourceUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-[#5B3DF5] hover:underline">{l.source}</a> : l.source}

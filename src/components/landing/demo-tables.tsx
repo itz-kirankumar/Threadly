@@ -107,13 +107,13 @@ function Bubble({ label, body, first }: { label: string; body: string; first?: b
 // The message flow for one person: a public reply where there is a post,
 // then the first direct message and the follow-ups, as a conversation.
 // Drafts for a person to send; nothing is sent from the demo.
-export function MessageFlow({ to, reply, sequence, profileUrl, openLabel = "Open profile", action }: { to: string; reply?: string | null; sequence?: { dm: string; followUps: Array<{ day: number; body: string }> } | null; profileUrl?: string | null; openLabel?: string; action?: ReactNode }) {
+export function MessageFlow({ to, reply, sequence, profileUrl, openLabel = "Open profile", action }: { to: string; reply?: string | null; sequence?: { dm: string; followUps: Array<{ day: number; body: string; stage?: string }> } | null; profileUrl?: string | null; openLabel?: string; action?: ReactNode }) {
   return (
     <div className="demo-pop-in space-y-2 rounded-xl bg-[#F3F2EE] p-3">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6B6A72]">Drafts you send from your own account. Nothing is sent from the demo.</p>
       {reply && <Bubble label="Public reply on the post" body={reply} />}
-      {sequence && <Bubble first label={`Day 0 · message to ${to}`} body={sequence.dm} />}
-      {sequence?.followUps.map((f) => <Bubble key={f.day} label={`Day ${f.day} · follow-up if no reply`} body={f.body} />)}
+      {sequence && <Bubble first label={`Day 0 · introduce · message to ${to}`} body={sequence.dm} />}
+      {sequence?.followUps.map((f) => <Bubble key={f.day} label={`Day ${f.day} · ${f.stage ? f.stage.toLowerCase() : "follow-up"} · if no reply`} body={f.body} />)}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {profileUrl && <a href={profileUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-[#111114] hover:border-[#5B3DF5]">{openLabel}</a>}
         {action}

@@ -34,9 +34,21 @@ export interface ScoredLead {
   score: number;
   priority: Priority;
   why: string[];
+  // BANT, after the ai-sales-team qualification checklists: each part met
+  // or not, with the evidence from the run.
+  bant: Bant;
   reply: string | null;
-  sequence: { dm: string; followUps: Array<{ day: number; body: string }> } | null;
+  sequence: { dm: string; followUps: Array<{ day: number; body: string; stage?: string }> } | null;
 }
+
+export interface Bant {
+  budget: { met: boolean; why: string };
+  authority: { met: boolean; why: string };
+  need: { met: boolean; why: string };
+  timing: { met: boolean; why: string };
+}
+
+const part = (met: boolean, yes: string, no: string) => ({ met, why: met ? yes : no });
 
 const DAY = 86_400_000;
 
@@ -63,6 +75,12 @@ export function scoreAsk(lead: DemoSocialLead, competitors: string[], now = Date
   const reach = lead.profileUrl ? 80 : 50;
   if (lead.profileUrl) why.push("direct profile link");
   const score = combine(fit, intent, reach);
+  const bant: Bant = {
+    budget: part(rivals.length > 0, `already weighing ${rivals[0]}`, "no paid tool named"),
+    authority: part(/\b(i|we|my|our)\b/i.test(lead.title), "asking for their own use", "role not stated"),
+    need: part(lead.intent !== "discussing the topic", lead.intent, "discussing, not asking"),
+    timing: part(age !== null && age <= 30, "posted this month", "not this month"),
+  };
   return {
     id: `ask:${lead.url}`,
     kind: "Person asking",
@@ -80,6 +98,7 @@ export function scoreAsk(lead: DemoSocialLead, competitors: string[], now = Date
     score,
     priority: priorityOf(score),
     why,
+    bant,
     reply: lead.reply,
     sequence: lead.sequence ?? null,
   };
@@ -96,6 +115,14 @@ export function scorePerson(person: DemoPerson, company: DemoCompany | undefined
   const reach = person.profileUrl ? 85 : person.source ? 60 : 40;
   const why = [...base.why, ...(right ? [`the right role: ${person.title}`] : []), person.profileUrl ? "direct profile link" : person.source ? "named on their team page" : ""].filter(Boolean);
   const score = combine(base.fit, intent, reach);
+  const signal = company?.signal ?? "";
+  const bant: Bant = {
+    budget: part(/^(Customer of|Hiring a)/.test(signal), signal, "spend not shown"),
+    authority: part(right, person.title, "not a deciding role"),
+    need: part(Boolean(signal), signal || "", "no signal"),
+    timing: part(/^Hiring a/.test(signal), "hiring now", "no timing signal"),
+  };
+  if (person.likelyEmail) why.push("likely email (not verified)");
   return {
     id: `person:${person.domain}:${person.name}`,
     kind: "Decision maker",
@@ -113,6 +140,7 @@ export function scorePerson(person: DemoPerson, company: DemoCompany | undefined
     score,
     priority: priorityOf(score),
     why,
+    bant,
     reply: null,
     sequence: person.sequence ?? null,
   };
@@ -123,6 +151,13 @@ export function scoreCompany(company: DemoCompany): ScoredLead {
   const email = company.emails?.[0] ?? null;
   const reach = email ? 70 : 30;
   const score = combine(fit, intent, reach);
+  const signal = company.signal ?? "";
+  const bant: Bant = {
+    budget: part(/^(Customer of|Hiring a)/.test(signal), signal, "spend not shown"),
+    authority: part(false, "", "no decision maker yet"),
+    need: part(Boolean(signal), signal, "no signal"),
+    timing: part(/^Hiring a/.test(signal), "hiring now", "no timing signal"),
+  };
   return {
     id: `company:${company.domain}`,
     kind: "Company",
@@ -140,6 +175,7 @@ export function scoreCompany(company: DemoCompany): ScoredLead {
     score,
     priority: priorityOf(score),
     why: [...why, email ? `published address ${email}` : "no decision maker found yet"],
+    bant,
     reply: null,
     sequence: null,
   };
@@ -170,6 +206,12 @@ export function scoreLocal(b: DemoLocalBusiness): ScoredLead {
     score,
     priority: priorityOf(score),
     why: [...gaps, ...(b.phone ? ["phone on the listing"] : [])],
+    bant: {
+      budget: part(b.reviews !== null && b.reviews >= 50, "busy enough to invest", "size not shown"),
+      authority: part(Boolean(b.people?.length), b.people?.[0] ? `${b.people[0].name}, ${b.people[0].title}` : "", "owner not named"),
+      need: part(gaps.length > 0, gaps[0] ?? "", "no gap on the listing"),
+      timing: part(false, "", "no timing signal"),
+    },
     reply: null,
     sequence: b.sequence ?? null,
   };
@@ -199,7 +241,8 @@ const csvCell = (v: string | number | null) => {
 
 // The lead list as CSV, for sharing or importing into a CRM.
 export function leadsCsv(leads: ScoredLead[]): string {
-  const head = ["priority", "score", "fit", "intent", "reach", "type", "name", "company", "title_or_post", "source", "profile_url", "source_url", "why"];
-  const rows = leads.map((l) => [l.priority, l.score, l.fit, l.intent, l.reach, l.kind, l.name, l.company, l.detail, l.source, l.profileUrl, l.sourceUrl, l.why.join("; ")].map(csvCell).join(","));
+  const head = ["priority", "score", "fit", "intent", "reach", "type", "name", "company", "title_or_post", "source", "profile_url", "source_url", "bant", "why"];
+  const bantText = (b: Bant) => (["budget", "authority", "need", "timing"] as const).filter((k) => b[k].met).join("+") || "none";
+  const rows = leads.map((l) => [l.priority, l.score, l.fit, l.intent, l.reach, l.kind, l.name, l.company, l.detail, l.source, l.profileUrl, l.sourceUrl, bantText(l.bant), l.why.join("; ")].map(csvCell).join(","));
   return [head.join(","), ...rows].join("\n");
 }

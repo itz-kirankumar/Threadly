@@ -840,6 +840,7 @@ function ContactsStage({ contacts }: { contacts: DemoContacts }) {
                         <p className="mt-1 text-[11px] text-zinc-500">
                           {p.source ? <a href={p.source} target="_blank" rel="noopener noreferrer" className={link}>Named on their team page</a> : "From a public profile that names the company"}
                         </p>
+                        {p.likelyEmail && <p className="mt-0.5 truncate text-[11px] text-zinc-600" title={p.emailBasis ?? ""}><span className="font-medium">{p.likelyEmail}</span> · likely, not verified</p>}
                       </div>
                     </div>
                     {p.sequence && (
