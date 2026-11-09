@@ -13,7 +13,7 @@ import { modelEnabled, modelJson } from "./model.ts";
 import { firstSentence, searchTopics, termsIn } from "./text.ts";
 import { mapLimit, search, searchAvailable, type SearchHit } from "./web.ts";
 
-export type Platform = "Reddit" | "X" | "LinkedIn";
+export type Platform = "Reddit" | "X" | "LinkedIn" | "Quora";
 
 export interface SocialLead {
   platform: Platform;
@@ -43,6 +43,8 @@ const PLATFORMS: Array<{ platform: Platform; domains: string[] }> = [
   { platform: "Reddit", domains: ["reddit.com"] },
   { platform: "X", domains: ["x.com", "twitter.com"] },
   { platform: "LinkedIn", domains: ["linkedin.com"] },
+  // Questions people ask on Quora ("What is the best form builder?").
+  { platform: "Quora", domains: ["quora.com"] },
 ];
 
 const INTENT: Array<[RegExp, SocialLead["intent"], number]> = [
@@ -320,6 +322,7 @@ export async function findSocialLeads(
       // profiles.
       const isPost = platform === "Reddit" ? /\/comments\//.test(path)
         : platform === "X" ? /\/status\/\d+/.test(path)
+        : platform === "Quora" ? /^\/(?!profile\/|topic\/|search|spaces?\/|q\/)[A-Za-z0-9][^/]*(\/answer\/[^/]+)?\/?$/.test(path) && path.includes("-")
         : /^\/(posts|feed\/update|pulse)\//.test(path);
       if (!isPost || seen.has(h.url)) continue;
       seen.add(h.url);

@@ -34,6 +34,8 @@ export interface ExtractedPage {
   paragraphs: string[];
   // Absolute http(s) link targets found on the page, deduplicated.
   links: string[];
+  // Email addresses the page publishes (mailto links and visible text).
+  emails?: string[];
 }
 
 // Removes elements marked aria-hidden="true" (decorative or sample content
@@ -90,7 +92,18 @@ export function extractPage(rawHtml: string): ExtractedPage {
     headings: [...new Set(headings)].slice(0, 20),
     paragraphs: [...new Set(paragraphs)].slice(0, 15),
     links: [...new Set([...html.matchAll(/<a\b[^>]*\bhref\s*=\s*["'](https?:\/\/[^"'#\s]+)["']/gi)].map((m) => decodeEntities(m[1])))].slice(0, 400),
+    emails: publishedEmails(html),
   };
+}
+
+// Addresses a page publishes itself: mailto links and plain-text addresses.
+// Nothing is guessed; image names like logo@2x.png are not addresses.
+export function publishedEmails(html: string): string[] {
+  const found = [
+    ...[...html.matchAll(/mailto:([^"'?\s>]+)/gi)].map((m) => decodeEntities(m[1])),
+    ...[...decodeEntities(html.replace(/<[^>]+>/g, " ")).matchAll(/\b[a-z0-9._%+-]{1,40}@[a-z0-9.-]+\.[a-z]{2,10}\b/gi)].map((m) => m[0]),
+  ].map((e) => e.trim().toLowerCase());
+  return [...new Set(found)].filter((e) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,10}$/.test(e) && !/\.(png|jpe?g|gif|svg|webp)$/.test(e) && !/^(noreply|no-reply|donotreply)@/.test(e) && !/(example|sentry|wixpress|domain)\./.test(e)).slice(0, 10);
 }
 
 // Root domains a page links out to (excluding its own domain).

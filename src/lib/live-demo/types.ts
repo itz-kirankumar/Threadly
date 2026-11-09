@@ -100,6 +100,8 @@ export interface DemoCompany {
   sources?: number;
   // Potential customers: why it is one ("Customer of Coda").
   signal?: string | null;
+  // Addresses its own homepage publishes (sales@, hello@); never guessed.
+  emails?: string[];
 }
 export interface DemoCampaign {
   name: string;
@@ -109,7 +111,7 @@ export interface DemoCampaign {
   selected: boolean;
 }
 export interface DemoSocialLead {
-  platform: "Reddit" | "X" | "LinkedIn";
+  platform: "Reddit" | "X" | "LinkedIn" | "Quora";
   url: string;
   title: string;
   snippet: string;

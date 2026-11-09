@@ -99,6 +99,7 @@ const PLATFORM_STYLE: Record<string, string> = {
   Reddit: "bg-orange-50 text-orange-800 ring-orange-200",
   X: "bg-zinc-100 text-zinc-900 ring-zinc-300",
   LinkedIn: "bg-sky-50 text-sky-800 ring-sky-200",
+  Quora: "bg-red-50 text-red-800 ring-red-200",
 };
 
 export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonus?: { percent: number; cap: number } }) {
@@ -545,7 +546,7 @@ export default function LiveDemo({ bonus = { percent: 100, cap: 5000 } }: { bonu
               {planned("social") && <RailStep n={VIEWS.indexOf("social") + 1} step="social" status={status.social}>
                 {socialShown.length > 0 && (
                   <p className="text-xs text-zinc-700">
-                    {(["Reddit", "X", "LinkedIn"] as const).map((p) => `${socialShown.filter((l) => l.platform === p).length} ${p}`).join(" · ")}
+                    {(["Reddit", "X", "LinkedIn", "Quora"] as const).map((p) => `${socialShown.filter((l) => l.platform === p).length} ${p}`).join(" · ")}
                   </p>
                 )}
               </RailStep>}
@@ -675,7 +676,7 @@ function StepHeader({ views, view, results, streamed, done, readAt }: { views: V
     campaigns: results.campaigns ? `${results.campaigns.length} audience${results.campaigns.length === 1 ? "" : "s"} to prospect.` : "Choosing who to target.",
     companies: `${(results.companies ?? streamed.companies).length} potential customers, each with the reason it was found.`,
     local: results.local ? `${results.local.businesses.length} local businesses in ${results.local.city} from ${results.local.provider}, ranked by how much they need you.` : "Searching the map for local businesses that need you.",
-    social: `${social.filter((l) => l.intent !== "discussing the topic").length} people asking${social.some((l) => l.intent === "discussing the topic") ? `, ${social.filter((l) => l.intent === "discussing the topic").length} related conversations` : ""} on Reddit, X and LinkedIn.`,
+    social: `${social.filter((l) => l.intent !== "discussing the topic").length} people asking${social.some((l) => l.intent === "discussing the topic") ? `, ${social.filter((l) => l.intent === "discussing the topic").length} related conversations` : ""} on Reddit, X, LinkedIn and Quora.`,
     contacts: results.contacts ? `${results.contacts.people.length} decision makers from company team pages and public profiles, each with a message flow.` : "Reading each company's team page and public profiles.",
     pitch: results.pitch ? `${results.pitch.length} first emails written from each company's own words.` : "Writing first emails.",
     report: "Everything this run found, in one place.",
@@ -954,7 +955,7 @@ function CompetitorStage({ list, live, summary }: { list: DemoCompany[]; live: b
 }
 
 function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; topic: string | null; live: boolean; logs: LogLine[] }) {
-  const lanes: Array<DemoSocialLead["platform"]> = ["Reddit", "X", "LinkedIn"];
+  const lanes: Array<DemoSocialLead["platform"]> = ["Reddit", "X", "LinkedIn", "Quora"];
   const current = logs[logs.length - 1]?.text ?? "";
   return (
     <div>
@@ -972,7 +973,7 @@ function SocialStage({ leads, topic, live, logs }: { leads: DemoSocialLead[]; to
           <ActionButton tone="green" label="Reach out to all" />
         </div>
       )}
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {lanes.map((lane) => {
           const items = leads.filter((l) => l.platform === lane);
           const scanning = live && new RegExp(`\\b${lane}\\b`, "i").test(current);

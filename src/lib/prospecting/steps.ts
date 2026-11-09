@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BrandProfile } from "../geo/types.ts";
 import { contactProvider } from "./contacts.ts";
 import { modelEnabled, modelJson } from "./model.ts";
+import { findJobPosts, hiringRoles } from "./hiring.ts";
 import { findDecisionMakers, withProfiles } from "./people.ts";
 import { draftCompanyEmail } from "./social.ts";
 import { categoryAreas, categoryPhrases, categoryTerms, companyName, decodeEntities, extractAudiencePhrases, extractKeywords, firstSentence, matchedTerms, outboundDomains, searchTopics, termsIn } from "./text.ts";
@@ -15,6 +16,8 @@ export interface StepContext {
   // Epoch milliseconds after which a step stops starting new page reads
   // and returns what it has; unset means no deadline.
   deadline?: number;
+  // The business's own country, for searches in its market.
+  country?: string | null;
 }
 
 const pastDeadline = (ctx: StepContext) => ctx.deadline !== undefined && Date.now() > ctx.deadline;
@@ -959,6 +962,26 @@ export function displayName(name: string, title: string | null, description: str
   return label.length <= 5 ? label.toUpperCase() : label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+// A job board's company slug ("acme-labs") to the company's own domain:
+// its .com, .io, .ai or .co, kept only when that homepage carries the name.
+async function slugDomain(slug: string): Promise<string | null> {
+  const key = slug.replace(/[^a-z0-9]/g, "");
+  if (key.length < 3) return null;
+  for (const tld of ["com", "io", "ai", "co"]) {
+    try {
+      const home = await fetchPage(`${key}.${tld}`, 5000);
+      const name = squash(companyName(home, home.domain));
+      // A real company site: the name matches and the page describes itself
+      // (an empty or parked page on the guessed domain is someone else).
+      const real = Boolean(home.description) && home.paragraphs.length + home.headings.length >= 3 && !/for sale|parked|coming soon/i.test(`${home.title} ${home.description}`);
+      if (real && (name.includes(key) || key.includes(name)) && name.length >= 3 && !isNonCompany(rootDomain(home.domain))) return rootDomain(home.domain);
+    } catch {
+      // not this ending
+    }
+  }
+  return null;
+}
+
 export async function runCompanies(state: ProspectingState, ctx: StepContext): Promise<ProspectingState> {
   const research = state.research;
   const campaigns = (state.campaigns?.items ?? []).filter((c) => c.selected);
@@ -1063,6 +1086,24 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
     }
   }
 
+  // Companies hiring for the work this product supports: a public job post
+  // is a buying signal.
+  const hireFor = hiringRoles(`${primary.join(" ")} ${related.join(" ")} ${research.summary}`);
+  const target = campaigns.find((c) => c.source !== "competitors") ?? campaigns[0];
+  if (hireFor.length && target && !pastDeadline(ctx)) {
+    const posts = await findJobPosts(hireFor, ctx.country ?? null, search, ctx.log);
+    const resolved = await mapLimit(posts.slice(0, 16), 6, async (p) => (pastDeadline(ctx) ? null : { p, domain: await slugDomain(p.slug) }));
+    let added = 0;
+    for (const r of resolved) {
+      if (added >= 8) break;
+      if (!r?.domain || taken(r.domain)) continue;
+      candidates.push({ domain: r.domain, campaignId: target.id, ev: { kind: "page", url: r.p.url, quote: `Job post: ${r.p.title}`, at }, signal: `Hiring a ${r.p.role}`, trusted: true });
+      added++;
+    }
+    queries.push(...hireFor.map((r) => `${r} job posts`));
+    ctx.log(`  ${added} hiring companies matched to their own websites`);
+  }
+
   const perCampaign = new Map<string, number>();
   const limited = candidates.filter((c) => {
     const n = perCampaign.get(c.campaignId) ?? 0;
@@ -1112,6 +1153,7 @@ export async function runCompanies(state: ProspectingState, ctx: StepContext): P
         name: displayName(companyName(page, c.domain), page.title, description, c.domain),
         description,
         peopleUrl: peoplePage(page.links, page.domain),
+        emails: (page.emails ?? []).filter((e) => rootDomain(e.split("@")[1] ?? "") === rootDomain(page.domain)).slice(0, 3),
         campaignId: c.campaignId,
         matchedTerms: terms,
         signal: c.signal,

@@ -53,6 +53,7 @@ export function CompanyTable({ list, live = false, showTerms = true }: { list: D
                   <div className="min-w-0">
                     <p className="truncate font-medium text-[#111114]">{c.name}</p>
                     <a href={`https://${c.domain}`} target="_blank" rel="noopener noreferrer" className="block truncate font-mono text-xs text-[#6B6A72] hover:text-[#5B3DF5]">{c.domain}</a>
+                    {c.emails?.[0] && <a href={`mailto:${c.emails[0]}`} title="Published on its own homepage" className="block truncate text-xs text-[#5B3DF5] hover:underline">{c.emails[0]}</a>}
                   </div>
                 </div>
               </td>
@@ -90,7 +91,7 @@ export function authorPicture(lead: Pick<DemoSocialLead, "platform" | "author">)
   return lead.platform === "X" && lead.author?.startsWith("@") ? `https://unavatar.io/x/${lead.author.slice(1)}?fallback=false` : null;
 }
 
-export const PLATFORM_TONE: Record<DemoSocialLead["platform"], string> = { Reddit: "#FF4500", X: "#111114", LinkedIn: "#0A66C2" };
+export const PLATFORM_TONE: Record<DemoSocialLead["platform"], string> = { Reddit: "#FF4500", X: "#111114", LinkedIn: "#0A66C2", Quora: "#B92B27" };
 
 function Bubble({ label, body, first }: { label: string; body: string; first?: boolean }) {
   return (
@@ -130,7 +131,7 @@ export function SignalTable({ leads, action }: { leads: DemoSocialLead[]; action
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by platform">
-        {(["All", "Reddit", "X", "LinkedIn"] as const).map((p) => (
+        {(["All", "Reddit", "X", "LinkedIn", "Quora"] as const).map((p) => (
           <button key={p} type="button" aria-pressed={filter === p} onClick={() => setFilter(p)} className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${filter === p ? "bg-[#111114] text-white" : "bg-[#F3F2EE] text-[#4A4950] hover:bg-[#EAE9E4]"}`}>
             {p} {count(p)}
           </button>

@@ -89,7 +89,7 @@ export async function POST(request: Request) {
           createdAt: "",
           updatedAt: "",
         };
-        const ctx: { brand: BrandProfile; senderName: string; log: (t: string) => void; deadline?: number } = { brand, senderName: "", log };
+        const ctx: { brand: BrandProfile; senderName: string; log: (t: string) => void; deadline?: number; country?: string | null } = { brand, senderName: "", log };
         let state: ProspectingState = { version: 1, updatedAt: "" };
         state = await runResearch(state, ctx);
         const r = state.research!;
@@ -234,6 +234,7 @@ export async function POST(request: Request) {
         if (planned.has("companies")) {
         begin("companies");
         ctx.deadline = started + STEP_BUDGET_MS.companies;
+        ctx.country = fit.place.country;
         if (campaigns.some((c) => c.selected)) state = await runCompanies(state, ctx);
         else {
           log("no audience or competitor to start from; skipping company search");
@@ -252,7 +253,7 @@ export async function POST(request: Request) {
         }
         companies = state.companies!.items;
         const companyList = await mapLimit(companies, 6, async (c) => {
-          const item = { domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms, signal: c.signal ?? null, iconDataUrl: await fetchSiteIcon(c.domain) };
+          const item = { domain: c.domain, name: c.name, description: c.description, matchedTerms: c.matchedTerms, signal: c.signal ?? null, emails: c.emails ?? [], iconDataUrl: await fetchSiteIcon(c.domain) };
           send({ type: "item", step: "companies", data: item });
           return item;
         });

@@ -120,7 +120,8 @@ export function scorePerson(person: DemoPerson, company: DemoCompany | undefined
 
 export function scoreCompany(company: DemoCompany): ScoredLead {
   const { fit, intent, why } = companySignal(company);
-  const reach = 30;
+  const email = company.emails?.[0] ?? null;
+  const reach = email ? 70 : 30;
   const score = combine(fit, intent, reach);
   return {
     id: `company:${company.domain}`,
@@ -138,7 +139,7 @@ export function scoreCompany(company: DemoCompany): ScoredLead {
     reach,
     score,
     priority: priorityOf(score),
-    why: [...why, "no decision maker found yet"],
+    why: [...why, email ? `published address ${email}` : "no decision maker found yet"],
     reply: null,
     sequence: null,
   };

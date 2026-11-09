@@ -91,3 +91,16 @@ test("keywords: services are phrases, buyers' searches are checked, gaps are sug
   assert.ok(out.some((p) => p.includes("interview questions")));
   assert.ok(!out.includes("rather than"), "phrases unrelated to the services are not suggested");
 });
+
+test("hiring signals: job posts name the company; roles follow the product", async () => {
+  const { hiringRoles, jobPostFromResult } = await import("../src/lib/prospecting/hiring.ts");
+  assert.deepEqual(hiringRoles("cold email outreach"), ["Sales Development Representative", "Account Executive", "Head of Sales"]);
+  assert.equal(jobPostFromResult({ url: "https://jobs.lever.co/acme/123-abc", title: "Acme - SDR", published: null }, "SDR").slug, "acme");
+  assert.equal(jobPostFromResult({ url: "https://wellfound.com/company/acme-labs/jobs/1-sdr", title: "SDR at Acme Labs", published: null }, "SDR").slug, "acme-labs");
+  assert.equal(jobPostFromResult({ url: "https://jobs.lever.co/acme", title: "Acme jobs", published: null }, "SDR"), null, "a board's own page is not a post");
+});
+
+test("published emails: only what the page shows, never guessed", async () => {
+  const { publishedEmails } = await import("../src/lib/prospecting/text.ts");
+  assert.deepEqual(publishedEmails('<a href="mailto:Hello@Tally.so?subject=x">x</a> sales@tally.so logo@2x.png noreply@tally.so'), ["hello@tally.so", "sales@tally.so"]);
+});

@@ -165,7 +165,7 @@ async function firecrawlPage(url: string): Promise<ReturnType<typeof extractPage
   const paragraphs = lines.filter((l) => !/^#/.test(l)).map(strip).filter((t) => t.length >= 40 && t.length <= 600).slice(0, 15);
   const meta = body.data?.metadata ?? {};
   const links = [...new Set([...md.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)].map((m) => m[1]))].slice(0, 400);
-  return { siteName: meta.ogSiteName ?? null, title: meta.title ?? null, description: meta.description ?? null, headings, paragraphs, links };
+  return { siteName: meta.ogSiteName ?? null, title: meta.title ?? null, description: meta.description ?? null, headings, paragraphs, links, emails: [] };
 }
 
 export interface SitePreview {

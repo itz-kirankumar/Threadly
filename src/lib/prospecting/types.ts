@@ -34,6 +34,8 @@ export interface PageSnapshot {
   headings: string[];
   paragraphs: string[];
   links: string[];
+  // Addresses the page publishes itself.
+  emails?: string[];
   fetchedAt: string;
 }
 
@@ -106,6 +108,8 @@ export interface ProspectCompany {
   signal?: string;
   // Its own team or leadership page, when the homepage links one.
   peopleUrl?: string;
+  // Addresses its own homepage publishes on its own domain (sales@, hello@).
+  emails?: string[];
   selected: boolean;
   evidence: Evidence[];
 }

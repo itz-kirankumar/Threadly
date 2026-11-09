@@ -23,6 +23,8 @@ export function priorityOf(score: number): Priority {
 // to win); a campaign match fits the audience but shows no buying yet.
 export function companyFitIntent(signal: string | null | undefined, terms: string[] = []): { fit: number; intent: number; why: string[] } {
   const s = signal ?? "";
+  // Hiring for the work the product supports: buying now.
+  if (/^Hiring a /.test(s)) return { fit: 65 + Math.min(10, terms.length * 5), intent: 70, why: [s.replace(/^Hiring a/, "hiring a"), "a public job post this month"] };
   if (/^Customer of /.test(s)) return { fit: 80 + Math.min(10, terms.length * 5), intent: 45, why: [s.replace(/^Customer of/, "uses"), "a switch to win"] };
   return { fit: 55 + Math.min(10, terms.length * 5), intent: 25, why: [s || "matches the campaign", ...(terms.length ? [`homepage says ${terms.slice(0, 2).join(", ")}`] : [])] };
 }
