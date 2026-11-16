@@ -1,6 +1,7 @@
 import { runScan } from "@/lib/geo/engine";
 import { scheduledScanIncluded } from "@/lib/geo/plan";
 import { adminConfigured, adminLoadKeySettings, adminLoadWorkspace, adminSaveRun, listWorkspaceIds } from "@/lib/geo/admin-store";
+import { RUNS_TEMPORARILY_UNAVAILABLE } from "@/lib/geo/runs-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,8 +68,10 @@ export async function GET(request: Request) {
     return Response.json({ ok: true, sweep, claimsSweep });
   }
 
+  // Scan runs are paused while providers are unavailable; the tombstone and
+  // claims sweeps above still run. Flip runs-availability.ts to resume.
   const scanned: Array<{ uid: string; runId?: string; error?: string }> = [];
-  const uids = await listWorkspaceIds(50);
+  const uids = RUNS_TEMPORARILY_UNAVAILABLE ? [] : await listWorkspaceIds(50);
   for (const uid of uids) {
     try {
       const planNode = await db.ref(`users/${uid}/geo`).child("plan").get();
@@ -91,6 +94,6 @@ export async function GET(request: Request) {
     }
   }
   const runsOk = scanned.filter((entry) => entry.runId).length;
-  await db.ref("geo/ops/lastCron").set({ at: markerAt, mode: "full", workspaces: scanned.length, runsOk, pendingDeletionsSwept: sweep.swept.length, claimsSweep }).catch((err) => console.error("Cron: marker write failed", err));
-  return Response.json({ ok: true, workspaces: scanned.length, scanned, pendingDeletionsSwept: sweep.swept.length, claimsSweep });
+  await db.ref("geo/ops/lastCron").set({ at: markerAt, mode: RUNS_TEMPORARILY_UNAVAILABLE ? "full-scans-paused" : "full", workspaces: scanned.length, runsOk, pendingDeletionsSwept: sweep.swept.length, claimsSweep }).catch((err) => console.error("Cron: marker write failed", err));
+  return Response.json({ ok: true, scansPaused: RUNS_TEMPORARILY_UNAVAILABLE, workspaces: scanned.length, scanned, pendingDeletionsSwept: sweep.swept.length, claimsSweep });
 }

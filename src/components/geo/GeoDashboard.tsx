@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { GeoProviderId, MetricsSnapshot, QueryResult, ScanRun, TrackedQuery, WorkspaceState } from "@/lib/geo/types";
+import { RUNS_TEMPORARILY_UNAVAILABLE, RUNS_UNAVAILABLE_MESSAGE } from "@/lib/geo/runs-availability";
 import { PROVIDER_ERROR_LABELS, type ProviderErrorClass } from "@/lib/geo/provider-error";
 import SetupWizard from "./SetupWizard";
 import QueryTable from "./QueryTable";
@@ -352,7 +353,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
         { id: "new-company", label: "New CRM company", hint: "Create", run: () => newThing("company") },
         { id: "new-deal", label: "New deal", hint: "Create", run: () => newThing("deal") },
         { id: "new-question", label: "New buyer question", hint: "Create", run: () => newThing("question") },
-        { id: "scan", label: "Run AI visibility scan now", hint: "Action", run: () => void runScan() },
+        ...(RUNS_TEMPORARILY_UNAVAILABLE ? [] : [{ id: "scan", label: "Run AI visibility scan now", hint: "Action", run: () => void runScan() }]),
         { id: "prospecting", label: "Start a prospecting run", hint: "Action", run: () => setTab("prospect") },
         { id: "brand", label: "Edit brand profile and competitors", hint: "Settings", run: () => openSettings("brand") },
         { id: "team", label: "Invite a teammate", hint: "Settings", run: () => openSettings("team") },
@@ -397,7 +398,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
   function newThing(action: NewAction) {
     if (action === "scan") {
       setTab("runs");
-      void runScan();
+      if (!RUNS_TEMPORARILY_UNAVAILABLE) void runScan();
       return;
     }
     if (action === "invite") return openSettings("team");
@@ -469,6 +470,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 
 
   async function runScan() {
+    if (RUNS_TEMPORARILY_UNAVAILABLE) return;
     setScanning(true);
     setError("");
     setScanError("");
@@ -592,7 +594,11 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 
   const geoContext = readOnly || INTELLIGENCE_TABS.includes(tab);
   const canAdmin = state.team?.role !== "member";
-  const scanButton = (
+  const scanButton = RUNS_TEMPORARILY_UNAVAILABLE ? (
+    <span className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200">
+      Runs are temporarily unavailable
+    </span>
+  ) : (
     <button
       type="button"
       data-tour="run-scan"
@@ -774,8 +780,7 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
 
       {tab === "queries" && justOnboarded && !readOnly && (
         <div className="rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200">
-          Brand saved - you are set up. Next: add the questions your buyers ask AI assistants (or press Suggest), then
-          run your first scan from the top of the page. You can add your own AI provider keys anytime in Settings.
+          Brand saved - you are set up. Next: add the questions your buyers ask AI assistants (or press Suggest){RUNS_TEMPORARILY_UNAVAILABLE ? ". Scan runs are temporarily unavailable right now; we will bring them back soon." : ", then run your first scan from the top of the page."} You can add your own AI provider keys anytime in Settings.
         </div>
       )}
 
@@ -865,6 +870,12 @@ export default function GeoDashboard({ user, readOnly = false, initialState, dem
             </tbody>
           </table>
         </div>
+        </div>
+      )}
+
+      {tab === "runs" && RUNS_TEMPORARILY_UNAVAILABLE && !readOnly && (
+        <div role="status" className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          {RUNS_UNAVAILABLE_MESSAGE}
         </div>
       )}
 

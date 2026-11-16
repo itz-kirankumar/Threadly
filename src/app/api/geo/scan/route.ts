@@ -9,6 +9,7 @@ import { sendLifecycleEmail } from "@/lib/email";
 import { appendAudit } from "@/lib/geo/store";
 import { charge, grant, InsufficientCredits } from "@/lib/credits/ledger";
 import { CREDIT_RATES } from "@/lib/credits/rates";
+import { RUNS_TEMPORARILY_UNAVAILABLE, RUNS_UNAVAILABLE_MESSAGE } from "@/lib/geo/runs-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,12 @@ export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
+    if (RUNS_TEMPORARILY_UNAVAILABLE) {
+      return Response.json(
+        { error: RUNS_UNAVAILABLE_MESSAGE },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const access = await resolveWorkspaceAccess(request, "runScans");
     const body = (await readJsonBody(request, 8 * 1024).catch(() => ({}))) as { queryIds?: unknown };
     const queryIds = Array.isArray(body.queryIds)
